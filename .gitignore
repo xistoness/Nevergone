@@ -3,15 +3,18 @@ DerivedDataCache
 Intermediate
 Saved
 Build
-Content
 
 .vscode
 .vs
+.idea/
+
 *.VC.db
 *.opensdf
 *.opendb
 *.sdf
-*.sln
 *.suo
 *.xcodeproj
 *.xcworkspace
+
+.DS_Store
+Thumbs.db
