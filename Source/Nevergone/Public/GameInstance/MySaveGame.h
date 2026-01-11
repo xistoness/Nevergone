@@ -16,6 +16,10 @@ class NEVERGONE_API UMySaveGame : public USaveGame
 	GENERATED_BODY()
 
 public:
+	
+	UPROPERTY(SaveGame)
+	FString SaveSlotName;
+	
 	UPROPERTY()
 	FPartyData PartyData;
 

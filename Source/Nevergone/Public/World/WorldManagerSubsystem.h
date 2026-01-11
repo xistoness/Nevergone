@@ -29,13 +29,14 @@ private:
 	void HandlePartyRestored(const struct FPartyData& PartyData);
 
 	// Core responsibilities
+	void CollectWorldSaveData();
 	void RestoreWorldState();
 	void RestoreSaveableActors();
 	void SpawnMissingActors();
 	void ResolveActorConflicts();
+	void CallPostRestore();
 
 	// Utilities
-	void RegisterSaveableActors() const;
 	void ClearCachedData();
 	
 	UPROPERTY()
