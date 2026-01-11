@@ -4,8 +4,8 @@
 #include "GameInstance/MyGameInstance.h"
 
 #include "EngineUtils.h"
+#include "ActorComponents/SaveableComponent.h"
 #include "GameInstance/MySaveGame.h"
-#include "GameInstance/Saveable.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 
@@ -13,11 +13,59 @@
 void UMyGameInstance::Init()
 {
 	Super::Init();
+	
+	const FString SlotName = TEXT("MainSlot");
+
+	if (!LoadSaveSlot(SlotName))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No save found, creating new one"));
+		CreateNewSave(SlotName);
+	}
 }
 
 void UMyGameInstance::Shutdown()
 {
+	OnSaveRequested.Broadcast();
+	CommitSave();
+	
 	Super::Shutdown();
+}
+
+void UMyGameInstance::RequestSaveGame()
+{
+	if (!ActiveSave)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("RequestSaveGame failed: No active save"));
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Requesting manual save"));
+	OnSaveRequested.Broadcast();
+	
+	CommitSave();
+
+	const FString SlotName = ActiveSave->SaveSlotName;
+	const bool bSuccess = UGameplayStatics::SaveGameToSlot(
+		ActiveSave,
+		SlotName,
+		0
+	);
+
+	if (!bSuccess)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SaveGameToSlot failed"));
+	}
+}
+
+void UMyGameInstance::RequestLoadGame()
+{
+	if (!ActiveSave)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("RequestLoadGame failed: No active save"));
+		return;
+	}
+
+	OnSaveLoaded.Broadcast();
 }
 
 void UMyGameInstance::ClearActiveSave()
@@ -39,6 +87,7 @@ bool UMyGameInstance::CreateNewSave(const FString& SlotName)
 	ActiveSave = NewSave;
 
 	// Initial state
+	ActiveSave->SaveSlotName = SlotName;
 	PartyData = FPartyData();
 	ProgressionData = FProgressionData();
 	GlobalFlags.Empty();
@@ -56,25 +105,6 @@ void UMyGameInstance::CommitSave() const
 	ActiveSave->PartyData = PartyData;
 	ActiveSave->ProgressionData = ProgressionData;
 	ActiveSave->GlobalFlags = GlobalFlags;
-	ActiveSave->SavedActors.Empty();
-	
-	UWorld* World = GetWorld();
-	if (!World)
-		return;
-	
-	const FName CurrentLevel = FName(*World->GetMapName());
-
-	for (TActorIterator<AActor> It(World); It; ++It)
-	{
-		AActor* Actor = *It;
-		
-		if (Actor->Implements<USaveable>())
-		{
-			FActorSaveData SaveData;
-			ISaveable::Execute_WriteSaveData(Actor, SaveData);
-			ActiveSave->SavedActors.Add(SaveData);
-		}
-	}
 }
 
 bool UMyGameInstance::LoadSaveSlot(const FString& SlotName)
@@ -106,6 +136,7 @@ void UMyGameInstance::RequestLevelChange(
 
 void UMyGameInstance::OnPreLevelUnload() const
 {
+	OnSaveRequested.Broadcast();
 	CommitSave();
 }
 

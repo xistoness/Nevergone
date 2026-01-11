@@ -2,69 +2,90 @@
 
 
 #include "Characters/CharacterBase.h"
-#include "Actors/Interactable.h"
+#include "ActorComponents/InteractableComponent.h"
+#include "ActorComponents/SaveableComponent.h"
+#include "Data/ActorSaveData.h"
+#include "GameInstance/MyGameInstance.h"
+#include "EngineTools/CollisionChannels.h"
 
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "GameFramework/SpringArmComponent.h"
 
 // Sets default values
 ACharacterBase::ACharacterBase()
 {
- 	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
-
+	
+	SaveableComponent = CreateDefaultSubobject<USaveableComponent>(TEXT("SaveableComponent"));
 }
 
-void ACharacterBase::OnConstruction(const FTransform& Transform)
-{
-	Super::OnConstruction(Transform);
-
-	GetOrCreateGuid();
-}
-
-FGuid ACharacterBase::GetOrCreateGuid()
-{
-	if (!SaveGuid.IsValid())
-	{
-		SaveGuid = FGuid::NewGuid();
-	}
-	return SaveGuid;
-}
-
-void ACharacterBase::SetActorGuid(const FGuid& NewGuid)
-{
-	SaveGuid = NewGuid;
-}
-
-void ACharacterBase::WriteSaveData_Implementation(FActorSaveData& OutData) const
-{
-	ISaveable::WriteSaveData_Implementation(OutData);
-	OutData.ActorGuid = SaveGuid;
-	OutData.ActorClass = GetActorClass();
-	OutData.Transform = GetActorTransform();
-	OutData.LevelName = GetWorld()->GetOutermost()->GetFName();
-}
-
-void ACharacterBase::ReadSaveData(const FActorSaveData& InData)
-{
-	SaveGuid = InData.ActorGuid;
-	SetActorTransform(InData.Transform);
-}
-
-TSoftClassPtr<AActor> ACharacterBase::GetActorClass() const
-{
-	return GetClass();
-}
-
-// Called when the game starts or when spawned
 void ACharacterBase::BeginPlay()
 {
 	Super::BeginPlay();
 	
 }
 
-void ACharacterBase::OnActionPressed()
+void ACharacterBase::WriteSaveData_Implementation(FActorSaveData& OutData) const
+{	
+	// Get Controller rotation
+	FRotator TempControllerRot = ControllerRot;
+	if (AController* Ctrl = GetController())
+	{
+		TempControllerRot = Ctrl->GetControlRotation();
+	}
+
+	// Get SpringArm length if dynamic zoom is allowed
+	float TempArmLength = ArmLength;
+	if (USpringArmComponent* Arm = GetCameraBoom())
+	{
+		TempArmLength = Arm->TargetArmLength;
+	}
+
+	// Serialize
+	OutData.CustomData.Reset();
+	FMemoryWriter Writer(OutData.CustomData, true);
+	FArchive& Ar = Writer;
+
+	Ar << TempArmLength;
+	Ar << TempControllerRot;
+}
+
+void ACharacterBase::ReadSaveData_Implementation(const FActorSaveData& InData)
 {
+	if (InData.CustomData.Num() > 0)
+	{
+		FMemoryReader Reader(InData.CustomData, true);
+		FArchive& Ar = Reader;
+
+		Ar << ArmLength;
+		Ar << ControllerRot;
+	}
+	
+}
+
+void ACharacterBase::OnPostRestore_Implementation()
+{
+	ResetCamera();
+}
+
+void ACharacterBase::ResetCamera()
+{
+	if (USpringArmComponent* Arm = GetCameraBoom())
+	{
+		Arm->TargetArmLength = ArmLength;
+	}
+
+	if (AController* Ctrl = GetController())
+	{
+		Ctrl->SetControlRotation(ControllerRot);
+	}
+}
+
+
+void ACharacterBase::OnInteractionPressed()
+{
+	UE_LOG(LogTemp, Warning, TEXT("Interagindo..."));
 	FVector Start;
 	FRotator Rot;
 
@@ -80,16 +101,39 @@ void ACharacterBase::OnActionPressed()
 		Hit,
 		Start,
 		End,
-		ECC_Visibility,
+		NevergoneCollision::Interactable,
 		Params))
 	{
 		if (AActor* HitActor = Hit.GetActor())
 		{
-			if (HitActor->Implements<UInteractable>())
+			UInteractableComponent* InteractComp =
+			HitActor->FindComponentByClass<UInteractableComponent>();
+
+			if (InteractComp)
 			{
-				IInteractable::Execute_Interact(HitActor, this);
+				InteractComp->Interact(this);
 			}
 		}
+	}
+}
+
+void ACharacterBase::OnSaveGamePressed()
+{
+	UE_LOG(LogTemp, Warning, TEXT("Save requested"));
+
+	if (UMyGameInstance* GI = GetGameInstance<UMyGameInstance>())
+	{
+		GI->RequestSaveGame();
+	}
+}
+
+void ACharacterBase::OnLoadGamePressed()
+{
+	UE_LOG(LogTemp, Warning, TEXT("Load requested"));
+
+	if (UMyGameInstance* GI = GetGameInstance<UMyGameInstance>())
+	{
+		GI->RequestLoadGame();
 	}
 }
 
@@ -107,7 +151,9 @@ void ACharacterBase::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 
 	if (UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
-		EIC->BindAction(InteractionInput, ETriggerEvent::Triggered, this, &ACharacterBase::OnActionPressed);
+		EIC->BindAction(InteractionInput, ETriggerEvent::Triggered, this, &ACharacterBase::OnInteractionPressed);
+		EIC->BindAction(SaveGameInput, ETriggerEvent::Triggered, this, &ACharacterBase::OnSaveGamePressed);
+		EIC->BindAction(LoadGameInput, ETriggerEvent::Triggered, this, &ACharacterBase::OnLoadGamePressed);
 	}
 }
 
