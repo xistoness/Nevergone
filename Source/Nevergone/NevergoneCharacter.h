@@ -10,6 +10,7 @@
 class USpringArmComponent;
 class UCameraComponent;
 class UInputAction;
+class UInputMappingContext;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -18,7 +19,7 @@ DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
  *  A simple player-controllable third person character
  *  Implements a controllable orbiting camera
  */
-UCLASS(abstract)
+UCLASS()
 class ANevergoneCharacter : public ACharacter
 {
 	GENERATED_BODY()
@@ -61,11 +62,16 @@ protected:
 
 protected:
 
+	virtual void BeginPlay() override;
+	
 	/** Called for movement input */
 	void Move(const FInputActionValue& Value);
 
 	/** Called for looking input */
 	void Look(const FInputActionValue& Value);
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Input")
+	UInputMappingContext* DefaultMappingContext;
 
 public:
 
