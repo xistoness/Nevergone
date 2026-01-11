@@ -2,23 +2,14 @@
 
 
 #include "World/WorldManagerSubsystem.h"
+#include "ActorComponents/SaveableComponent.h"
 #include "GameInstance/MyGameInstance.h"
 #include "GameInstance/MySaveGame.h"
-#include "GameInstance/Saveable.h"
+
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "EngineUtils.h"
 
-void UWorldManagerSubsystem::HandleSaveLoaded()
-{
-	RestoreWorldState();
-}
-
-void UWorldManagerSubsystem::HandlePartyRestored(const FPartyData& PartyData)
-{
-	// TODO	
-	// Party can affect companion spawns, etc
-}
 
 void UWorldManagerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -31,6 +22,38 @@ void UWorldManagerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	);
 }
 
+void UWorldManagerSubsystem::HandleSaveLoaded()
+{
+	RestoreWorldState();
+}
+
+void UWorldManagerSubsystem::HandlePartyRestored(const FPartyData& PartyData)
+{
+	// TODO	
+	// Party can affect companion spawns, etc
+}
+
+void UWorldManagerSubsystem::CollectWorldSaveData()
+{
+	if (!GameInstance)
+		return;
+
+	TArray<FActorSaveData> CollectedActors;
+
+	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	{
+		if (USaveableComponent* SaveComp =
+			It->FindComponentByClass<USaveableComponent>())
+		{
+			FActorSaveData Data;
+			SaveComp->WriteSaveData(Data);
+			CollectedActors.Add(Data);
+		}
+	}
+
+	GameInstance->SetSavedActors(CollectedActors);
+}
+
 void UWorldManagerSubsystem::HandleWorldInitializedActors(
 	const FActorsInitializedParams& Params
 )
@@ -39,14 +62,23 @@ void UWorldManagerSubsystem::HandleWorldInitializedActors(
 	if (!LoadedWorld)
 		return;
 
-	GameInstance = LoadedWorld->GetGameInstance<UMyGameInstance>();
-	if (!GameInstance)
+	UMyGameInstance* MyGI =
+		LoadedWorld->GetGameInstance<UMyGameInstance>();
+
+	if (!MyGI)
 		return;
 
-	// Register once per world
+	GameInstance = MyGI;
+
+	// Bind save/load events (only once per world)
 	GameInstance->OnSaveLoaded.AddUObject(
 		this,
 		&UWorldManagerSubsystem::HandleSaveLoaded
+	);
+
+	GameInstance->OnSaveRequested.AddUObject(
+		this,
+		&UWorldManagerSubsystem::CollectWorldSaveData
 	);
 
 	GameInstance->OnPartyChanged.AddUObject(
@@ -54,8 +86,10 @@ void UWorldManagerSubsystem::HandleWorldInitializedActors(
 		&UWorldManagerSubsystem::HandlePartyRestored
 	);
 
+	// Notify world is ready
 	GameInstance->OnPostLevelLoad();
 
+	// Restore persistent actors
 	RestoreWorldState();
 }
 
@@ -70,21 +104,10 @@ void UWorldManagerSubsystem::Deinitialize()
 
 void UWorldManagerSubsystem::RestoreWorldState()
 {
-	RegisterSaveableActors();
 	RestoreSaveableActors();
 	ResolveActorConflicts();
 	SpawnMissingActors();
-}
-
-void UWorldManagerSubsystem::RegisterSaveableActors() const
-{
-	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
-	{
-		if (It->Implements<USaveable>())
-		{
-			// Index by GUID, Tag or ID
-		}
-	}
+	CallPostRestore();
 }
 
 void UWorldManagerSubsystem::ClearCachedData()
@@ -106,26 +129,31 @@ void UWorldManagerSubsystem::RestoreSaveableActors()
 
 	const TArray<FActorSaveData>& SavedActors = GameInstance->GetSavedActors();
 
+	// Index saved data by GUID
+	TMap<FGuid, const FActorSaveData*> SavedByGuid;
+	for (const FActorSaveData& Data : SavedActors)
+	{
+		if (Data.ActorGuid.IsValid())
+		{
+			SavedByGuid.Add(Data.ActorGuid, &Data);
+		}
+	}
+
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
 		AActor* Actor = *It;
 
-		if (!Actor->Implements<USaveable>())
+		USaveableComponent* SaveComp =
+			Actor->FindComponentByClass<USaveableComponent>();
+
+		if (!SaveComp)
 			continue;
 
-		ISaveable* Saveable = Cast<ISaveable>(Actor);
-		if (!Saveable)
-			continue;
+		const FGuid Guid = SaveComp->GetOrCreateGuid();
 
-		const FGuid ActorGuid = Saveable->GetOrCreateGuid();
-
-		for (const FActorSaveData& Data : SavedActors)
+		if (const FActorSaveData* Data = SavedByGuid.FindRef(Guid))
 		{
-			if (Data.ActorGuid == ActorGuid)
-			{
-				Saveable->ReadSaveData(Data);
-				break;
-			}
+			SaveComp->ReadSaveData(*Data);
 		}
 	}
 }
@@ -136,6 +164,28 @@ void UWorldManagerSubsystem::ResolveActorConflicts()
 	// Duplicates
 	// Exists in saved game but not in the world
 	// Exists in the world but not in the saved game
+}
+
+void UWorldManagerSubsystem::CallPostRestore()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+		return;
+
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Actor = *It;
+		if (!IsValid(Actor))
+			continue;
+
+		USaveableComponent* SaveComp =
+			Actor->FindComponentByClass<USaveableComponent>();
+
+		if (!SaveComp)
+			continue;
+		
+		SaveComp->OnPostRestore();
+	}
 }
 
 void UWorldManagerSubsystem::SpawnMissingActors()
@@ -155,38 +205,37 @@ void UWorldManagerSubsystem::SpawnMissingActors()
 		if (Data.LevelName != CurrentLevel)
 			continue;
 
-		bool bAlreadyExists = false;
+		bool bExists = false;
 
 		for (TActorIterator<AActor> It(World); It; ++It)
 		{
-			if (!It->Implements<USaveable>())
-				continue;
-
-			ISaveable* Saveable = Cast<ISaveable>(*It);
-			if (Saveable && Saveable->GetOrCreateGuid() == Data.ActorGuid)
+			if (USaveableComponent* SaveComp =
+				It->FindComponentByClass<USaveableComponent>())
 			{
-				bAlreadyExists = true;
-				break;
+				if (SaveComp->GetOrCreateGuid() == Data.ActorGuid)
+				{
+					bExists = true;
+					break;
+				}
 			}
 		}
 
-		if (bAlreadyExists)
+		if (bExists || Data.ActorClass.IsNull())
 			continue;
 
-		if (!Data.ActorClass.IsNull())
-		{
-			AActor* SpawnedActor =
-				World->SpawnActor<AActor>(
-					Data.ActorClass.LoadSynchronous(),
-					Data.Transform
-				);
+		AActor* SpawnedActor = World->SpawnActor<AActor>(
+			Data.ActorClass.LoadSynchronous(),
+			Data.Transform
+		);
 
-			if (SpawnedActor && SpawnedActor->Implements<USaveable>())
-			{
-				ISaveable* Saveable = Cast<ISaveable>(SpawnedActor);
-				Saveable->SetActorGuid(Data.ActorGuid);
-				Saveable->ReadSaveData(Data);
-			}
+		if (!SpawnedActor)
+			continue;
+
+		if (USaveableComponent* SaveComp =
+			SpawnedActor->FindComponentByClass<USaveableComponent>())
+		{
+			SaveComp->SetActorGuid(Data.ActorGuid);
+			SaveComp->ReadSaveData(Data);
 		}
 	}
 }
