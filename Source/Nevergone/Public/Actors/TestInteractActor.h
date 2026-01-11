@@ -3,12 +3,15 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Interactable.h"
-#include "GameInstance/SaveableActorBase.h"
+#include "Interfaces/Interactable.h"
+#include "Interfaces/SaveParticipant.h"
 #include "TestInteractActor.generated.h"
 
+class UInteractableComponent;
+class USaveableComponent;
+
 UCLASS()
-class NEVERGONE_API ATestInteractActor : public ASaveableActorBase, public IInteractable
+class NEVERGONE_API ATestInteractActor : public AActor, public IInteractable, public ISaveParticipant
 {
 	GENERATED_BODY()
 
@@ -22,8 +25,13 @@ protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Interaction")
+	UInteractableComponent* InteractableComponent;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Save")
+	USaveableComponent* SaveableComponent;
+	
 	virtual void WriteSaveData_Implementation(FActorSaveData& OutData) const override;
-	virtual void ReadSaveData(const FActorSaveData& InData) override;
+	virtual void ReadSaveData_Implementation(const FActorSaveData& InData) override;
 	
 	UPROPERTY(EditAnywhere)
 	int32 InteractCount = 0;

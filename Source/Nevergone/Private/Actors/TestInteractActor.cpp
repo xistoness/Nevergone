@@ -2,6 +2,9 @@
 
 
 #include "Actors/TestInteractActor.h"
+#include "Data/ActorSaveData.h"
+#include "ActorComponents/InteractableComponent.h"
+#include "ActorComponents/SaveableComponent.h"
 #include "Serialization/MemoryWriter.h"
 #include "Serialization/MemoryReader.h"
 
@@ -11,6 +14,9 @@ ATestInteractActor::ATestInteractActor()
 {
 	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
+	SaveableComponent = CreateDefaultSubobject<USaveableComponent>(TEXT("SaveableComponent"));
+	InteractableComponent = CreateDefaultSubobject<UInteractableComponent>(TEXT("InteractableComponent"));
+
 }
 
 void ATestInteractActor::Interact_Implementation(AActor* Interactor)
@@ -28,8 +34,6 @@ void ATestInteractActor::BeginPlay()
 
 void ATestInteractActor::WriteSaveData_Implementation(FActorSaveData& OutData) const
 {
-	Super::WriteSaveData_Implementation(OutData);
-
 	OutData.CustomData.Reset();
 
 	FMemoryWriter Writer(OutData.CustomData, true);
@@ -39,10 +43,8 @@ void ATestInteractActor::WriteSaveData_Implementation(FActorSaveData& OutData) c
 	Ar << Temp;
 }
 
-void ATestInteractActor::ReadSaveData(const FActorSaveData& InData)
+void ATestInteractActor::ReadSaveData_Implementation(const FActorSaveData& InData)
 {
-	Super::ReadSaveData(InData);
-	
 	if (InData.CustomData.Num() > 0)
 	{
 		FMemoryReader Reader(InData.CustomData, true);

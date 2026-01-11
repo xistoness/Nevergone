@@ -12,9 +12,6 @@
 struct FActorSaveData;
 class UMySaveGame;
 
-/**
- * 
- */
 UCLASS()
 class NEVERGONE_API UMyGameInstance : public UGameInstance
 {
@@ -24,14 +21,10 @@ public:
 	virtual void Init() override;
 	virtual void Shutdown() override;
 	
-	void SetActiveSave(UMySaveGame* Save);
-	UMySaveGame* GetActiveSave() const;
-	
-	bool LoadSaveSlot(const FString& SlotName);
-	bool CreateNewSave(const FString& SlotName);
-	void ClearActiveSave();
-	
-	void CommitSave() const;
+	UFUNCTION(BlueprintCallable)
+	void RequestSaveGame();
+	UFUNCTION(BlueprintCallable)
+	void RequestLoadGame();
 	
 	
 	// TODO
@@ -69,17 +62,31 @@ public:
 	//OnRestoreParty.Broadcast(PartyData);
 	//OnRestoreProgress.Broadcast(ProgressionData);
 	
+	DECLARE_MULTICAST_DELEGATE(FOnSaveRequested);
 	DECLARE_MULTICAST_DELEGATE(FOnSaveLoaded);
 	DECLARE_MULTICAST_DELEGATE_OneParam(FOnPartyChanged, const FPartyData&);
 
 	FOnSaveLoaded OnSaveLoaded;
 	FOnPartyChanged OnPartyChanged;
+	FOnSaveRequested OnSaveRequested;
 	
 	
 	// Debugging
 	void Debug_PrintGlobalState() const;
 	void Debug_ResetProgression();
 
+protected:
+	
+	void SetActiveSave(UMySaveGame* Save);
+	UMySaveGame* GetActiveSave() const;
+	
+	bool LoadSaveSlot(const FString& SlotName);
+	void ApplySaveToWorld(UWorld* World) const;
+	bool CreateNewSave(const FString& SlotName);
+	void ClearActiveSave();
+	
+	void CommitSave() const;
+	
 private:
 	UPROPERTY()
 	UMySaveGame* ActiveSave;
