@@ -72,6 +72,23 @@ void ANevergoneCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInput
 	}
 }
 
+void ANevergoneCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+	
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		if (ULocalPlayer* LP = PC->GetLocalPlayer())
+		{
+			if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
+				LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
+			{
+				Subsystem->AddMappingContext(DefaultMappingContext, 0);
+			}
+		}
+	}
+}
+
 void ANevergoneCharacter::Move(const FInputActionValue& Value)
 {
 	// input is a Vector2D
