@@ -12,6 +12,7 @@ public class Nevergone : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
+			"GameplayTags",
 			"InputCore",
 			"EnhancedInput",
 			"AIModule",
