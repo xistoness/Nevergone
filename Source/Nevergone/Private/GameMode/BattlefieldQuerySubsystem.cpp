@@ -4,6 +4,8 @@
 #include "GameMode/BattlefieldQuerySubsystem.h"
 
 #include "EngineUtils.h"
+#include "Actors/BattlefieldAllySpawnPoint.h"
+#include "Actors/BattlefieldEnemySpawnPoint.h"
 
 void UBattlefieldQuerySubsystem::BuildCache()
 {
@@ -24,22 +26,20 @@ void UBattlefieldQuerySubsystem::InvalidateCache()
 
 void UBattlefieldQuerySubsystem::GetPlayerSpawnSlots(TArray<FTransform>& OutSlots) const
 {
-	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	for (TActorIterator<ABattlefieldAllySpawnPoint> It(GetWorld()); It; ++It)
 	{
-		AActor* Actor = *It;
-
-		//if (Actor->FindComponentByClass<UBattlefieldSpawnSlotComponent>())
-		{
-			// Read transform & classify
-			FTransform TempTransform = Actor->GetTransform();
-			OutSlots.Add(TempTransform);
-		}
-	}
-	
+		FTransform TempTransform = It->GetTransform();
+		OutSlots.Add(TempTransform);
+	}	
 }
 
 void UBattlefieldQuerySubsystem::GetEnemySpawnSlots(TArray<FTransform>& OutSlots) const
 {
+	for (TActorIterator<ABattlefieldEnemySpawnPoint> It(GetWorld()); It; ++It)
+	{
+		FTransform TempTransform = It->GetTransform();
+		OutSlots.Add(TempTransform);
+	}
 }
 
 void UBattlefieldQuerySubsystem::GetCoverProviders(TArray<TWeakObjectPtr<AActor>>& OutCovers) const
@@ -49,6 +49,22 @@ void UBattlefieldQuerySubsystem::GetCoverProviders(TArray<TWeakObjectPtr<AActor>
 bool UBattlefieldQuerySubsystem::HasCoverAtLocation(const FVector& Location) const
 {
 	return false;
+}
+
+bool UBattlefieldQuerySubsystem::HasLineOfEffect(const FVector& From, const FVector& To,
+	const TArray<AActor*>& IgnoredActors) const
+{
+	return false;
+}
+
+void UBattlefieldQuerySubsystem::QueryActorsInRadius(const FVector& Origin, float Radius,
+	TArray<AActor*>& OutActors) const
+{
+}
+
+void UBattlefieldQuerySubsystem::QueryActorsInCone(const FVector& Origin, const FVector& Forward, float AngleDegrees,
+	float Distance, TArray<AActor*>& OutActors) const
+{
 }
 
 

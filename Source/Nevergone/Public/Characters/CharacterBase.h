@@ -10,6 +10,12 @@
 class UInputMappingContext;
 class UInputAction;
 class USaveableComponent;
+class UInteractableComponent;
+class UCharacterModeComponent;
+class UExplorationModeComponent;
+class UBattleModeComponent;
+class UUnitStatsComponent;
+class UMyAbilitySystemComponent;
 
 UCLASS()
 class NEVERGONE_API ACharacterBase : public ANevergoneCharacter, public ISaveParticipant
@@ -19,45 +25,63 @@ class NEVERGONE_API ACharacterBase : public ANevergoneCharacter, public ISavePar
 public:
 
 	ACharacterBase();
+	
+	void EnableExplorationMode();
+	void EnableBattleMode();
+	
+	// Camera
+	void ResetCamera();
 
+	// Save system
 	virtual void WriteSaveData_Implementation(FActorSaveData& OutData) const override;
 	virtual void ReadSaveData_Implementation(const FActorSaveData& InData) override;
 	virtual void OnPostRestore_Implementation() override;
-	void ResetCamera();
+	
+	// Getters
+	UUnitStatsComponent* GetUnitStats() const;
+	
+	UBattleModeComponent* GetBattleModeComponent() const;
+	
+	UMyAbilitySystemComponent* GetAbilitySystemComponent();
+	
+	const FVector& GetPendingMoveLocation() const;
+	
+	// Setters
+	
+	void SetPendingMoveLocation(const FVector& InLocation);
+	
+	void MoveToLocation(const FVector& InLocation);
+	
+	
 
 protected:
 
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaTime) override;
+	void SetMode(UCharacterModeComponent* NewMode);
+		
+	UPROPERTY()
+	FVector PendingMoveLocation;
 	
-	UFUNCTION()
-	void OnInteractionPressed();
-	UFUNCTION()
-	void OnSaveGamePressed();
-	UFUNCTION()
-	void OnLoadGamePressed();
-	
-	// Persistent runtime GUID (mirrors SaveData)
-	UPROPERTY(VisibleAnywhere, Category="Save")
-	FGuid SaveGuid;
-	
+	// Camera persistence
 	float ArmLength;
 	FRotator ControllerRot;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Modes")
+	UExplorationModeComponent* ExplorationMode;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Modes")
+	UBattleModeComponent* BattleMode;
+	
+	UPROPERTY()
+	UCharacterModeComponent* ActiveMode;
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Save")
 	USaveableComponent* SaveableComponent;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Input")
-	UInputAction* InteractionInput;
-	UPROPERTY(EditDefaultsOnly, Category = "Input")
-	UInputAction* SaveGameInput;
-	UPROPERTY(EditDefaultsOnly, Category = "Input")
-	UInputAction* LoadGameInput;
 	
-public:	
-	// Called every frame
-	virtual void Tick(float DeltaTime) override;
-
-	// Called to bind functionality to input
-	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
-
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Stats")
+	UUnitStatsComponent* UnitStatsComponent;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	UMyAbilitySystemComponent* AbilitySystemComponent;
 };

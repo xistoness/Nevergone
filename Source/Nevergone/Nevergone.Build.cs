@@ -12,7 +12,9 @@ public class Nevergone : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
+			"GameplayAbilities",
 			"GameplayTags",
+			"GameplayTasks",
 			"InputCore",
 			"EnhancedInput",
 			"AIModule",
@@ -26,6 +28,7 @@ public class Nevergone : ModuleRules
 
 		PublicIncludePaths.AddRange(new string[] {
 			"Nevergone",
+			"Nevergone/Public",
 			"Nevergone/Variant_Platforming",
 			"Nevergone/Variant_Platforming/Animation",
 			"Nevergone/Variant_Combat",

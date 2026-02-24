@@ -1,8 +1,8 @@
 // Copyright Xyzto Works
 
 
-#include "Characters/CharacterBase.h"
 #include "Level/EncounterGeneratorSubsystem.h"
+#include "Characters/CharacterBase.h"
 #include "Level/FloorEncounterData.h"
 #include "GameMode/BattlePreparationContext.h"
 #include "Types/BattleTypes.h"
@@ -28,7 +28,7 @@ void UEncounterGeneratorSubsystem::GenerateEncounter(const UFloorEncounterData* 
 		FGeneratedEnemyData NewEnemy;
 		NewEnemy.EnemyClass = Entry.EnemyClass;
 		NewEnemy.Tags = Entry.Tags;
-		NewEnemy.Level = 1; // Neutral default for now
+		NewEnemy.Level = Entry.Level;
 
 		OutPrepContext.EnemyParty.Add(NewEnemy);
 	}

@@ -16,6 +16,8 @@ public:
 	UInteractableComponent();
 	
 	void Interact(AActor* Interactor);
+	
+	void SetHighlighted(bool bHighlighted);
 
 protected:
 	virtual void OnRegister() override;		

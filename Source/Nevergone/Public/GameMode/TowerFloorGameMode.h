@@ -6,6 +6,8 @@
 #include "GameFramework/GameModeBase.h"
 #include "TowerFloorGameMode.generated.h"
 
+class ACharacterBase;
+
 UENUM(BlueprintType)
 enum class EFloorCombatPolicy : uint8
 {
@@ -13,6 +15,8 @@ enum class EFloorCombatPolicy : uint8
 	SingleCombat,
 	MultipleCombats
 };
+
+enum class EGameContextState : uint8;
 
 UCLASS()
 class NEVERGONE_API ATowerFloorGameMode : public AGameModeBase
@@ -34,15 +38,35 @@ protected:
 	/** Defines how combat behaves on this floor */
 	UPROPERTY(EditDefaultsOnly, Category = "Floor Rules")
 	EFloorCombatPolicy CombatPolicy = EFloorCombatPolicy::MultipleCombats;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Controllers")
+	TSubclassOf<APlayerController> ExplorationControllerClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Controllers")
+	TSubclassOf<APlayerController> BattleControllerClass;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Controllers")
+	TSubclassOf<APlayerController> BattlePreparationControllerClass;
+	
+	UPROPERTY()
+	APlayerController* ActivePlayerController;
+	
+	//Debug
+	UPROPERTY(EditDefaultsOnly, Category="Debug|Party")
+	TSubclassOf<ACharacterBase> TestCharClass;
 
 protected:
+	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	
 	/** Called once when the level becomes active */
 	virtual void SetupFloor();
 
 	/** Called once before the level is unloaded */
 	virtual void TeardownFloor();
+	
+	void HandleGameContextChanged(EGameContextState NewState);
 
-	virtual void BeginPlay() override;
-	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;	
+	void SwitchPlayerController(TSubclassOf<APlayerController> NewControllerClass);
 	
 };

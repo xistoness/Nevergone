@@ -5,8 +5,7 @@
 #include "Data/ActorSaveData.h"
 #include "ActorComponents/InteractableComponent.h"
 #include "ActorComponents/SaveableComponent.h"
-#include "Serialization/MemoryWriter.h"
-#include "Serialization/MemoryReader.h"
+#include "GameInstance/SaveKeys.h"
 
 
 // Sets default values
@@ -29,29 +28,33 @@ void ATestInteractActor::Interact_Implementation(AActor* Interactor)
 void ATestInteractActor::BeginPlay()
 {
 	Super::BeginPlay();
-	
 }
 
 void ATestInteractActor::WriteSaveData_Implementation(FActorSaveData& OutData) const
 {
-	OutData.CustomData.Reset();
+	FSavePayload Payload;
 
-	FMemoryWriter Writer(OutData.CustomData, true);
+	FMemoryWriter Writer(Payload.Data, true);
 	FArchive& Ar = Writer;
-	
+
 	int32 Temp = InteractCount;
 	Ar << Temp;
+
+	OutData.CustomDataMap.Add(SaveKeys::TestInteract, MoveTemp(Payload));
 }
 
 void ATestInteractActor::ReadSaveData_Implementation(const FActorSaveData& InData)
 {
-	if (InData.CustomData.Num() > 0)
+	const FSavePayload* Payload = InData.CustomDataMap.Find(SaveKeys::TestInteract);
+	if (!Payload)
 	{
-		FMemoryReader Reader(InData.CustomData, true);
-		FArchive& Ar = Reader;
-		
-		Ar << InteractCount;
+		return;
 	}
+
+	FMemoryReader Reader(Payload->Data, true);
+	FArchive& Ar = Reader;
+
+	Ar << InteractCount;
 }
 
 // Called every frame

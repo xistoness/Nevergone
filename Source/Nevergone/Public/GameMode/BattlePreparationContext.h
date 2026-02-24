@@ -7,12 +7,16 @@
 #include "UObject/Object.h"
 #include "BattlePreparationContext.generated.h"
 
+class UGridManager;
+
 UCLASS()
 class NEVERGONE_API UBattlePreparationContext : public UObject
 {
 	GENERATED_BODY()
 
 public:
+	
+	
 	/* --- Enemy side --- */
 	UPROPERTY(BlueprintReadWrite)
 	TArray<FGeneratedEnemyData> EnemyParty;
@@ -26,6 +30,10 @@ public:
 	UPROPERTY(BlueprintReadWrite)
 	TArray<FPlannedSpawn> PlayerPlannedSpawns;
 	
+	/* --- Spawned runtime units --- */
+	UPROPERTY()
+	TArray<FSpawnedBattleUnit> SpawnedUnits;
+	
 	/* --- Metadata --- */
 	UPROPERTY(BlueprintReadOnly)
 	int32 FloorIndex;
@@ -34,8 +42,9 @@ public:
 	FGameplayTagContainer CombatTags;
 	
 	/* --- Validation --- */
+	void Initialize();
 	bool IsReadyToStartCombat() const;
 	
 	void Reset();
-	
+	void DumpToLog() const;
 };

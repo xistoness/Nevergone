@@ -6,30 +6,35 @@
 #include "ActorSaveData.generated.h"
 
 USTRUCT(BlueprintType)
+struct FSavePayload
+{
+	GENERATED_BODY()
+
+	UPROPERTY(SaveGame)
+	TArray<uint8> Data;
+};
+
+USTRUCT(BlueprintType)
 struct FActorSaveData
 {
 	GENERATED_BODY()
 
 public:
-	// Persistent unique identifier for this actor
 	UPROPERTY(SaveGame)
 	FGuid ActorGuid;
 
-	// Class used to respawn this actor if missing
 	UPROPERTY(SaveGame)
 	TSoftClassPtr<AActor> ActorClass;
 
-	// World transform at save time
 	UPROPERTY(SaveGame)
 	FTransform Transform;
 
-	// Level 
 	UPROPERTY(SaveGame)
 	FName LevelName;
-	
-	// Optional custom binary payload (actor-defined)
+
+	// Custom data per save participant
 	UPROPERTY(SaveGame)
-	TArray<uint8> CustomData;
+	TMap<FName, FSavePayload> CustomDataMap;
 
 	FActorSaveData()
 		: ActorGuid()
