@@ -11,6 +11,7 @@
 
 struct FActorSaveData;
 class UMySaveGame;
+class UGameContextManager;
 
 UCLASS()
 class NEVERGONE_API UMyGameInstance : public UGameInstance
@@ -18,7 +19,6 @@ class NEVERGONE_API UMyGameInstance : public UGameInstance
 	GENERATED_BODY()
 public:
 	
-	virtual void Init() override;
 	virtual void Shutdown() override;
 	
 	UFUNCTION(BlueprintCallable)
@@ -26,6 +26,7 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void RequestLoadGame();
 	
+	UGameContextManager* GetGameContextManager() const;
 	
 	// TODO
 	// Party
@@ -77,11 +78,11 @@ public:
 
 protected:
 	
+	virtual void Init() override;
 	void SetActiveSave(UMySaveGame* Save);
 	UMySaveGame* GetActiveSave() const;
 	
 	bool LoadSaveSlot(const FString& SlotName);
-	void ApplySaveToWorld(UWorld* World) const;
 	bool CreateNewSave(const FString& SlotName);
 	void ClearActiveSave();
 	
@@ -103,4 +104,6 @@ private:
 	UPROPERTY()
 	FLevelTransitionContext PendingLevelTransition;	
 	
+	UPROPERTY()
+	UGameContextManager* GameContextManager;
 };

@@ -7,7 +7,7 @@
 #include "Engine/DataAsset.h"
 #include "FloorEncounterData.generated.h"
 
-UCLASS()
+UCLASS(BlueprintType)
 class NEVERGONE_API UFloorEncounterData : public UDataAsset
 {
 	GENERATED_BODY()

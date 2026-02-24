@@ -28,6 +28,25 @@ public:
 
 	bool HasCoverAtLocation(const FVector& Location) const;
 
+	bool HasLineOfEffect(
+	const FVector& From,
+	const FVector& To,
+	const TArray<AActor*>& IgnoredActors
+) const;
+
+	void QueryActorsInRadius(
+		const FVector& Origin,
+		float Radius,
+		TArray<AActor*>& OutActors
+	) const;
+
+	void QueryActorsInCone(
+		const FVector& Origin,
+		const FVector& Forward,
+		float AngleDegrees,
+		float Distance,
+		TArray<AActor*>& OutActors
+	) const;
 
 	
 private:

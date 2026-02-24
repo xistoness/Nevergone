@@ -2,6 +2,7 @@
 
 
 #include "GameInstance/MyGameInstance.h"
+#include "GameInstance/GameContextManager.h"
 
 #include "EngineUtils.h"
 #include "ActorComponents/SaveableComponent.h"
@@ -21,6 +22,8 @@ void UMyGameInstance::Init()
 		UE_LOG(LogTemp, Warning, TEXT("No save found, creating new one"));
 		CreateNewSave(SlotName);
 	}
+	
+	GameContextManager = NewObject<UGameContextManager>(this);
 }
 
 void UMyGameInstance::Shutdown()
@@ -66,6 +69,11 @@ void UMyGameInstance::RequestLoadGame()
 	}
 
 	OnSaveLoaded.Broadcast();
+}
+
+UGameContextManager* UMyGameInstance::GetGameContextManager() const
+{
+	return GameContextManager;
 }
 
 void UMyGameInstance::ClearActiveSave()

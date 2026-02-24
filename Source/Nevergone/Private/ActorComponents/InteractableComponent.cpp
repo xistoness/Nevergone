@@ -24,6 +24,38 @@ void UInteractableComponent::Interact(AActor* Interactor)
 	}
 }
 
+void UInteractableComponent::SetHighlighted(bool bHighlighted)
+{
+	AActor* OwnerActor = GetOwner();
+	if (!OwnerActor)
+	{
+		return;
+	}
+
+	TArray<UPrimitiveComponent*> Primitives;
+	OwnerActor->GetComponents<UPrimitiveComponent>(Primitives);
+
+	for (UPrimitiveComponent* Primitive : Primitives)
+	{
+		
+		UE_LOG(LogTemp, Warning,
+		TEXT("[Highlight] Primitive: %s | Class: %s | Visible: %d"),
+		*Primitive->GetName(),
+		*Primitive->GetClass()->GetName(),
+		Primitive->IsVisible()
+		);
+
+		UE_LOG(LogTemp, Warning, TEXT("Tries to highlight..."));
+		Primitive->SetRenderCustomDepth(bHighlighted);
+		Primitive->SetCustomDepthStencilValue(1);
+		
+		UE_LOG(LogTemp, Warning,
+			TEXT("[Highlight] CustomDepth ENABLED for: %s"),
+			*Primitive->GetName()
+		);
+	}
+}
+
 void UInteractableComponent::OnRegister()
 {
 	Super::OnRegister();

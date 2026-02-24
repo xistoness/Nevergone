@@ -14,9 +14,27 @@ struct FPartyMemberData
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FGuid CharacterID;
+	
+	UPROPERTY()
+	TSubclassOf<ACharacter> CharacterClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 Level;
+	
+	UPROPERTY()
+	float CurrentHP;
+
+	UPROPERTY()
+	float MaxHP;
+
+	UPROPERTY()
+	bool bIsAlive;
+
+	UPROPERTY()
+	TMap<FName, int32> Stats;
+
+	UPROPERTY()
+	TArray<FName> EquippedItems;
 };
 
 USTRUCT(BlueprintType)
@@ -26,4 +44,7 @@ struct FPartyData
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FPartyMemberData> Members;
+	
+	UPROPERTY()
+	int32 MaxPartySize = 4;
 };

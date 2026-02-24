@@ -5,37 +5,55 @@
 
 void UTurnManager::Initialize(const TArray<AActor*>& InCombatants)
 {
-	Combatants.Reset();
-
-	for (AActor* Actor : InCombatants)
-	{
-		if (Actor)
-		{
-			Combatants.Add(Actor);
-		}
-	}
-
-	CurrentTurnIndex = INDEX_NONE;
+	Combatants = InCombatants;
 }
 
-void UTurnManager::StartTurns()
+void UTurnManager::StartCombat()
 {
-	if (Combatants.Num() == 0)
-	{
-		return;
-	}
-
-	CurrentTurnIndex = 0;
-	OnTurnAdvanced.Broadcast();
+	BeginPlayerTurn();
 }
 
-void UTurnManager::AdvanceTurn()
+void UTurnManager::BeginPlayerTurn()
 {
-	if (Combatants.Num() == 0)
-	{
-		return;
-	}
+	UE_LOG(LogTemp, Warning, TEXT("[TurnManager] Starting Player turn"));
+	SetTurnState(EBattleTurnOwner::Player, EBattleTurnPhase::AwaitingOrders);
+}
 
-	CurrentTurnIndex = (CurrentTurnIndex + 1) % Combatants.Num();
-	OnTurnAdvanced.Broadcast();
+void UTurnManager::BeginEnemyTurn()
+{
+	UE_LOG(LogTemp, Warning, TEXT("[TurnManager] Starting Enemy turn"));
+	SetTurnState(EBattleTurnOwner::Enemy, EBattleTurnPhase::ExecutingActions);
+
+	// Enemy AI execution would be triggered here
+	// When finished, EndCurrentTurn() must be called
+}
+
+void UTurnManager::EndCurrentTurn()
+{
+	if (CurrentTurnOwner == EBattleTurnOwner::Player)
+	{
+		BeginEnemyTurn();
+	}
+	else
+	{
+		BeginPlayerTurn();
+	}
+}
+
+void UTurnManager::SetTurnState(EBattleTurnOwner NewOwner, EBattleTurnPhase NewPhase)
+{
+	CurrentTurnOwner = NewOwner;
+	CurrentTurnPhase = NewPhase;
+
+	OnTurnStateChanged.Broadcast(CurrentTurnOwner, CurrentTurnPhase);
+}
+
+EBattleTurnOwner UTurnManager::GetCurrentTurnOwner() const
+{
+	return CurrentTurnOwner;
+}
+
+EBattleTurnPhase UTurnManager::GetCurrentTurnPhase() const
+{
+	return CurrentTurnPhase;
 }
