@@ -15,7 +15,9 @@ bool MoveRangeRule::IsSatisfied(const FActionContext& Context) const
 	int32 MaxRange = Speed * ActionPoints;
 	
 	if (Context.CachedPathCost == INDEX_NONE)
+	{
 		return false;
-
+	}
+		
 	return Context.CachedPathCost <= MaxRange;
 }

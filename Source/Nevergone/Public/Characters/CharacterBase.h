@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "NevergoneCharacter.h"
 #include "Interfaces/SaveParticipant.h"
+#include "Components/DecalComponent.h"
 #include "CharacterBase.generated.h"
 
 class UInputMappingContext;
@@ -23,14 +24,20 @@ class NEVERGONE_API ACharacterBase : public ANevergoneCharacter, public ISavePar
 	GENERATED_BODY()
 
 public:
-
+	
+	DECLARE_MULTICAST_DELEGATE(FOnPathMoveFinished);
+	FOnPathMoveFinished OnPathMoveFinished;
+	
 	ACharacterBase();
 	
 	void EnableExplorationMode();
 	void EnableBattleMode();
 	
+	void SetSelected(bool bSelected);
+	
 	// Camera
 	void ResetCamera();
+	FVector GetGroundAlignedLocation(const FVector& GroundLocation) const;
 
 	// Save system
 	virtual void WriteSaveData_Implementation(FActorSaveData& OutData) const override;
@@ -44,24 +51,19 @@ public:
 	
 	UMyAbilitySystemComponent* GetAbilitySystemComponent();
 	
-	const FVector& GetPendingMoveLocation() const;
-	
 	// Setters
 	
-	void SetPendingMoveLocation(const FVector& InLocation);
-	
-	void MoveToLocation(const FVector& InLocation);
-	
-	
+	void MoveToLocation(const FVector& InLocation, const TArray<FVector>& WorldPoints);	
 
 protected:
 
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
 	void SetMode(UCharacterModeComponent* NewMode);
-		
-	UPROPERTY()
-	FVector PendingMoveLocation;
+	
+	// Path movement
+	UFUNCTION(BlueprintCallable, Category="Movement")
+	void MoveAlongPath_Lerped(const TArray<FVector>& WorldPoints);
 	
 	// Camera persistence
 	float ArmLength;
@@ -84,4 +86,30 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	UMyAbilitySystemComponent* AbilitySystemComponent;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Selection")
+	UDecalComponent* SelectionIndicator;
+
+private:	
+	// --- Lerp movement state ---
+	UPROPERTY()
+	TArray<FVector> PendingPathPoints;
+
+	int32 CurrentPathIndex = INDEX_NONE;
+
+	UPROPERTY()
+	bool bIsMovingAlongPath = false;
+
+	UPROPERTY(EditAnywhere, Category="Movement|Lerp")
+	float MoveSpeedUnitsPerSec = 600.0f;
+
+	UPROPERTY(EditAnywhere, Category="Movement|Lerp")
+	float AcceptRadius = 5.0f;
+
+	// Advances movement toward current point
+	void TickPathMove(float DeltaSeconds);
+
+	// Stops and clears state
+	void StopPathMove();
+	void FinishPathMove();
 };

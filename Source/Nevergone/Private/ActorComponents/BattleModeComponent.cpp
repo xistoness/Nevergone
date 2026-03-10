@@ -1,73 +1,155 @@
 // Copyright Xyzto Works
 
-
 #include "ActorComponents/BattleModeComponent.h"
 
+#include "Abilities/GameplayAbility.h"
 #include "ActorComponents/MyAbilitySystemComponent.h"
 #include "ActorComponents/UnitStatsComponent.h"
 #include "Characters/CharacterBase.h"
-#include "Characters/Abilities/GA_Move_Simple.h"
+#include "Characters/Abilities/BattleGameplayAbility.h"
+#include "Characters/Abilities/BattleMovementAbility.h"
 #include "Characters/Abilities/AbilityPreview/AbilityPreviewRenderer.h"
+#include "Data/UnitDefinition.h"
 #include "GameMode/Combat/Resolvers/ActionResolver.h"
 #include "Level/GridManager.h"
-#include "WorldPartition/HLOD/HLODActor.h"
 
 UBattleModeComponent::UBattleModeComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 }
 
-void UBattleModeComponent::TickComponent(float DeltaTime, ELevelTick TickType,
-	FActorComponentTickFunction* ThisTickFunction)
+void UBattleModeComponent::TickComponent(
+	float DeltaTime,
+	ELevelTick TickType,
+	FActorComponentTickFunction* ThisTickFunction
+)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+}
+
+UUnitStatsComponent* UBattleModeComponent::GetUnitStats() const
+{
+	if (const ACharacterBase* Character = Cast<ACharacterBase>(GetOwner()))
+	{
+		return Character->GetUnitStats();
+	}
+	return nullptr;
+}
+
+void UBattleModeComponent::HandleUnitDeath(ACharacterBase* OwnerCharacter)
+{
+	FVector DeadLocation = OwnerCharacter->GetActorLocation();
+	DeadLocation.Z -= 1000.f;
+	OwnerCharacter->SetActorLocation(DeadLocation);	
 }
 
 void UBattleModeComponent::EnterMode()
 {
 	Super::EnterMode();
 	SetComponentTickEnabled(true);
-	
-	UE_LOG(LogTemp, Warning, TEXT("Owner class: %s"),
-	*GetOwner()->GetClass()->GetName());
-	
+
 	UE_LOG(LogTemp, Warning, TEXT("[BattleModeComponent]: Entering battle mode..."));
+
 	ActionResolver = NewObject<UActionResolver>(this);
 
-	// Default action is MOVE
-	SetDefaultMoveAction();
-	
 	ACharacterBase* Character = Cast<ACharacterBase>(GetOwner());
 	if (!Character)
-		return;
-
-	UMyAbilitySystemComponent* ASC =
-		Character->GetAbilitySystemComponent();
-
-	if (!ASC)
-		return;
-
-	ASC->InitAbilityActorInfo(Character, Character);
-	// Only grant if not already granted
-	if (!ASC->FindAbilitySpecFromClass(DefaultMoveAbilityClass))
 	{
-		if (Character->HasAuthority())
-		{
-			UE_LOG(LogTemp, Warning, TEXT("Ability class valid? %s"), DefaultMoveAbilityClass ? TEXT("YES") : TEXT("NO"));
-			ASC->GiveAbility(FGameplayAbilitySpec(DefaultMoveAbilityClass, 1, INDEX_NONE, this));	
-		}
+		return;
 	}
-	FGameplayAbilitySpec* Spec =
-	ASC->FindAbilitySpecFromClass(DefaultMoveAbilityClass);
 
-	UE_LOG(LogTemp, Warning, TEXT("After GiveAbility - Spec exists? %s"),
-		Spec ? TEXT("YES") : TEXT("NO"));
+	UMyAbilitySystemComponent* ASC = Character->GetAbilitySystemComponent();
+	if (!ASC)
+	{
+		return;
+	}
+	
+	if (UUnitStatsComponent* Stats = GetUnitStats())
+	{
+		Stats->OnUnitDeath.AddUObject(this, &UBattleModeComponent::HandleUnitDeath);
+	}
+	
+	ASC->InitAbilityActorInfo(Character, Character);
+
+	InitializeAbilitiesFromDefinition();
+	SelectDefaultAbility();
 }
 
 void UBattleModeComponent::ExitMode()
 {
 	Super::ExitMode();
 	SetComponentTickEnabled(false);
+	
+	if (UUnitStatsComponent* Stats = GetUnitStats())
+	{
+		Stats->OnUnitDeath.RemoveAll(this);
+	}
+}
+
+void UBattleModeComponent::InitializeAbilitiesFromDefinition()
+{
+	GrantedBattleAbilities.Reset();
+	SelectedAbilityIndex = INDEX_NONE;
+
+	UUnitStatsComponent* Stats = GetUnitStats();
+	if (!Stats) return;
+	
+	const UUnitDefinition* Definition = Stats->GetDefinition();
+
+	if (!Definition)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[BattleModeComponent]: UnitDefinition is null"));
+		return;
+	}
+
+	for (const FUnitAbilityEntry& Entry : Definition->BattleAbilities)
+	{
+		if (!Entry.AbilityClass)
+		{
+			continue;
+		}
+
+		GrantedBattleAbilities.Add(Entry);
+
+		if (Entry.bGrantedAtBattleStart)
+		{
+			EnsureAbilityGranted(Entry.AbilityClass);
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[BattleModeComponent]: Loaded %d battle abilities from definition"),
+		GrantedBattleAbilities.Num());
+}
+
+void UBattleModeComponent::EnsureAbilityGranted(TSubclassOf<UGameplayAbility> AbilityClass)
+{
+	if (!AbilityClass)
+	{
+		return;
+	}
+
+	ACharacterBase* Character = Cast<ACharacterBase>(GetOwner());
+	if (!Character)
+	{
+		return;
+	}
+
+	UMyAbilitySystemComponent* ASC = Character->GetAbilitySystemComponent();
+	if (!ASC)
+	{
+		return;
+	}
+
+	if (ASC->FindAbilitySpecFromClass(AbilityClass))
+	{
+		return;
+	}
+
+	if (Character->HasAuthority())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[BattleModeComponent]: Granting ability %s"), *AbilityClass->GetName());
+		ASC->GiveAbility(FGameplayAbilitySpec(AbilityClass, 1, INDEX_NONE, this));
+	}
 }
 
 void UBattleModeComponent::HandleAbilitySelected()
@@ -77,75 +159,166 @@ void UBattleModeComponent::HandleAbilitySelected()
 		CurrentPreview->ClearPreview();
 		CurrentPreview = nullptr;
 	}
-	
+}
+
+void UBattleModeComponent::SetSelectedAbilityFromEntry(const FUnitAbilityEntry& Entry)
+{
+	CurrentContext = {};
+	CurrentContext.SourceActor = GetOwner();
+	CurrentContext.AbilityClass = Entry.AbilityClass;
+	CurrentContext.Ability = Entry.AbilityData;
+	UE_LOG(LogTemp, Warning, TEXT("[BattleModeComponent]: Selected ability: %s"), *Entry.AbilityClass->GetName());
+
+	HandleAbilitySelected();
+}
+
+bool UBattleModeComponent::SelectAbilityByIndex(int32 AbilityIndex)
+{
+	if (!GrantedBattleAbilities.IsValidIndex(AbilityIndex))
+	{
+		return false;
+	}
+
+	SelectedAbilityIndex = AbilityIndex;
+	SetSelectedAbilityFromEntry(GrantedBattleAbilities[AbilityIndex]);
+	return true;
+}
+
+bool UBattleModeComponent::SelectAbilityByActionId(FName ActionId)
+{
+	for (int32 Index = 0; Index < GrantedBattleAbilities.Num(); ++Index)
+	{
+		if (GrantedBattleAbilities[Index].ActionId == ActionId)
+		{
+			return SelectAbilityByIndex(Index);
+		}
+	}
+
+	return false;
+}
+
+bool UBattleModeComponent::SelectDefaultAbility()
+{
+	for (int32 Index = 0; Index < GrantedBattleAbilities.Num(); ++Index)
+	{
+		if (GrantedBattleAbilities[Index].bIsDefaultAction)
+		{
+			return SelectAbilityByIndex(Index);
+		}
+	}
+
+	if (GrantedBattleAbilities.Num() > 0)
+	{
+		return SelectAbilityByIndex(0);
+	}
+
+	return false;
+}
+
+TSubclassOf<UBattleMovementAbility> UBattleModeComponent::GetEquippedMovementAbilityClass() const
+{
+	for (const FUnitAbilityEntry& Entry : GrantedBattleAbilities)
+	{
+		if (!Entry.bIsMovementAbility || !Entry.AbilityClass)
+		{
+			continue;
+		}
+
+		if (Entry.AbilityClass->IsChildOf(UBattleMovementAbility::StaticClass()))
+		{
+			return TSubclassOf<UBattleMovementAbility>(Entry.AbilityClass);
+		}
+	}
+
+	return nullptr;
 }
 
 bool UBattleModeComponent::PreviewCurrentAbilityExecution(FActionResult& ExecutionResult)
 {
 	if (!CurrentContext.AbilityClass)
+	{
 		return false;
-	
-	UE_LOG(LogTemp, Warning, TEXT("[BattleModeComponent]: Trying to execute: %s"), *CurrentContext.AbilityClass.Get()->GetName());
-	ExecutionResult = ActionResolver->ResolveExecution(
-		CurrentContext.AbilityClass,
-		CurrentContext);
+	}
+
+	//UE_LOG(LogTemp, Warning, TEXT("[BattleModeComponent]: Trying to build execution: %s"), *CurrentContext.AbilityClass->GetName());
+
+	ExecutionResult = ActionResolver->ResolveExecution(CurrentContext.AbilityClass, CurrentContext);
 
 	if (!ExecutionResult.bIsValid)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[BattleModeComponent]: Execution invalid"));
 		return false;
 	}
+
 	return true;
 }
 
 void UBattleModeComponent::RenderVisualPreview()
 {
+	if (!CurrentContext.AbilityClass)
+	{
+		return;
+	}
 
 	if (!CurrentPreview)
 	{
-		ACharacterBase* Character =
-			Cast<ACharacterBase>(GetOwner());
-
-		if (!Character)
-			return;
-
-		UMyAbilitySystemComponent* ASC =
-			Character->GetAbilitySystemComponent();
-
-		if (!ASC)
-			return;
-	
 		UBattleGameplayAbility* AbilityCDO =
 			CurrentContext.AbilityClass->GetDefaultObject<UBattleGameplayAbility>();
 
 		if (!AbilityCDO)
+		{
 			return;
-			
-		CurrentPreview = NewObject<UAbilityPreviewRenderer>(this, AbilityCDO->GetPreviewClass());
+		}
+
+		TSubclassOf<UAbilityPreviewRenderer> PreviewClass = AbilityCDO->GetPreviewClass();
+		if (!PreviewClass)
+		{
+			return;
+		}
+
+		CurrentPreview = NewObject<UAbilityPreviewRenderer>(this, PreviewClass);
+		if (!CurrentPreview)
+		{
+			return;
+		}
+
 		CurrentPreview->Initialize(GetWorld());
 	}
-		
+
 	CurrentPreview->UpdatePreview(CurrentContext);
 }
 
 void UBattleModeComponent::PreviewCurrentAbility(FActionResult& PreviewResult)
 {
 	if (!CurrentContext.AbilityClass)
+	{
 		return;
-	
-	UE_LOG(LogTemp, Warning, TEXT("[BattleModeComponent]: Trying to execute: %s"), *CurrentContext.AbilityClass.Get()->GetName());
-	PreviewResult = ActionResolver->ResolvePreview(
-		CurrentContext.AbilityClass,
-		CurrentContext);
-	
+	}
+
+	PreviewResult = ActionResolver->ResolvePreview(CurrentContext.AbilityClass, CurrentContext);
 	CurrentContext.bIsActionValid = PreviewResult.bIsValid;
+
+	if (PreviewResult.bIsValid)
+	{
+		CurrentContext.MovementTargetGridCoord = PreviewResult.MovementTargetGridCoord;
+		CurrentContext.MovementTargetWorldPosition = PreviewResult.MovementTargetWorldPosition;
+	}
+	else
+	{
+		CurrentContext.MovementTargetGridCoord = FIntPoint::ZeroValue;
+		CurrentContext.MovementTargetWorldPosition = FVector::ZeroVector;
+	}
+
 	RenderVisualPreview();
 }
 
 void UBattleModeComponent::Input_Confirm()
 {
 	FActionResult ExecutionResult;
-	if (!PreviewCurrentAbilityExecution(ExecutionResult)) return;
+	if (!PreviewCurrentAbilityExecution(ExecutionResult))
+	{
+		return;
+	}
 
 	CurrentContext.ActionPointsCost = ExecutionResult.ActionPointsCost;
 	ExecuteCurrentAction(CurrentContext, ExecutionResult);
@@ -163,90 +336,145 @@ void UBattleModeComponent::Input_Hover(const FVector& WorldLocation)
 	{
 		return;
 	}
-	
+
 	CurrentContext.SourceWorldPosition = GetOwner()->GetActorLocation();
-	CurrentContext.TargetWorldPosition = WorldLocation;
-	
+	CurrentContext.HoveredWorldPosition = WorldLocation;
+
 	CurrentContext.SourceGridCoord = GridManager->WorldToGrid(CurrentContext.SourceWorldPosition);
-	CurrentContext.TargetGridCoord = GridManager->WorldToGrid(WorldLocation);
-	
-	CurrentContext.TargetActor = GridManager->GetActorAt(CurrentContext.TargetGridCoord);
-	
-	CurrentContext.CachedPathCost = GridManager->CalculatePathCost(CurrentContext.SourceGridCoord, CurrentContext.TargetGridCoord);
+	CurrentContext.HoveredGridCoord = GridManager->WorldToGrid(WorldLocation);
+
+	CurrentContext.TargetActor = GridManager->GetActorAt(CurrentContext.HoveredGridCoord);
+
+	ACharacterBase* Character = Cast<ACharacterBase>(GetOwner());
+	if (!Character || !Character->GetUnitStats())
+	{
+		return;
+	}
+
+	CurrentContext.TraversalParams = Character->GetUnitStats()->GetTraversalParams();
+	CurrentContext.CachedPathCost = GridManager->CalculatePathCost(
+		CurrentContext.SourceGridCoord,
+		CurrentContext.HoveredGridCoord,
+		CurrentContext.TraversalParams
+	);
+
 	CurrentContext.bHasLineOfSight = HasLineOfSight();
-	if (const FGridTile* Tile = GridManager->GetTile(CurrentContext.TargetGridCoord))
+
+	if (const FGridTile* Tile = GridManager->GetTile(CurrentContext.HoveredGridCoord))
 	{
 		CurrentContext.bIsTileBlocked = Tile->bBlocked;
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[BattleModeComponent]: Tile is invalid..."));
+		CurrentContext.bIsTileBlocked = true;
+		UE_LOG(LogTemp, Warning, TEXT("[BattleModeComponent]: Hovered tile is invalid"));
 	}
-	
+
 	FActionResult PreviewResult;
 	PreviewCurrentAbility(PreviewResult);
 }
 
-void UBattleModeComponent::SetDefaultMoveAction()
+void UBattleModeComponent::Input_SelectNextAction()
 {
-	CurrentContext = {};
+	int32 AbilityCount = GrantedBattleAbilities.Num();
+	SelectedAbilityIndex += 1;
+	if (SelectedAbilityIndex >= AbilityCount)
+	{
+		SelectedAbilityIndex = 0;
+	}
+	
+	SelectAbilityByIndex(SelectedAbilityIndex);
+}
 
-	CurrentContext.SourceActor = GetOwner();
-	CurrentContext.Ability = DefaultMoveAbilityData;
-	CurrentContext.AbilityClass = DefaultMoveAbilityClass;
+void UBattleModeComponent::Input_SelectPreviousAction()
+{
+	int32 AbilityCount = GrantedBattleAbilities.Num();
+	SelectedAbilityIndex -= 1;
+
+	if (SelectedAbilityIndex < 0)
+	{
+		SelectedAbilityIndex = AbilityCount - 1;
+	}
+	
+	SelectAbilityByIndex(SelectedAbilityIndex);	
 }
 
 void UBattleModeComponent::ExecuteCurrentAction(const FActionContext& Context, const FActionResult& Result)
 {
 	UE_LOG(LogTemp, Warning, TEXT("[BattleModeComponent]: Trying to execute ability..."));
+
 	if (!Context.AbilityClass)
+	{
 		return;
+	}
 
-	ACharacterBase* Character =
-		Cast<ACharacterBase>(Context.SourceActor);
-
+	ACharacterBase* Character = Cast<ACharacterBase>(Context.SourceActor);
 	if (!Character)
+	{
 		return;
+	}
 
-	UMyAbilitySystemComponent* ASC =
-		Character->GetAbilitySystemComponent();
-
+	UMyAbilitySystemComponent* ASC = Character->GetAbilitySystemComponent();
 	if (!ASC)
+	{
 		return;
-	
+	}
+
 	UBattleGameplayAbility* AbilityCDO =
 		Context.AbilityClass->GetDefaultObject<UBattleGameplayAbility>();
 
 	if (!AbilityCDO)
+	{
 		return;
-	
+	}
+
 	UE_LOG(LogTemp, Warning, TEXT("[BattleModeComponent]: Calling ASC to activate ability!"));
-	
-	// Try to activate ability and checks if it worked
-	ASC->TryActivateAbilityByClass(Context.AbilityClass);
+
+	if (ASC->TryActivateAbilityByClass(Context.AbilityClass))
+	{
+		HandleActionStarted();
+	}
 }
 
-void UBattleModeComponent::UpdateOccupancy() const
+void UBattleModeComponent::HandleActionStarted()
+{
+	UE_LOG(LogTemp, Warning, TEXT("[BattleModeComponent]: Broadcasting ActionStarted!"));
+	OnActionUseStarted.Broadcast();
+}
+
+void UBattleModeComponent::HandleActionFinished()
+{
+	UE_LOG(LogTemp, Warning, TEXT("[BattleModeComponent]: Broadcasting ActionFinished!"));
+	OnActionUseFinished.Broadcast();
+
+	if (ACharacterBase* Character = Cast<ACharacterBase>(GetOwner()))
+	{
+		if (UUnitStatsComponent* UnitStats = Character->GetUnitStats())
+		{
+			if (UnitStats->GetCurrentActionPoints() == 0)
+			{
+				OnActionPointsDepleted.Broadcast(Character);
+			}
+		}
+	}
+}
+
+void UBattleModeComponent::UpdateOccupancy(const FIntPoint& NewGridCoord) const
 {
 	UGridManager* GridManager = GetWorld()->GetSubsystem<UGridManager>();
 	if (!GridManager)
 	{
 		return;
 	}
-	
-	GridManager->UpdateActorPosition(GetOwner(), CurrentContext.TargetGridCoord);
+
+	GridManager->UpdateActorPosition(GetOwner(), NewGridCoord);
 }
 
-void UBattleModeComponent::ConsumeActionPoints() const
+void UBattleModeComponent::ConsumeActionPoints(int32 ExplicitCost) const
 {
-	if (ACharacterBase* Character = Cast<ACharacterBase>(GetOwner()))
+	if (UUnitStatsComponent* Stats = GetUnitStats())
 	{
-		UUnitStatsComponent* CharacterUnitStats = Character->GetUnitStats();
-		CharacterUnitStats->SetCurrentActionPoints(CharacterUnitStats->GetCurrentActionPoints() - CurrentContext.ActionPointsCost);
-		if (CharacterUnitStats->GetCurrentActionPoints() == 0)
-		{
-			OnActionPointsDepleted.Broadcast(Character);
-		}
+		Stats->SetCurrentActionPoints(Stats->GetCurrentActionPoints() - ExplicitCost);
 	}
 }
 
@@ -256,16 +484,13 @@ bool UBattleModeComponent::HasLineOfSight() const
 	FCollisionQueryParams Params;
 	Params.AddIgnoredActor(GetOwner());
 
-	bool bHit =
-		GetWorld()->LineTraceSingleByChannel(
-			Hit,
-			CurrentContext.SourceWorldPosition,
-			CurrentContext.TargetWorldPosition,
-			ECC_Visibility,
-			Params
-		);
-	if (!bHit)
-		return true;
-	
-	return false;
+	const bool bHit = GetWorld()->LineTraceSingleByChannel(
+		Hit,
+		CurrentContext.SourceWorldPosition,
+		CurrentContext.HoveredWorldPosition,
+		ECC_Visibility,
+		Params
+	);
+
+	return !bHit;
 }

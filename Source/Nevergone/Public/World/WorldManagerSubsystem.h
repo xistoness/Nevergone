@@ -21,6 +21,10 @@ public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	void HandleWorldInitializedActors(const FActorsInitializedParams& Params);
 	virtual void Deinitialize() override;
+	
+	// Single public entry point used after level load
+	UFUNCTION(BlueprintCallable, Category="Save")
+	void RestoreWorldState();
 
 private:
 
@@ -30,7 +34,6 @@ private:
 
 	// Core responsibilities
 	void CollectWorldSaveData();
-	void RestoreWorldState();
 	void RestoreSaveableActors();
 	void SpawnMissingActors();
 	void ResolveActorConflicts();

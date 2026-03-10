@@ -5,9 +5,12 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Interfaces/SaveParticipant.h"
+#include "Types/BattleTypes.h"
 #include "UnitStatsComponent.generated.h"
 
 class UUnitDefinition;
+
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnUnitDeath, ACharacterBase*);
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class NEVERGONE_API UUnitStatsComponent : public UActorComponent, public ISaveParticipant
@@ -15,7 +18,7 @@ class NEVERGONE_API UUnitStatsComponent : public UActorComponent, public ISavePa
 	GENERATED_BODY()
 
 public:	
-
+	
 	UUnitStatsComponent();
 	void InitializeForBattle();
 	
@@ -55,6 +58,8 @@ public:
 	int32 GetAllyTeam() const;
 	int32 GetEnemyTeam() const;
 	float GetCurrentHP() const;
+	FGridTraversalParams GetTraversalParams() const;
+	const UUnitDefinition* GetDefinition() const { return Definition; }
 	
 	// ===== Derived Setters =====
 	void SetAllyTeam(int32 Team);
@@ -63,6 +68,8 @@ public:
 	void SetCurrentActionPoints(int32 ActionPoints);
 
 	bool IsAlive() const;
+	
+	FOnUnitDeath OnUnitDeath;
 
 protected:
 	virtual void BeginPlay() override;

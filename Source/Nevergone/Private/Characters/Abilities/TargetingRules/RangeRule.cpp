@@ -6,7 +6,7 @@
 bool RangeRule::IsSatisfied(const FActionContext& Context) const
 {
 	const FIntPoint& Source = Context.SourceGridCoord;
-	const FIntPoint& Target = Context.TargetGridCoord;
+	const FIntPoint& Target = Context.HoveredGridCoord;
 
 	int32 Distance =
 		FMath::Max(

@@ -3,6 +3,8 @@
 
 #include "ActorComponents/UnitStatsComponent.h"
 
+#include "Chaos/Deformable/Utilities.h"
+#include "Characters/CharacterBase.h"
 #include "Data/ActorSaveData.h"
 #include "Data/UnitDefinition.h"
 #include "GameInstance/SaveKeys.h"
@@ -139,14 +141,32 @@ float UUnitStatsComponent::GetCurrentHP() const
 	return PersistentHP;
 }
 
+FGridTraversalParams UUnitStatsComponent::GetTraversalParams() const
+{
+	return Definition->TraversalParams;
+}
+
 void UUnitStatsComponent::SetCurrentHP(float NewHP)
 {
+	const bool bWasAlive = IsAlive();
+
 	PersistentHP = FMath::Clamp(NewHP, 0.f, GetMaxHP());
+
+	const bool bIsAliveNow = IsAlive();
+
+	if (bWasAlive && !bIsAliveNow)
+	{
+		if (ACharacterBase* OwnerCharacter = Cast<ACharacterBase>(GetOwner()))
+		{
+			OnUnitDeath.Broadcast(OwnerCharacter);
+		}
+	}
 }
 
 void UUnitStatsComponent::SetCurrentActionPoints(int32 ActionPoints)
 {
 	CurrentActionPoints = ActionPoints;
+	UE_LOG(LogTemp, Warning, TEXT("[%s]: Current AP: %d"), *GetOwner()->GetName(), CurrentActionPoints);
 }
 
 bool UUnitStatsComponent::IsAlive() const

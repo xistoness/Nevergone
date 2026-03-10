@@ -63,7 +63,9 @@ private:
 
 	void CacheUnitInput(ACharacterBase* Unit);
 	IBattleInputReceiver* ResolveReceiver() const;
-
+	
+	void BindToSelectedUnitBattleEvents(ACharacterBase* Unit);
+	void UnbindFromSelectedUnitBattleEvents(ACharacterBase* Unit);
 private:
 	
 	UPROPERTY()

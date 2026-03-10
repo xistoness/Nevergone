@@ -7,7 +7,6 @@
 
 FActionResult UActionResolver::ResolvePreview(TSubclassOf<UBattleGameplayAbility> AbilityClass, const FActionContext& Context)
 {
-	UE_LOG(LogTemp, Warning, TEXT("[ActionResolver]: Resolving preview..."));
 	if (!AbilityClass)
 		return {};
 

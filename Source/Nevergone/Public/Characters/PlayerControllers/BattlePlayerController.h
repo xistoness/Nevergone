@@ -25,7 +25,6 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
-	void PreviewMovement(FIntPoint TargetCoord);
 	virtual void PlayerTick(float DeltaTime) override;
 	void SpawnPreviewActors();
 	virtual void SetupInputComponent() override;

@@ -45,10 +45,28 @@ class NEVERGONE_API BattleTypes
 {
 };
 
+USTRUCT(BlueprintType)
+struct FGridTraversalParams
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float MaxStepUpHeight = 60.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float MaxStepDownHeight = 80.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bCanMoveDiagonally = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bIgnoreOccupiedTiles = false;
+};
+
 UENUM()
 enum class EBattleUnitTeam : uint8
 {
-	Player,
+	Ally,
 	Enemy
 };
 
@@ -64,7 +82,7 @@ struct FSpawnedBattleUnit
 	int32 SourceIndex = INDEX_NONE;
 
 	UPROPERTY()
-	EBattleUnitTeam Team = EBattleUnitTeam::Player;
+	EBattleUnitTeam Team = EBattleUnitTeam::Ally;
 };
 
 USTRUCT(BlueprintType)
@@ -112,44 +130,49 @@ struct FActionContext
 	AActor* SourceActor = nullptr;
 
 	UPROPERTY()
-	AActor* TargetActor = nullptr;
-	
-	UPROPERTY()
-	FIntPoint SourceGridCoord;
-
-	UPROPERTY()
-	FIntPoint TargetGridCoord;
-
-	UPROPERTY()
-	FVector SourceWorldPosition;
-	
-	UPROPERTY()
-	FVector TargetWorldPosition;
-	
-	UPROPERTY()
-	int32 CachedPathCost = INDEX_NONE;
-	
-	UPROPERTY()
-	bool bHasLineOfSight = false;
-	
-	UPROPERTY()
-	bool bIsTileBlocked = false;
+	AActor* TargetActor = nullptr; // attack target
 	
 	UPROPERTY()
 	bool bIsActionValid = false;
 	
 	UPROPERTY()
-	bool bIsPreview = false;
+	bool bIsTileBlocked = false;
+
+	UPROPERTY()
+	FIntPoint SourceGridCoord;
+
+	UPROPERTY()
+	FIntPoint HoveredGridCoord; // tile under cursor
+
+	UPROPERTY()
+	FIntPoint MovementTargetGridCoord; // resolved adjacent tile for approach
+
+	UPROPERTY()
+	FVector SourceWorldPosition;
+
+	UPROPERTY()
+	FVector HoveredWorldPosition;
+
+	UPROPERTY()
+	FVector MovementTargetWorldPosition;
+
+	UPROPERTY()
+	FGridTraversalParams TraversalParams;
+
+	UPROPERTY()
+	int32 CachedPathCost = INDEX_NONE;
+
+	UPROPERTY()
+	TSubclassOf<UBattleGameplayAbility> AbilityClass;
+	
+	UPROPERTY()
+	UAbilityData* Ability;
 	
 	UPROPERTY()
 	int32 ActionPointsCost = 0;
-
-	UPROPERTY()
-	UAbilityData* Ability = nullptr;
 	
 	UPROPERTY()
-	TSubclassOf<UBattleGameplayAbility> AbilityClass;
-
+	bool bHasLineOfSight = false;
 };
 
 USTRUCT()
@@ -158,22 +181,34 @@ struct FActionResult
 	GENERATED_BODY()
 
 	UPROPERTY()
-	float HitChance = 0.0f;
+	bool bIsValid = false;
 
 	UPROPERTY()
-	float ExpectedDamage = 0.0f;
+	bool bRequiresMovement = false;
 
+	UPROPERTY()
+	FIntPoint MovementTargetGridCoord;
+
+	UPROPERTY()
+	FVector MovementTargetWorldPosition;
+
+	UPROPERTY()
+	TArray<FVector> PathPoints;
+
+	UPROPERTY()
+	AActor* ResolvedAttackTarget = nullptr;
+
+	UPROPERTY()
+	int32 ActionPointsCost = 0;
+
+	UPROPERTY()
+	float ExpectedDamage = 0.f;
+	
+	UPROPERTY()
+	float HitChance = 0.f;
+	
 	UPROPERTY()
 	TArray<AActor*> AffectedActors;
-
-	UPROPERTY()
-	bool bIsValid = false;
-	
-	FIntPoint TargetGridCoord;
-	
-	int32 ActionPointsCost = 0;
-	
-	FVector TargetWorldPosition = FVector::ZeroVector;
 };
 
 // Target data representing a single grid tile

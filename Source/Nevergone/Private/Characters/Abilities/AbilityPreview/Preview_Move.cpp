@@ -16,7 +16,7 @@ void UPreview_Move::Initialize(UWorld* InWorld)
 
 void UPreview_Move::UpdatePreview(const FActionContext& Context)
 {
-	UE_LOG(LogTemp, Warning, TEXT("[Preview_Move]: Trying to update preview..."));
+	//UE_LOG(LogTemp, Warning, TEXT("[Preview_Move]: Trying to update preview..."));
 	if (!World)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[Preview_Move]: World is invalid..."));
@@ -32,9 +32,7 @@ void UPreview_Move::UpdatePreview(const FActionContext& Context)
 	}
 
 	TArray<FIntPoint> Path;
-	Grid->FindPath(Context.SourceGridCoord,
-					   Context.TargetGridCoord,
-					   Path);
+	Grid->FindPath(Context.SourceGridCoord, Context.HoveredGridCoord, Context.TraversalParams, Path);
 	
 	if (Context.bIsActionValid)
 			DrawPath(Path, Grid);
@@ -46,7 +44,7 @@ void UPreview_Move::UpdatePreview(const FActionContext& Context)
 
 void UPreview_Move::DrawPath(const TArray<FIntPoint>& Path, UGridManager* Grid)
 {
-	UE_LOG(LogTemp, Warning, TEXT("[Preview_Move]: Trying to draw path..."));
+	//UE_LOG(LogTemp, Warning, TEXT("[Preview_Move]: Trying to draw path..."));
 	for (const FIntPoint& Coord : Path)
 	{
 		const FVector Location =
@@ -66,7 +64,7 @@ void UPreview_Move::DrawPath(const TArray<FIntPoint>& Path, UGridManager* Grid)
 
 void UPreview_Move::DrawInvalidPath(const TArray<FIntPoint>& Path, UGridManager* Grid)
 {
-	UE_LOG(LogTemp, Warning, TEXT("[Preview_Move]: Trying to draw invalid path..."));
+	//UE_LOG(LogTemp, Warning, TEXT("[Preview_Move]: Trying to draw invalid path..."));
 	for (const FIntPoint& Coord : Path)
 	{
 		const FVector Location =

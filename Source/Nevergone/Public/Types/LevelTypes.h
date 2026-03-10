@@ -23,3 +23,18 @@ enum class EGridSurfaceType : uint8
 {
 	Normal    UMETA(DisplayName = "Normal"),
 };
+
+USTRUCT(BlueprintType)
+struct FLevelTransitionContext
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FName FromLevel;
+
+	UPROPERTY()
+	FName ToLevel;
+
+	UPROPERTY()
+	FName EntryPortalID;
+};

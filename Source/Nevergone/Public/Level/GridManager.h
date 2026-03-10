@@ -7,6 +7,7 @@
 #include "Types/LevelTypes.h"
 #include "GridManager.generated.h"
 
+struct FGridTraversalParams;
 class ABattleVolume;
 
 UCLASS()
@@ -30,18 +31,22 @@ public:
 	
 	bool IsValidCoord(const FIntPoint& Coord) const;
 	
+	bool IsTraversalAllowed(const FGridTile& FromTile, const FGridTile& ToTile, const FGridTraversalParams& Params) const;
+	
 	void BuildNeighborCache();
 	
-	int32 CalculatePathCost(const FIntPoint& Start,	const FIntPoint& Goal) const;
+	int32 CalculatePathCost(const FIntPoint& Start,	const FIntPoint& Goal, const FGridTraversalParams& TraversalParams) const;
 	
 	AActor* GetActorAt(const FIntPoint& Coord) const;
 	
-	bool FindPath(const FIntPoint& Start, const FIntPoint& Goal, TArray<FIntPoint>& OutPath) const;
+	bool FindPath(const FIntPoint& Start, const FIntPoint& Goal, const FGridTraversalParams& TraversalParams, TArray<FIntPoint>& OutPath) const;
 	
 	UPROPERTY(EditAnywhere, Category="Debug")
 	bool bDrawDebugTiles = true;
 	
 	void DrawDebugGrid(const UWorld* World, float Duration = 0.f) const;
+	
+	void RemoveActorFromGrid(AActor* Actor);
 
 private:
 	

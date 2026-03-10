@@ -13,6 +13,7 @@
 
 #include "GameFramework/SpringArmComponent.h"
 #include "DrawDebugHelpers.h"
+#include "Components/CapsuleComponent.h"
 #include "Debug/DebugDrawHelper.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
@@ -32,8 +33,23 @@ ACharacterBase::ACharacterBase()
 	BattleMode->SetComponentTickEnabled(false);
 	
 	GetCameraBoom()->bUsePawnControlRotation = true;
+	
+	ArmLength = 400.f;
+	
 	bUseControllerRotationYaw = false;
 	GetCharacterMovement()->bOrientRotationToMovement = true;
+	
+	SelectionIndicator = CreateDefaultSubobject<UDecalComponent>(TEXT("SelectionIndicator"));
+	SelectionIndicator->SetupAttachment(RootComponent);
+
+	// Size of the projected decal
+	SelectionIndicator->DecalSize = FVector(64.f, 128.f, 128.f);
+
+	// Rotate so it faces the ground
+	SelectionIndicator->SetRelativeRotation(FRotator(-90.f, 0.f, 0.f));
+
+	// Hidden by default
+	SelectionIndicator->SetVisibility(false);
 }
 
 void ACharacterBase::EnableExplorationMode()
@@ -46,6 +62,11 @@ void ACharacterBase::EnableBattleMode()
 {
 	UE_LOG(LogTemp, Warning, TEXT("Setting battle mode..."));
 	SetMode(BattleMode);
+}
+
+void ACharacterBase::SetSelected(bool bSelected)
+{
+	SelectionIndicator->SetVisibility(bSelected);
 }
 
 void ACharacterBase::SetMode(UCharacterModeComponent* NewMode)
@@ -80,25 +101,30 @@ void ACharacterBase::BeginPlay()
 void ACharacterBase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	if (bIsMovingAlongPath)
+	{
+		TickPathMove(DeltaTime);
+	}
 }
 
 void ACharacterBase::WriteSaveData_Implementation(FActorSaveData& OutData) const
 {	
 	FSavePayload Payload;
 
-	// Controller rotation
 	FRotator TempControllerRot = ControllerRot;
 	if (AController* Ctrl = GetController())
 	{
 		TempControllerRot = Ctrl->GetControlRotation();
 	}
 
-	// Camera arm length
 	float TempArmLength = ArmLength;
 	if (USpringArmComponent* Arm = GetCameraBoom())
 	{
 		TempArmLength = Arm->TargetArmLength;
 	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[BaseCharacter]: Saving BoomTargetArm=%s"),
+		*FString::SanitizeFloat(TempArmLength));
 
 	FMemoryWriter Writer(Payload.Data, true);
 	FArchive& Ar = Writer;
@@ -122,6 +148,7 @@ void ACharacterBase::ReadSaveData_Implementation(const FActorSaveData& InData)
 
 	Ar << ArmLength;
 	Ar << ControllerRot;
+	
 }
 
 void ACharacterBase::OnPostRestore_Implementation()
@@ -139,19 +166,70 @@ UBattleModeComponent* ACharacterBase::GetBattleModeComponent() const
 	return BattleMode;
 }
 
-void ACharacterBase::SetPendingMoveLocation(const FVector& InLocation)
+void ACharacterBase::MoveToLocation(const FVector& InLocation, const TArray<FVector>& WorldPoints)
 {
-	PendingMoveLocation = InLocation;
+	MoveAlongPath_Lerped(WorldPoints);
+	//SetActorLocation(InLocation);
 }
 
-const FVector& ACharacterBase::GetPendingMoveLocation() const
+void ACharacterBase::MoveAlongPath_Lerped(const TArray<FVector>& WorldPoints)
 {
-	return PendingMoveLocation;
+	StopPathMove();
+
+	if (WorldPoints.Num() == 0)
+	{
+		return;
+	}
+
+	PendingPathPoints = WorldPoints;
+	CurrentPathIndex = 0;
+	bIsMovingAlongPath = true;
 }
 
-void ACharacterBase::MoveToLocation(const FVector& InLocation)
+void ACharacterBase::TickPathMove(float DeltaSeconds)
 {
-	SetActorLocation(InLocation);
+	if (!PendingPathPoints.IsValidIndex(CurrentPathIndex))
+	{
+		StopPathMove();
+		return;
+	}
+
+	const FVector CurrentLocation = GetActorLocation();
+	const FVector Target = PendingPathPoints[CurrentPathIndex];
+
+	const float Dist = FVector::Dist(CurrentLocation, Target);
+	if (Dist <= AcceptRadius)
+	{
+		SetActorLocation(Target);
+
+		CurrentPathIndex++;
+		if (!PendingPathPoints.IsValidIndex(CurrentPathIndex))
+		{
+			FinishPathMove();
+		}
+		return;
+	}
+
+	const FVector NewLocation =
+		FMath::VInterpConstantTo(CurrentLocation, Target, DeltaSeconds, MoveSpeedUnitsPerSec);
+
+	SetActorLocation(NewLocation);
+}
+
+void ACharacterBase::StopPathMove()
+{
+	bIsMovingAlongPath = false;
+	PendingPathPoints.Reset();
+	CurrentPathIndex = INDEX_NONE;
+}
+
+void ACharacterBase::FinishPathMove()
+{
+	bIsMovingAlongPath = false;
+	PendingPathPoints.Reset();
+	CurrentPathIndex = INDEX_NONE;
+	OnPathMoveFinished.Broadcast();
+	UE_LOG(LogTemp, Warning, TEXT("[BaseCharacter]: Character broadcasting OnPathMoveFinished"));
 }
 
 UMyAbilitySystemComponent* ACharacterBase::GetAbilitySystemComponent()
@@ -170,4 +248,17 @@ void ACharacterBase::ResetCamera()
 	{
 		Ctrl->SetControlRotation(ControllerRot);
 	}
+}
+
+FVector ACharacterBase::GetGroundAlignedLocation(const FVector& GroundLocation) const
+{
+	const UCapsuleComponent* Capsule = GetCapsuleComponent();
+	if (!Capsule)
+	{
+		return GroundLocation;
+	}
+
+	FVector AdjustedLocation = GroundLocation;
+	AdjustedLocation.Z += Capsule->GetScaledCapsuleHalfHeight();
+	return AdjustedLocation;
 }

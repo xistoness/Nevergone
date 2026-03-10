@@ -83,10 +83,9 @@ struct FBattleInputContext
 
 
 	/* ----- Locks ----- */
-
-	// Hard lock: no input should be accepted
+		
 	UPROPERTY(BlueprintReadOnly)
-	bool bInputLocked = false;
+	bool bUnitInputEnabled = true;
 	
 	UPROPERTY()
 	bool bCameraInputEnabled = true;
@@ -103,7 +102,7 @@ struct FBattleInputContext
 	{
 		return IsPlayerTurn()
 			&& TurnPhase == EBattleTurnPhase::AwaitingOrders
-			&& !bInputLocked;
+			&& bUnitInputEnabled;
 	}
 
 	bool IsUIFocused() const

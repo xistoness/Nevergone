@@ -14,9 +14,14 @@ class NEVERGONE_API UPreview_Move : public UAbilityPreviewRenderer
 {
 	GENERATED_BODY()
 	
+public:
+	
 	virtual void Initialize(UWorld* InWorld) override;
 	
 	virtual void UpdatePreview(const FActionContext& Context) override;
+	
+protected:
+	
 	
 	void DrawPath(const TArray<FIntPoint>& Path, UGridManager* Grid);
 	

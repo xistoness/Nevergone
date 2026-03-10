@@ -43,7 +43,7 @@ void UBattleState::Initialize(UBattlePreparationContext& BattlePrepContext)
 		NewState.ActionPoints = Stats->GetActionPoints();
 
 		// Optional: tags from generated data
-		if (Spawned.Team == EBattleUnitTeam::Player &&
+		if (Spawned.Team == EBattleUnitTeam::Ally &&
 			BattlePrepContext.PlayerParty.IsValidIndex(Spawned.SourceIndex))
 		{
 			NewState.StatusTags.AppendTags(

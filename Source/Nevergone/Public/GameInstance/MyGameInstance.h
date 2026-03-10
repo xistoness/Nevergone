@@ -6,12 +6,22 @@
 #include "Engine/GameInstance.h"
 #include "Data/PartyData.h"
 #include "Data/ProgressionData.h"
-#include "Data/LevelTransitionContext.h"
+#include "Types/LevelTypes.h"
 #include "MyGameInstance.generated.h"
 
 struct FActorSaveData;
 class UMySaveGame;
 class UGameContextManager;
+class ULoadingScreenWidget;
+
+
+UENUM()
+enum class ELevelTransitionState : uint8
+{
+	Idle,
+	Transitioning
+};
+
 
 UCLASS()
 class NEVERGONE_API UMyGameInstance : public UGameInstance
@@ -19,12 +29,16 @@ class NEVERGONE_API UMyGameInstance : public UGameInstance
 	GENERATED_BODY()
 public:
 	
-	virtual void Shutdown() override;
-	
 	UFUNCTION(BlueprintCallable)
 	void RequestSaveGame();
+	
+	// Loads the save from disk and applies it to the current world
 	UFUNCTION(BlueprintCallable)
 	void RequestLoadGame();
+	
+	// Applies current ActiveSave to the world (no disk I/O)
+	UFUNCTION(BlueprintCallable)
+	void ApplyActiveSaveToWorld();
 	
 	UGameContextManager* GetGameContextManager() const;
 	
@@ -47,10 +61,7 @@ public:
 	void AddOrUpdateSavedActor(const FActorSaveData& ActorData) const;
 	
 	// Level Transition
-	void RequestLevelChange(
-		FName TargetLevel,
-		const FLevelTransitionContext& Context
-	);
+	void RequestLevelChange(FName TargetLevel, const FLevelTransitionContext& Context);
 	
 	// Callbacks
 	void OnPreLevelUnload() const;
@@ -79,6 +90,8 @@ public:
 protected:
 	
 	virtual void Init() override;
+	virtual void Shutdown() override;
+	
 	void SetActiveSave(UMySaveGame* Save);
 	UMySaveGame* GetActiveSave() const;
 	
@@ -88,9 +101,32 @@ protected:
 	
 	void CommitSave() const;
 	
+	// LEVEL TRANSITION // 
+	// Called right before leaving the current map
+	void BeginLevelTransition();
+
+	// Called after a new map is loaded (PostLoadMapWithWorld)
+	void EndLevelTransition(UWorld* LoadedWorld);
+
+	// Delegate callback
+	void HandlePostLoadMapWithWorld(UWorld* LoadedWorld);
+
+	// UI helpers
+	void ShowLoadingScreen();
+	void HideLoadingScreen();
+
+	// Input helpers
+	void SetInputLocked(bool bLocked);
+
+	// Save helpers
+	void AutoSaveBeforeTravel();
+	
 private:
 	UPROPERTY()
 	UMySaveGame* ActiveSave;
+	
+	UPROPERTY()
+	FString ActiveSlotName = TEXT("MainSlot");
 
 	UPROPERTY()
 	FPartyData PartyData;
@@ -100,10 +136,27 @@ private:
 	
 	UPROPERTY()
 	TMap<FName, bool> GlobalFlags;
-
-	UPROPERTY()
-	FLevelTransitionContext PendingLevelTransition;	
 	
 	UPROPERTY()
 	UGameContextManager* GameContextManager;
+	
+	bool bDidInitialWorldRestore = false;
+	
+	bool bHasPendingEntryPoint = false;
+
+	void ApplyPendingEntryPoint(UWorld* World);
+	
+	
+	// LEVEL TRANSITION // 
+	
+	UPROPERTY()
+	ULoadingScreenWidget* LoadingWidgetInstance = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, Category="Loading")
+	TSubclassOf<ULoadingScreenWidget> LoadingWidgetClass;
+
+	ELevelTransitionState TransitionState = ELevelTransitionState::Idle;
+
+	// Keep your existing pending context
+	FLevelTransitionContext PendingLevelTransition;
 };

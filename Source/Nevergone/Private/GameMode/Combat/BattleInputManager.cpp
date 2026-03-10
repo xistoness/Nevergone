@@ -37,7 +37,7 @@ void UBattleInputManager::SetInputContext(const FBattleInputContext& NewContext)
 
 void UBattleInputManager::SetSelectedCharacter(ACharacterBase* NewSelection)
 {
-	if (!CanAcceptInput())
+	if (!InputContext.CanAcceptOrders())
 	{
 		return;
 	}
@@ -48,7 +48,7 @@ void UBattleInputManager::SetSelectedCharacter(ACharacterBase* NewSelection)
 
 void UBattleInputManager::OnConfirmPressed()
 {
-	if (!CanAcceptInput())
+	if (!InputContext.CanAcceptOrders())
 	{
 		return;
 	}
@@ -58,7 +58,7 @@ void UBattleInputManager::OnConfirmPressed()
 
 void UBattleInputManager::OnCancelPressed()
 {
-	if (!CanAcceptInput())
+	if (!InputContext.CanAcceptOrders())
 	{
 		return;
 	}
@@ -78,7 +78,7 @@ void UBattleInputManager::OnEndTurn()
 
 void UBattleInputManager::OnHover(const FVector& WorldLocation)
 {
-	if (!CanAcceptInput())
+	if (!InputContext.CanAcceptOrders())
 	{
 		return;
 	}
@@ -90,6 +90,7 @@ void UBattleInputManager::OnSelectNextUnit()
 {
 	if (!CanAcceptInput() || !CombatManager)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[BattleInputManager] Can't select next unit"));
 		return;
 	}
 	UE_LOG(LogTemp, Warning, TEXT("[BattleInputManager] Calls CM to select next..."));
@@ -100,6 +101,7 @@ void UBattleInputManager::OnSelectPreviousUnit()
 {
 	if (!CanAcceptInput() || !CombatManager)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[BattleInputManager] Can't select previous unit"));
 		return;
 	}
 	UE_LOG(LogTemp, Warning, TEXT("[BattleInputManager] Calls CM to select previous..."));
@@ -110,7 +112,7 @@ void UBattleInputManager::OnSelectNextAction()
 {
 	UE_LOG(LogTemp, Warning, TEXT("[BattleInputManager]: Routing select next action..."));
 	IBattleInputReceiver* Receiver = ResolveReceiver();
-	if (!Receiver)
+	if (!CanAcceptInput() || !CombatManager || !Receiver)
 	{
 		return;
 	}
@@ -122,7 +124,7 @@ void UBattleInputManager::OnSelectPreviousAction()
 {
 	UE_LOG(LogTemp, Warning, TEXT("[BattleInputManager]: Routing select previous action..."));
 	IBattleInputReceiver* Receiver = ResolveReceiver();
-	if (!Receiver)
+	if (!CanAcceptInput() || !CombatManager || !Receiver)
 	{
 		return;
 	}
@@ -132,7 +134,6 @@ void UBattleInputManager::OnSelectPreviousAction()
 
 void UBattleInputManager::OnCameraMove(const FVector2D& Input)
 {
-	UE_LOG(LogTemp, Warning, TEXT("Input manager hearing camera move..."));
 	if (!InputContext.bCameraInputEnabled) {return;}
 		
 	RouteCameraMove(Input);
@@ -155,16 +156,29 @@ void UBattleInputManager::OnCameraRotate(float Value)
 void UBattleInputManager::OnActiveUnitChanged(ACharacterBase* NewActiveUnit)
 {
 	UE_LOG(LogTemp, Warning, TEXT("[BattleInputManager] Selects new active unit!"));
-	SelectedCharacter = NewActiveUnit;
-	CacheUnitInput(NewActiveUnit);
-	
-	if (UBattleModeComponent* BattleComp =
-	NewActiveUnit->FindComponentByClass<UBattleModeComponent>())
+
+	if (SelectedCharacter)
 	{
-		BattleComp->SetDefaultMoveAction();
+		SelectedCharacter->SetSelected(false);
 	}
-	
-	if (BattleCameraPawn && NewActiveUnit)
+
+	if (!NewActiveUnit)
+	{
+		SelectedCharacter = nullptr;
+		SelectedCharacterInput = nullptr;
+		return;
+	}
+
+	SelectedCharacter = NewActiveUnit;
+	SelectedCharacter->SetSelected(true);
+	CacheUnitInput(NewActiveUnit);
+
+	if (UBattleModeComponent* BattleComp = NewActiveUnit->FindComponentByClass<UBattleModeComponent>())
+	{
+		BattleComp->SelectAbilityByIndex(0);
+	}
+
+	if (BattleCameraPawn)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[BattleInputManager] Battle camera pawn is valid"));
 		BattleCameraPawn->FocusOnLocationSmooth(NewActiveUnit->GetActorLocation());
@@ -212,7 +226,6 @@ bool UBattleInputManager::CanAcceptInput() const
 
 void UBattleInputManager::RouteCameraMove(const FVector2D& Input)
 {
-	UE_LOG(LogTemp, Warning, TEXT("Input manager routing camera move!"));
 	if (BattleCameraPawn)
 	{
 		BattleCameraPawn->Input_CameraMove(Input);
