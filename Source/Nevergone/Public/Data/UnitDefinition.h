@@ -3,6 +3,9 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Types/BattleTypes.h"
+#include "Types/CharacterTypes.h"
+
 #include "Engine/DataAsset.h"
 #include "UnitDefinition.generated.h"
 
@@ -39,4 +42,10 @@ public:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	TSubclassOf<AActor> UnitClass;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+	FGridTraversalParams TraversalParams;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Battle")
+	TArray<FUnitAbilityEntry> BattleAbilities;
 };

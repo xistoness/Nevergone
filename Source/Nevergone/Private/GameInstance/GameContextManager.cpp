@@ -126,7 +126,7 @@ void UGameContextManager::RequestBattleEnd()
 {
 	if (ActiveCombatManager)
 	{
-		ActiveCombatManager->EndCombat();
+		ActiveCombatManager->EndCombatWithWinner(EBattleUnitTeam::Enemy);
 	}
 }
 
@@ -168,7 +168,6 @@ void UGameContextManager::EnterState(EGameContextState NewState)
 	CurrentState = NewState;
 
 	OnGameContextChanged.Broadcast(NewState);
-	// Create / enable systems here (CombatManager, UI, input, etc)
 }
 
 void UGameContextManager::ExitState(EGameContextState OldState)
@@ -182,9 +181,7 @@ void UGameContextManager::CreateCombatManager()
 
 	ActiveCombatManager = NewObject<UCombatManager>(this);
 	ActiveCombatManager->Initialize();
-	ActiveCombatManager->OnCombatFinished.AddUObject(
-		this, &UGameContextManager::HandleCombatFinished
-	);
+	ActiveCombatManager->OnCombatFinished.AddDynamic(this, &UGameContextManager::HandleCombatFinished);
 }
 
 void UGameContextManager::DestroyCombatManager()
@@ -196,11 +193,10 @@ void UGameContextManager::DestroyCombatManager()
 	ActiveCombatManager = nullptr;
 }
 
-void UGameContextManager::HandleCombatFinished()
+void UGameContextManager::HandleCombatFinished(EBattleUnitTeam WinningTeam)
 {
 	DestroyCombatManager();
-
-	// Decide next state (simplified)
+	
 	RequestExploration();
 }
 

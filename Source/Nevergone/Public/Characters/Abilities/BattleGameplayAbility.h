@@ -20,6 +20,10 @@ public:
 	
 	virtual FActionResult BuildPreview(const FActionContext& Context) const;
 	virtual FActionResult BuildExecution(const FActionContext& Context) const;
+	virtual void FinalizeAbilityExecution();
+	virtual void ApplyAbilityCompletionEffects();
+	
+	void CleanupAbilityDelegates();
 	
 	virtual TSubclassOf<UAbilityPreviewRenderer> GetPreviewClass() const;
 	

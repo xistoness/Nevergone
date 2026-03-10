@@ -7,6 +7,7 @@
 #include "GameFramework/Actor.h"
 #include "DrawDebugHelpers.h"
 #include "EngineUtils.h"
+#include "Types/BattleTypes.h"
 
 
 struct FAStarNode
@@ -169,26 +170,55 @@ const FGridTile* UGridManager::GetTile(const FIntPoint& Coord) const
 FIntPoint UGridManager::WorldToGrid(const FVector& WorldLocation) const
 {
 	// Convert world location into local space relative to grid origin
-	const FVector Local = WorldLocation - Origin;
+	const float GridMinX = Origin.X - (GridWidth * TileSize * 0.5f);
+	const float GridMinY = Origin.Y - (GridHeightCount * TileSize * 0.5f);
 
-	const int32 X = FMath::RoundToInt((Local.X + (GridWidth * TileSize * 0.5f)) / TileSize);
-	const int32 Y = FMath::RoundToInt((Local.Y + (GridHeightCount * TileSize * 0.5f)) / TileSize);
+	const int32 X = FMath::FloorToInt((WorldLocation.X - GridMinX) / TileSize);
+	const int32 Y = FMath::FloorToInt((WorldLocation.Y - GridMinY) / TileSize);
 
 	return FIntPoint(X, Y);
 }
 
 FVector UGridManager::GridToWorld(const FIntPoint& Coord) const
 {
-	const float WorldX = Origin.X - (GridWidth * TileSize * 0.5f) + (Coord.X + 0.5f) * TileSize;
-	const float WorldY = Origin.Y - (GridHeightCount * TileSize * 0.5f) + (Coord.Y + 0.5f) * TileSize;
+	const FGridTile* Tile = GetTile(Coord);
+	if (!Tile)
+	{
+		const float WorldX = Origin.X - (GridWidth * TileSize * 0.5f) + (Coord.X + 0.5f) * TileSize;
+		const float WorldY = Origin.Y - (GridHeightCount * TileSize * 0.5f) + (Coord.Y + 0.5f) * TileSize;
+		return FVector(WorldX, WorldY, Origin.Z);
+	}
 
-	return FVector(WorldX, WorldY, Origin.Z);
+	return Tile->WorldLocation;
 }
 
 bool UGridManager::IsValidCoord(const FIntPoint& Coord) const
 {
 	return Coord.X >= 0 && Coord.X < GridWidth
 		&& Coord.Y >= 0 && Coord.Y < GridHeightCount;
+}
+
+bool UGridManager::IsTraversalAllowed(const FGridTile& FromTile, const FGridTile& ToTile,
+	const FGridTraversalParams& Params) const
+{
+	if (ToTile.bBlocked)
+	{
+		return false;
+	}
+
+	const float DeltaZ = ToTile.Height - FromTile.Height;
+
+	if (DeltaZ > Params.MaxStepUpHeight)
+	{
+		return false;
+	}
+
+	if (-DeltaZ > Params.MaxStepDownHeight)
+	{
+		return false;
+	}
+
+	return true;
 }
 
 void UGridManager::BuildNeighborCache()
@@ -243,7 +273,7 @@ void UGridManager::BuildNeighborCache()
 	}
 }
 
-int32 UGridManager::CalculatePathCost(const FIntPoint& Start, const FIntPoint& Goal) const
+int32 UGridManager::CalculatePathCost(const FIntPoint& Start, const FIntPoint& Goal, const FGridTraversalParams& TraversalParams) const
 {
 	const FGridTile* StartTile = GetTile(Start);
     const FGridTile* GoalTile  = GetTile(Goal);
@@ -390,6 +420,23 @@ void UGridManager::DrawDebugGrid(const UWorld* World, float Duration) const
 #endif
 }
 
+void UGridManager::RemoveActorFromGrid(AActor* Actor)
+{
+	if (!Actor)
+	{
+		return;
+	}
+
+	const FIntPoint Coord = WorldToGrid(Actor->GetActorLocation());
+
+	if (!IsValidCoord(Coord))
+	{
+		return;
+	}
+
+	OccupancyMap.Remove(Coord);
+}
+
 int32 UGridManager::Heuristic(const FIntPoint& A, const FIntPoint& B) const
 {
 	const int32 DX = FMath::Abs(A.X - B.X);
@@ -398,17 +445,27 @@ int32 UGridManager::Heuristic(const FIntPoint& A, const FIntPoint& B) const
 	return FMath::Max(DX, DY);
 }
 
-bool UGridManager::FindPath(const FIntPoint& Start, const FIntPoint& Goal, TArray<FIntPoint>& OutPath) const
+bool UGridManager::FindPath(
+	const FIntPoint& Start,
+	const FIntPoint& Goal,
+	const FGridTraversalParams& TraversalParams,
+	TArray<FIntPoint>& OutPath
+) const
 {
 	OutPath.Reset();
 
 	const FGridTile* StartTile = GetTile(Start);
-	const FGridTile* GoalTile  = GetTile(Goal);
+	const FGridTile* GoalTile = GetTile(Goal);
 
 	if (!StartTile || !GoalTile || GoalTile->bBlocked)
 	{
 		return false;
 	}
+
+	static const FIntPoint Directions[] = {
+		{ 1,  0}, {-1,  0}, { 0,  1}, { 0, -1},
+		{ 1,  1}, { 1, -1}, {-1,  1}, {-1, -1}
+	};
 
 	TMap<FIntPoint, FAStarNode> AllNodes;
 	TSet<FIntPoint> OpenSet;
@@ -424,7 +481,6 @@ bool UGridManager::FindPath(const FIntPoint& Start, const FIntPoint& Goal, TArra
 
 	while (OpenSet.Num() > 0)
 	{
-		// Find node with lower F
 		FIntPoint CurrentCoord;
 		int32 LowestF = TNumericLimits<int32>::Max();
 
@@ -438,10 +494,8 @@ bool UGridManager::FindPath(const FIntPoint& Start, const FIntPoint& Goal, TArra
 			}
 		}
 
-		// Got to destination 
 		if (CurrentCoord == Goal)
 		{
-			// Rebuild path
 			FIntPoint Trace = Goal;
 			while (Trace != Start)
 			{
@@ -456,32 +510,61 @@ bool UGridManager::FindPath(const FIntPoint& Start, const FIntPoint& Goal, TArra
 		ClosedSet.Add(CurrentCoord);
 
 		const FGridTile* CurrentTile = GetTile(CurrentCoord);
-
-		for (const FIntPoint& NeighborCoord : CurrentTile->Neighbors)
+		if (!CurrentTile)
 		{
-			if (ClosedSet.Contains(NeighborCoord))
+			continue;
+		}
+
+		for (const FIntPoint& Dir : Directions)
+		{
+			const FIntPoint NeighborCoord = CurrentCoord + Dir;
+
+			if (!IsValidCoord(NeighborCoord) || ClosedSet.Contains(NeighborCoord))
 			{
 				continue;
 			}
 
 			const FGridTile* NeighborTile = GetTile(NeighborCoord);
-			if (!NeighborTile || NeighborTile->bBlocked)
+			if (!NeighborTile)
 			{
 				continue;
 			}
-			
+
+			if (!IsTraversalAllowed(*CurrentTile, *NeighborTile, TraversalParams))
+			{
+				continue;
+			}
+
 			AActor* Occupant = GetActorAt(NeighborCoord);
-
-			if (Occupant && NeighborCoord != Goal)
+			if (Occupant && NeighborCoord != Goal && !TraversalParams.bIgnoreOccupiedTiles)
 			{
 				continue;
 			}
 
-			const int32 TentativeG =
-				AllNodes[CurrentCoord].GCost + NeighborTile->MoveCost;
+			// Diagonal validation
+			if (Dir.X != 0 && Dir.Y != 0)
+			{
+				const FIntPoint Adjacent1 = CurrentCoord + FIntPoint(Dir.X, 0);
+				const FIntPoint Adjacent2 = CurrentCoord + FIntPoint(0, Dir.Y);
+
+				const FGridTile* Tile1 = GetTile(Adjacent1);
+				const FGridTile* Tile2 = GetTile(Adjacent2);
+
+				if (!Tile1 || !Tile2)
+				{
+					continue;
+				}
+
+				if (!IsTraversalAllowed(*CurrentTile, *Tile1, TraversalParams) &&
+					!IsTraversalAllowed(*CurrentTile, *Tile2, TraversalParams))
+				{
+					continue;
+				}
+			}
+
+			const int32 TentativeG = AllNodes[CurrentCoord].GCost + NeighborTile->MoveCost;
 
 			FAStarNode* NeighborNode = AllNodes.Find(NeighborCoord);
-
 			if (!NeighborNode)
 			{
 				FAStarNode NewNode;
@@ -497,11 +580,10 @@ bool UGridManager::FindPath(const FIntPoint& Start, const FIntPoint& Goal, TArra
 			{
 				NeighborNode->GCost = TentativeG;
 				NeighborNode->Parent = CurrentCoord;
-
 				OpenSet.Add(NeighborCoord);
 			}
 		}
 	}
-	UE_LOG(LogTemp, Warning, TEXT("[GridManager]: Couldn't find a valid path..."));
+
 	return false;
 }

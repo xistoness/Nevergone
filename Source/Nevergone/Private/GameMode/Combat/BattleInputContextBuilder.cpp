@@ -26,7 +26,6 @@ FBattleInputContext UBattleInputContextBuilder::BuildContext() const
 	if (bHardLock)
 	{
 		Context.InputFocus = EBattleInputFocus::None;
-		Context.bInputLocked = true;
 	}
 	else if (bUIOpen)
 	{
@@ -36,10 +35,21 @@ FBattleInputContext UBattleInputContextBuilder::BuildContext() const
 	{
 		Context.InputFocus = EBattleInputFocus::Unit;
 	}
-	else if (bCameraEnabled)
-	{
-		Context.bCameraInputEnabled = bCameraEnabled;
-	}
+
+	Context.bCameraInputEnabled = bCameraEnabled;
+	Context.bUnitInputEnabled = bUnitEnabled;
+	
+	UE_LOG(LogTemp, Warning, TEXT(
+	"[InputContextBuilder] Context Built | TurnOwner=%d | TurnPhase=%d | InteractionMode=%d | InputFocus=%d | CameraInput=%s | UnitInput=%s | HardLock=%s | UIOpen=%s"),
+	(int32)Context.TurnOwner,
+	(int32)Context.TurnPhase,
+	(int32)Context.InteractionMode,
+	(int32)Context.InputFocus,
+	Context.bCameraInputEnabled ? TEXT("TRUE") : TEXT("FALSE"),
+	Context.bUnitInputEnabled ? TEXT("TRUE") : TEXT("FALSE"),
+	bHardLock ? TEXT("TRUE") : TEXT("FALSE"),
+	bUIOpen ? TEXT("TRUE") : TEXT("FALSE")
+);
 
 	return Context;
 }
@@ -64,7 +74,13 @@ void UBattleInputContextBuilder::SetCameraInputEnabled(bool bEnabled)
 	bCameraEnabled = bEnabled;
 }
 
+void UBattleInputContextBuilder::SetUnitInputEnabled(bool bEnabled)
+{
+	bUnitEnabled = bEnabled;
+}
+
 void UBattleInputContextBuilder::SetHardLock(bool bLocked)
 {
 	bHardLock = bLocked;
 }
+

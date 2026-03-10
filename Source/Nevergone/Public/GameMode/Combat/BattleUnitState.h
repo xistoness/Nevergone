@@ -20,7 +20,7 @@ struct FBattleUnitState
 	TWeakObjectPtr<ACharacterBase> UnitActor;
 
 	UPROPERTY()
-	EBattleUnitTeam Team = EBattleUnitTeam::Player;
+	EBattleUnitTeam Team = EBattleUnitTeam::Ally;
 
 	/* ----- Core stats ----- */
 

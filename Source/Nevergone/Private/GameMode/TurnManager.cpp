@@ -30,6 +30,7 @@ void UTurnManager::BeginEnemyTurn()
 
 void UTurnManager::EndCurrentTurn()
 {
+	UE_LOG(LogTemp, Warning, TEXT("[TurnManager] Ending current turn"));
 	if (CurrentTurnOwner == EBattleTurnOwner::Player)
 	{
 		BeginEnemyTurn();

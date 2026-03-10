@@ -1,9 +1,7 @@
 // Copyright Xyzto Works
 
-
 #include "Characters/Abilities/GA_Move_Simple.h"
 
-#include "StateTreePropertyBindings.h"
 #include "ActorComponents/BattleModeComponent.h"
 #include "ActorComponents/UnitStatsComponent.h"
 #include "Characters/CharacterBase.h"
@@ -17,27 +15,28 @@
 UGA_Move_Simple::UGA_Move_Simple()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
+
 	FGameplayTagContainer Tags;
-	Tags.AddTag(FGameplayTag::RequestGameplayTag("Ability.Move"));
+	Tags.AddTag(FGameplayTag::RequestGameplayTag(FName("Ability.Move")));
 	SetAssetTags(Tags);
-	
+
 	TargetPolicy.AddRule(MakeUnique<MoveRangeRule>());
 	TargetPolicy.AddRule(MakeUnique<TileNotBlockedRule>());
 	TargetPolicy.AddRule(MakeUnique<TileNotOccupiedRule>());
+
 	PreviewRendererClass = UPreview_Move::StaticClass();
 }
 
-FActionResult UGA_Move_Simple::BuildPreview(const FActionContext& Context) const
+FActionResult UGA_Move_Simple::BuildMovementPreview(const FActionContext& Context) const
 {
-	UE_LOG(LogTemp, Warning, TEXT("[MoveSimple]: Trying to build preview..."));
+	//UE_LOG(LogTemp, Warning, TEXT("[MoveSimple]: Trying to build movement preview..."));
+
 	FActionResult Result;
 
-	ACharacterBase* Character =
-		Cast<ACharacterBase>(Context.SourceActor);
-
+	ACharacterBase* Character = Cast<ACharacterBase>(Context.SourceActor);
 	if (!Character)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[MoveSimple]: Couldn't find Character..."));
+		UE_LOG(LogTemp, Warning, TEXT("[MoveSimple]: Character is invalid..."));
 		return Result;
 	}
 
@@ -46,70 +45,209 @@ FActionResult UGA_Move_Simple::BuildPreview(const FActionContext& Context) const
 		UE_LOG(LogTemp, Warning, TEXT("[MoveSimple]: Target policy is invalid..."));
 		return Result;
 	}
-	
+
 	UWorld* World = Character->GetWorld();
 	if (!World)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[MoveSimple]: World is invalid..."));
 		return Result;
 	}
-	
-	UGridManager* Grid =
-		World->GetSubsystem<UGridManager>();
 
+	UGridManager* Grid = World->GetSubsystem<UGridManager>();
 	if (!Grid)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[MoveSimple]: Grid is invalid..."));
 		return Result;
 	}
 
-	FIntPoint TargetCoord =	Grid->WorldToGrid(Context.TargetWorldPosition);
+	const FIntPoint TargetCoord = Grid->WorldToGrid(Context.HoveredWorldPosition);
+	const FGridTile* Tile = Grid->GetTile(TargetCoord);
+	if (!Tile)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[MoveSimple]: Target tile is invalid..."));
+		return Result;
+	}
 
-	const FGridTile* Tile =	Grid->GetTile(TargetCoord);
-	
-	int32 Distance = Context.CachedPathCost; // already calculated in tiles
-	int32 Speed = Character->GetUnitStats()->GetSpeed();
+	UUnitStatsComponent* UnitStats = Character->GetUnitStats();
+	if (!UnitStats)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[MoveSimple]: UnitStats is invalid..."));
+		return Result;
+	}
 
-	int32 ActionPointsCost = (Distance + Speed - 1) / Speed;
+	const int32 Distance = Context.CachedPathCost;
+	const int32 Speed = FMath::Max(1, UnitStats->GetSpeed());
+	const FGridTraversalParams TraversalParams = UnitStats->GetTraversalParams();
+
+	if (Distance == INDEX_NONE || Distance < 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[MoveSimple]: CachedPathCost is invalid..."));
+		return Result;
+	}
+
+	TArray<FIntPoint> PathCoords;
+	if (!Grid->FindPath(Context.SourceGridCoord, TargetCoord, TraversalParams, PathCoords))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[MoveSimple]: Pathfinding failed..."));
+		return Result;
+	}
+
+	Result.PathPoints.Reset();
+	Result.PathPoints.Reserve(PathCoords.Num());
+
+	for (const FIntPoint& Coord : PathCoords)
+	{
+		const FVector GroundPoint = Grid->GridToWorld(Coord);
+		Result.PathPoints.Add(Character->GetGroundAlignedLocation(GroundPoint));
+	}
 
 	Result.bIsValid = true;
-	Result.TargetGridCoord = TargetCoord;
-	Result.TargetWorldPosition = Tile->WorldLocation;
-	Result.ActionPointsCost = ActionPointsCost;
-
-	Character->SetPendingMoveLocation(Result.TargetWorldPosition);
+	Result.MovementTargetGridCoord = TargetCoord;
+	Result.MovementTargetWorldPosition = Character->GetGroundAlignedLocation(Tile->WorldLocation);
+	Result.ActionPointsCost = (Distance + Speed - 1) / Speed;
 
 	return Result;
 }
 
-void UGA_Move_Simple::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
-                                      const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo,
-                                      const FGameplayEventData* TriggerEventData)
+FActionResult UGA_Move_Simple::BuildMovementExecution(const FActionContext& Context) const
+{
+	return BuildMovementPreview(Context);
+}
+
+bool UGA_Move_Simple::ExecuteMovementPlan(
+	ACharacterBase* Character,
+	const FActionResult& MovementResult,
+	const FSimpleDelegate& OnMovementFinished
+)
+{
+	if (!Character || !MovementResult.bIsValid)
+	{
+		return false;
+	}
+
+	if (MovementFinishedDelegateHandle.IsValid())
+	{
+		Character->OnPathMoveFinished.Remove(MovementFinishedDelegateHandle);
+		MovementFinishedDelegateHandle.Reset();
+	}
+
+	PendingMovementFinishedDelegate.Unbind();
+
+	if (OnMovementFinished.IsBound())
+	{
+		PendingMovementFinishedDelegate = OnMovementFinished;
+
+		MovementFinishedDelegateHandle =
+			Character->OnPathMoveFinished.AddUObject(this, &UGA_Move_Simple::HandleExternalMovementFinished);
+	}
+
+	Character->MoveToLocation(MovementResult.MovementTargetWorldPosition, MovementResult.PathPoints);
+	return true;
+}
+
+void UGA_Move_Simple::ActivateAbility(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo,
+	const FGameplayEventData* TriggerEventData
+)
 {
 	UE_LOG(LogTemp, Warning, TEXT("[MoveSimple]: Ability activated..."));
+
 	if (!ActorInfo || !ActorInfo->AvatarActor.IsValid())
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
 		return;
 	}
 
-	ACharacterBase* Character =
-		Cast<ACharacterBase>(ActorInfo->AvatarActor.Get());
-
+	ACharacterBase* Character = Cast<ACharacterBase>(ActorInfo->AvatarActor.Get());
 	if (!Character)
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
 		return;
 	}
 
-	FVector TargetLocation = Character->GetPendingMoveLocation();
+	UBattleModeComponent* BattleMode = Character->GetBattleModeComponent();
+	if (!BattleMode)
+	{
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+		return;
+	}
 
-	Character->MoveToLocation(TargetLocation);
-	
-	Character->GetBattleModeComponent()->UpdateOccupancy();
-	Character->GetBattleModeComponent()->ConsumeActionPoints();
-	
-	UE_LOG(LogTemp, Warning, TEXT("[MoveSimple]: Ability reached end!"));
+	const FActionContext& Context = BattleMode->GetCurrentContext();
+	const FActionResult ExecutionResult = BuildMovementExecution(Context);
 
-	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+	if (!ExecutionResult.bIsValid)
+	{
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+		return;
+	}
+
+	CachedCharacter = Character;
+	CachedActionPointsCost = ExecutionResult.ActionPointsCost;
+	CachedDestinationGridCoord = ExecutionResult.MovementTargetGridCoord;
+
+	Character->OnPathMoveFinished.RemoveAll(this);
+	Character->OnPathMoveFinished.AddUObject(this, &UGA_Move_Simple::FinalizeAbilityExecution);
+
+	if (!ExecuteMovementPlan(Character, ExecutionResult, FSimpleDelegate()))
+	{
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+	}
+}
+
+void UGA_Move_Simple::EndAbility(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo,
+	bool bReplicateEndAbility,
+	bool bWasCancelled
+)
+{
+	if (CachedCharacter)
+	{
+		CachedCharacter->OnPathMoveFinished.RemoveAll(this);
+
+		if (MovementFinishedDelegateHandle.IsValid())
+		{
+			CachedCharacter->OnPathMoveFinished.Remove(MovementFinishedDelegateHandle);
+			MovementFinishedDelegateHandle.Reset();
+		}
+	}
+
+	PendingMovementFinishedDelegate.Unbind();
+	CachedCharacter = nullptr;
+
+	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+}
+
+void UGA_Move_Simple::ApplyAbilityCompletionEffects()
+{
+	Super::ApplyAbilityCompletionEffects();
+	UE_LOG(LogTemp, Warning, TEXT("[GA_Move_Simple]: Ability applying completion effects"));
+	if (!CachedCharacter)
+	{
+		return;
+	}
+
+	
+	if (UBattleModeComponent* BattleMode = CachedCharacter->GetBattleModeComponent())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[GA_Move_Simple]: Ability calling BattleMode functions"));
+		BattleMode->UpdateOccupancy(CachedDestinationGridCoord);
+		BattleMode->ConsumeActionPoints(CachedActionPointsCost);
+		BattleMode->HandleActionFinished();
+	}
+}
+
+void UGA_Move_Simple::HandleExternalMovementFinished()
+{
+	if (CachedCharacter && MovementFinishedDelegateHandle.IsValid())
+	{
+		CachedCharacter->OnPathMoveFinished.Remove(MovementFinishedDelegateHandle);
+		MovementFinishedDelegateHandle.Reset();
+	}
+
+	PendingMovementFinishedDelegate.ExecuteIfBound();
+	PendingMovementFinishedDelegate.Unbind();
 }

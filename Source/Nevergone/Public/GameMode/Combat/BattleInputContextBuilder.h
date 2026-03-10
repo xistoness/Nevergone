@@ -21,15 +21,19 @@ public:
 	void SetUIState(bool bIsUIOpen);
 	void SetInteractionMode(EBattleInteractionMode Mode);
 	void SetCameraInputEnabled(bool bEnabled);
+	void SetUnitInputEnabled(bool bEnabled);
 	void SetHardLock(bool bLocked);
 	
+
 private:
 	UPROPERTY()
 	UTurnManager* TurnManager = nullptr;
 
 	bool bUIOpen = false;
 	bool bCameraEnabled = true;
+	bool bUnitEnabled = true;
 	bool bHardLock = false;
+	
 
 	EBattleInteractionMode InteractionMode = EBattleInteractionMode::None;
 };

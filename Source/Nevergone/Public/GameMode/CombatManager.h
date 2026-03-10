@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Types/BattleInputContext.h"
+#include "Types/BattleTypes.h"
 #include "UObject/Object.h"
 #include "CombatManager.generated.h"
 
@@ -16,7 +17,7 @@ class ACharacterBase;
 class UBattleState;
 class UGridManager;
 
-DECLARE_MULTICAST_DELEGATE(FOnCombatFinished);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCombatFinished, EBattleUnitTeam, WinningTeam);
 
 UCLASS()
 class NEVERGONE_API UCombatManager : public UObject
@@ -29,11 +30,14 @@ public:
 	
 	/** Spawn units and send to TurnManager */
 	void StartCombat(UBattlePreparationContext& BattlePrepContext);
+	void InitializeSpawnedUnitForBattle(ACharacterBase* Character, EBattleUnitTeam Team, UGridManager* Grid);
 	void HandleTurnStateChanged(EBattleTurnOwner NewOwner, EBattleTurnPhase NewPhase);
+	void HandleUnitDeath(ACharacterBase* DeadUnit);
+	bool IsTeamDefeated(EBattleUnitTeam Team) const;
 	void UpdateInputContext();
 
 	void CancelPreparation();
-	void EndCombat();
+	void EndCombatWithWinner(EBattleUnitTeam WinningTeam);
 	
 	/** Input / camera integration */
 	void RegisterBattleCamera(ABattleCameraPawn* InCameraPawn);
@@ -45,10 +49,13 @@ public:
 	FOnCombatFinished OnCombatFinished;
 
 protected:
+	
+	void RestoreTeamActionPoints(EBattleUnitTeam Team);
+	
 	UPROPERTY(BlueprintReadOnly)
-	TArray<TObjectPtr<AActor>> SpawnedAllies;
+	TArray<ACharacterBase*> SpawnedAllies;
 	UPROPERTY(BlueprintReadOnly)
-	TArray<TObjectPtr<AActor>> SpawnedEnemies;
+	TArray<ACharacterBase*> SpawnedEnemies;
 
 private:
 	void Cleanup();
@@ -56,13 +63,25 @@ private:
 	/** Turn notifications */
 	void OnPlayerTurnStarted();
 	void OnEnemyTurnStarted();
+	void EndPlayerTurn();
+	void EndEnemyTurn();
+
 	void SelectFirstAvailableUnit();
 	void HandleActiveUnitChanged(ACharacterBase* NewActiveUnit);
+	
+	UFUNCTION()
 	void HandleUnitOutOfAP(ACharacterBase* Unit);
-	void EndPlayerTurn();
+	
 	
 	// Debug
 	static void LogActivePlayerController(UWorld* World, const FString& Context);
+	void BindToSelectedUnitBattleEvents(ACharacterBase* Unit);
+	void UnbindFromSelectedUnitBattleEvents(ACharacterBase* Unit);
+	
+	UFUNCTION()
+	void HandleUnitActionStarted();
+	UFUNCTION()
+	void HandleUnitActionFinished();
 
 private:	
 	
@@ -83,6 +102,10 @@ private:
 	
 	UPROPERTY()
 	UBattleInputContextBuilder* InputContextBuilder = nullptr;
+	
 	UPROPERTY()
 	UBattleState* BattleState = nullptr;
+	
+	UPROPERTY()
+	bool bCombatEnding = false;
 };

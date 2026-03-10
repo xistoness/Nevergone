@@ -71,26 +71,17 @@ void UWorldManagerSubsystem::HandleWorldInitializedActors(
 	GameInstance = MyGI;
 
 	// Bind save/load events (only once per world)
-	GameInstance->OnSaveLoaded.AddUObject(
-		this,
-		&UWorldManagerSubsystem::HandleSaveLoaded
-	);
+	GameInstance->OnSaveLoaded.RemoveAll(this);
+	GameInstance->OnSaveLoaded.AddUObject(this,	&UWorldManagerSubsystem::HandleSaveLoaded);
+	
+	GameInstance->OnSaveRequested.RemoveAll(this);
+	GameInstance->OnSaveRequested.AddUObject(this, &UWorldManagerSubsystem::CollectWorldSaveData);
 
-	GameInstance->OnSaveRequested.AddUObject(
-		this,
-		&UWorldManagerSubsystem::CollectWorldSaveData
-	);
-
-	GameInstance->OnPartyChanged.AddUObject(
-		this,
-		&UWorldManagerSubsystem::HandlePartyRestored
-	);
+	GameInstance->OnPartyChanged.RemoveAll(this);
+	GameInstance->OnPartyChanged.AddUObject(this, &UWorldManagerSubsystem::HandlePartyRestored);
 
 	// Notify world is ready
 	GameInstance->OnPostLevelLoad();
-
-	// Restore persistent actors
-	RestoreWorldState();
 }
 
 void UWorldManagerSubsystem::Deinitialize()
@@ -198,7 +189,7 @@ void UWorldManagerSubsystem::SpawnMissingActors()
 		return;
 
 	const TArray<FActorSaveData>& SavedActors = GameInstance->GetSavedActors();
-	const FName CurrentLevel = World->GetFName();
+	const FName CurrentLevel = World->GetOutermost()->GetFName();
 
 	for (const FActorSaveData& Data : SavedActors)
 	{

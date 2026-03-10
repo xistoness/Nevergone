@@ -20,16 +20,16 @@ public:
 	UPROPERTY(SaveGame)
 	FString SaveSlotName;
 	
-	UPROPERTY()
+	UPROPERTY(SaveGame)
 	FPartyData PartyData;
 
-	UPROPERTY()
+	UPROPERTY(SaveGame)
 	FProgressionData ProgressionData;
 	
-	UPROPERTY()
+	UPROPERTY(SaveGame)
 	TMap<FName, bool> GlobalFlags;
 	
-	UPROPERTY()
+	UPROPERTY(SaveGame)
 	TArray<FActorSaveData> SavedActors;
 	
 };

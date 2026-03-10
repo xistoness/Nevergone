@@ -2,8 +2,9 @@
 
 #pragma once
 
-#include "../../../../../../../../../UE_5.7/Engine/Source/Runtime/Core/Public/CoreMinimal.h"
-#include "../../../../../../../../../UE_5.7/Engine/Source/Runtime/Engine/Public/Subsystems/GameInstanceSubsystem.h"
+#include "CoreMinimal.h"
+#include "Subsystems/GameInstanceSubsystem.h"
+#include "Types/BattleTypes.h"
 #include "GameContextManager.generated.h"
 
 class ATowerFloorGameMode;
@@ -49,7 +50,8 @@ private:
 	void CreateCombatManager();
 	void DestroyCombatManager();
 	
-	void HandleCombatFinished();
+	UFUNCTION()
+	void HandleCombatFinished(EBattleUnitTeam WinningTeam);
 
 	ATowerFloorGameMode* GetActiveFloorGameMode() const;
 
