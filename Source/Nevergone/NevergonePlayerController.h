@@ -18,6 +18,9 @@ class ANevergonePlayerController : public APlayerController
 {
 	GENERATED_BODY()
 	
+public:
+	void ApplyDefaultInputMappings();
+	
 protected:
 
 	/** Input Mapping Contexts */
@@ -42,6 +45,7 @@ protected:
 
 	/** Gameplay initialization */
 	virtual void BeginPlay() override;
+	
 
 	/** Input mapping context setup */
 	virtual void SetupInputComponent() override;

@@ -9,6 +9,9 @@ namespace SaveKeys
 
 	// Unit stats, level, HP, attributes
 	static const FName UnitStats(TEXT("UnitStats"));
+	
+	// EncounterVolume
+	static const FName EncounterVolume(TEXT("EncounterVolume"));
 
 	// Test / debug actors
 	static const FName TestInteract(TEXT("TestInteract"));

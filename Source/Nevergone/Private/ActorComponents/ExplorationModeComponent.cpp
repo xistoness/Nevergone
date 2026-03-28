@@ -85,8 +85,8 @@ void UExplorationModeComponent::UpdateInteractionTrace()
 	const FVector TraceEnd = TraceStart + (TraceDirection * MaxInteractionDistance);
 	
 	// Debug visualization
-	DebugDrawHelper::DrawLine(TraceStart, TraceEnd, FColor::Green, 1.5f);
-	DebugDrawHelper::DrawSphere(TraceStart, 6.0f, FColor::Blue, 1.5f);
+	//DebugDrawHelper::DrawLine(TraceStart, TraceEnd, FColor::Green, 1.5f);
+	//DebugDrawHelper::DrawSphere(TraceStart, 6.0f, FColor::Blue, 1.5f);
 
 	FHitResult Hit;
 	FCollisionQueryParams Params;

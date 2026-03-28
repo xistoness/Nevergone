@@ -40,7 +40,11 @@ void ABattleCameraPawn::Tick(float DeltaTime)
 
 	ApplyMovement(DeltaTime);
 
-	if (bIsFocusing)
+	if (LockedActor)
+	{
+		UpdateActorLock(DeltaTime);
+	}
+	else if (bIsFocusing)
 	{
 		const FVector NewLocation = FMath::VInterpTo(
 			GetActorLocation(),
@@ -89,10 +93,50 @@ void ABattleCameraPawn::FocusOnBounds(const FBox& Bounds)
 	SetActorLocation(Bounds.GetCenter());
 }
 
+void ABattleCameraPawn::UpdateActorLock(float DeltaTime)
+{
+	if (!LockedActor)
+	{
+		return;
+	}
+
+	const FVector DesiredLocation = LockedActor->GetActorLocation() + LockOffset;
+
+	const FVector NewLocation = FMath::VInterpTo(
+		GetActorLocation(),
+		DesiredLocation,
+		DeltaTime,
+		LockInterpSpeed
+	);
+
+	SetActorLocation(NewLocation);
+}
+
 void ABattleCameraPawn::ResetView()
 {
 	SpringArm->TargetArmLength = (MinZoom + MaxZoom) * 0.5f;
 	SetActorRotation(FRotator::ZeroRotator);
+}
+
+void ABattleCameraPawn::LockOnActor(AActor* InActor)
+{
+	if (!InActor)
+	{
+		return;
+	}
+
+	LockedActor = InActor;
+	bIsFocusing = false;
+}
+
+void ABattleCameraPawn::ClearLockOnActor()
+{
+	LockedActor = nullptr;
+}
+
+bool ABattleCameraPawn::HasLockedActor() const
+{
+	return LockedActor != nullptr;
 }
 
 void ABattleCameraPawn::EnableCameraInput()

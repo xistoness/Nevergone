@@ -16,6 +16,7 @@ class NEVERGONE_API AExplorationPlayerController : public ANevergonePlayerContro
 
 public:
 	virtual void SetupInputComponent() override;
+	void ApplyExplorationInputMode();
 	void OnLook(const FInputActionValue& Value);
 
 	// Input Actions
@@ -45,4 +46,5 @@ protected:
 	
 	virtual void BeginPlay() override;
 	virtual void OnPossess(APawn* InPawn) override;
+	virtual void OnUnPossess() override;
 };

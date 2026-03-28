@@ -81,19 +81,177 @@ void ATowerFloorGameMode::HandleGameContextChanged(EGameContextState NewState)
 	switch (NewState)
 	{
 	case EGameContextState::Exploration:
-		SwitchPlayerController(ExplorationControllerClass);
-		break;
+		{
+			if (!ExplorationControllerClass)
+			{
+				return;
+			}
+
+			if (!ActivePlayerController)
+			{
+				ActivePlayerController = UGameplayStatics::GetPlayerController(this, 0);
+			}
+
+			APlayerController* OldPC = ActivePlayerController;
+			APlayerController* NewPC = nullptr;
+
+			if (OldPC && OldPC->IsA(ExplorationControllerClass))
+			{
+				NewPC = OldPC;
+			}
+			else
+			{
+				NewPC = GetWorld()->SpawnActor<APlayerController>(ExplorationControllerClass);
+				if (!NewPC)
+				{
+					return;
+				}
+
+				SwapPlayerControllers(OldPC, NewPC);
+				ActivePlayerController = NewPC;
+			}
+
+			if (UGameInstance* GI = GetGameInstance())
+			{
+				if (UGameContextManager* ContextManager = GI->GetSubsystem<UGameContextManager>())
+				{
+					ACharacterBase* ExplorationCharacter = ContextManager->GetSavedExplorationCharacter();
+					if (ExplorationCharacter)
+					{
+						UE_LOG(LogTemp, Warning,
+							TEXT("[TowerFloorGameMode]: Possessing saved exploration character: %s"),
+							*GetNameSafe(ExplorationCharacter));
+
+						NewPC->Possess(ExplorationCharacter);
+
+						if (NewPC->GetPawn() == ExplorationCharacter)
+						{
+							UE_LOG(LogTemp, Warning, TEXT("[TowerFloorGameMode]: Exploration character possessed successfully."));
+							ContextManager->ClearBattleSession();
+						}
+						else
+						{
+							UE_LOG(LogTemp, Error, TEXT("[TowerFloorGameMode]: Failed to possess saved exploration character."));
+						}
+					}
+					else
+					{
+						UE_LOG(LogTemp, Error, TEXT("[TowerFloorGameMode]: Saved exploration character is null."));
+					}
+				}
+			}
+			break;
+		}
 
 	case EGameContextState::BattlePreparation:
 		SwitchPlayerController(BattlePreparationControllerClass);
 		break;
-		
+
 	case EGameContextState::Battle:
 		SwitchPlayerController(BattleControllerClass);
 		break;
 
 	default:
 		break;
+	}
+}
+
+APlayerController* ATowerFloorGameMode::SpawnAndSwapPlayerController(
+	TSubclassOf<APlayerController> NewControllerClass)
+{
+	if (!NewControllerClass)
+	{
+		return nullptr;
+	}
+
+	if (!ActivePlayerController)
+	{
+		ActivePlayerController = UGameplayStatics::GetPlayerController(this, 0);
+	}
+
+	if (!ActivePlayerController)
+	{
+		return nullptr;
+	}
+
+	if (ActivePlayerController->IsA(NewControllerClass))
+	{
+		return ActivePlayerController;
+	}
+
+	APlayerController* OldPC = ActivePlayerController;
+
+	APlayerController* NewPC = GetWorld()->SpawnActor<APlayerController>(NewControllerClass);
+	if (!NewPC)
+	{
+		return nullptr;
+	}
+
+	SwapPlayerControllers(OldPC, NewPC);
+	ActivePlayerController = NewPC;
+
+	return NewPC;
+}
+
+void ATowerFloorGameMode::SwitchToExplorationController()
+{
+	APlayerController* NewPC = SpawnAndSwapPlayerController(ExplorationControllerClass);
+	if (!NewPC)
+	{
+		return;
+	}
+
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UGameContextManager* ContextManager = GI->GetSubsystem<UGameContextManager>())
+		{
+			ACharacterBase* ExplorationCharacter = ContextManager->GetSavedExplorationCharacter();
+			if (ExplorationCharacter)
+			{
+				NewPC->Possess(ExplorationCharacter);
+				ContextManager->ClearBattleSession();
+			}
+		}
+	}
+}
+
+void ATowerFloorGameMode::SwitchToBattlePreparationController()
+{
+	APlayerController* NewPC = SpawnAndSwapPlayerController(BattlePreparationControllerClass);
+	if (!NewPC)
+	{
+		return;
+	}
+
+	APawn* ExistingPawn = nullptr;
+	if (APlayerController* OldPC = UGameplayStatics::GetPlayerController(this, 0))
+	{
+		ExistingPawn = OldPC->GetPawn();
+	}
+
+	if (ExistingPawn && !NewPC->GetPawn())
+	{
+		NewPC->Possess(ExistingPawn);
+	}
+}
+
+void ATowerFloorGameMode::SwitchToBattleController()
+{
+	APlayerController* NewPC = SpawnAndSwapPlayerController(BattleControllerClass);
+	if (!NewPC)
+	{
+		return;
+	}
+
+	APawn* ExistingPawn = nullptr;
+	if (APlayerController* OldPC = UGameplayStatics::GetPlayerController(this, 0))
+	{
+		ExistingPawn = OldPC->GetPawn();
+	}
+
+	if (ExistingPawn && !NewPC->GetPawn())
+	{
+		NewPC->Possess(ExistingPawn);
 	}
 }
 
@@ -118,9 +276,16 @@ void ATowerFloorGameMode::SwitchPlayerController(
 	APlayerController* OldPC = ActivePlayerController;
 	APawn* Pawn = OldPC->GetPawn();
 
-	APlayerController* NewPC =
-		GetWorld()->SpawnActor<APlayerController>(NewControllerClass);
+	if (Pawn)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[TowerFloorGameMode]: Unpossessing pawn before controller swap: %s"),
+			*GetNameSafe(Pawn));
 
+		OldPC->UnPossess();
+	}
+
+	APlayerController* NewPC = GetWorld()->SpawnActor<APlayerController>(NewControllerClass);
 	if (!NewPC)
 	{
 		return;
@@ -128,9 +293,18 @@ void ATowerFloorGameMode::SwitchPlayerController(
 
 	SwapPlayerControllers(OldPC, NewPC);
 
-	if (Pawn)
+	if (Pawn && IsValid(Pawn))
 	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[TowerFloorGameMode]: Repossessing pawn after controller swap: %s"),
+			*GetNameSafe(Pawn));
+
 		NewPC->Possess(Pawn);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error,
+			TEXT("[TowerFloorGameMode]: Pawn became invalid during controller swap."));
 	}
 
 	ActivePlayerController = NewPC;

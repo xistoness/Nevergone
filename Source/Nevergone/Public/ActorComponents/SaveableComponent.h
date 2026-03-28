@@ -35,10 +35,24 @@ public:
 	
 	// Optional hook after full world restoration
 	void OnPostRestore();
+	
+	// If false, this actor is saved within a session but never respawned on load.
+	// Use for player pawns and other transient actors managed by the GameMode.
+	UPROPERTY(EditAnywhere, Category = "Save")
+	bool bPersistAcrossLoads = true;
 
 protected:
-	
-	// Persistent runtime GUID (mirrors SaveData)
-	UPROPERTY(VisibleAnywhere, Category="Save")
+
+	/**
+	 * Persistent GUID that identifies this actor across save/load cycles.
+	 *
+	 * EditAnywhere is intentional: the Unreal editor serializes this value
+	 * into the level .uasset when the level is saved, so the GUID generated
+	 * on first placement survives between play sessions and editor restarts.
+	 *
+	 * Do NOT modify this value manually. It is assigned automatically the
+	 * first time the component registers (OnRegister → GetOrCreateGuid).
+	 */
+	UPROPERTY(EditAnywhere, Category = "Save")
 	FGuid SaveGuid;
 };

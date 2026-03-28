@@ -17,6 +17,7 @@ class NEVERGONE_API UGA_Attack_Melee : public UBattleGameplayAbility
 
 public:
 	UGA_Attack_Melee();
+	virtual EBattleAbilitySelectionMode GetSelectionMode() const override;
 
 	virtual FActionResult BuildPreview(const FActionContext& Context) const override;
 	virtual FActionResult BuildExecution(const FActionContext& Context) const override;
@@ -71,6 +72,14 @@ protected:
 
 private:
 	bool BuildAttackResult(const FActionContext& Context, FActionResult& OutResult) const;
+	
+	bool TryBuildManualApproachResult(
+		const FActionContext& Context,
+		ACharacterBase* SourceCharacter,
+		ACharacterBase* TargetCharacter,
+		FActionResult& OutResult
+	) const;
+	
 	bool TryBuildApproachResult(
 		const FActionContext& Context,
 		ACharacterBase* SourceCharacter,

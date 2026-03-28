@@ -20,7 +20,6 @@ FActionResult UActionResolver::ResolvePreview(TSubclassOf<UBattleGameplayAbility
 FActionResult UActionResolver::ResolveExecution(TSubclassOf<UBattleGameplayAbility> AbilityClass,
 	const FActionContext& Context)
 {
-	UE_LOG(LogTemp, Warning, TEXT("[ActionResolver]: Resolving execution..."));
 	if (!AbilityClass)
 		return {};
 

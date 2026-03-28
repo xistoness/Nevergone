@@ -143,7 +143,12 @@ void ABattlePlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void ABattlePlayerController::HandleConfirm()
 {
-	if (BattleInputManager)
+	if (!BattleInputManager)
+	{
+		return;
+	}
+	
+	if (BattleInputManager->CanAcceptInput())
 	{
 		BattleInputManager->OnConfirmPressed();
 	}
@@ -151,10 +156,15 @@ void ABattlePlayerController::HandleConfirm()
 
 void ABattlePlayerController::HandleCancel()
 {
-	if (BattleInputManager)
+	if (!BattleInputManager)
+	{
+		return;
+	}
+	
+	if (BattleInputManager->CanAcceptInput())
 	{
 		BattleInputManager->OnCancelPressed();
-	}
+	}	
 }
 
 void ABattlePlayerController::HandleHover()
@@ -185,7 +195,12 @@ void ABattlePlayerController::HandleHover()
 void ABattlePlayerController::HandleSelectNextUnit()
 {
 	UE_LOG(LogTemp, Warning, TEXT("[BattlePlayerController] Inputs select next unit..."));
-	if (BattleInputManager)
+	if (!BattleInputManager)
+	{
+		return;
+	}	
+	
+	if (BattleInputManager->CanAcceptInput())
 	{
 		BattleInputManager->OnSelectNextUnit();
 	}
@@ -194,7 +209,12 @@ void ABattlePlayerController::HandleSelectNextUnit()
 void ABattlePlayerController::HandleSelectPreviousUnit()
 {
 	UE_LOG(LogTemp, Warning, TEXT("[BattlePlayerController] Inputs select previous unit..."));
-	if (BattleInputManager)
+	if (!BattleInputManager)
+	{
+		return;
+	}	
+	
+	if (BattleInputManager->CanAcceptInput())
 	{
 		BattleInputManager->OnSelectPreviousUnit();
 	}
@@ -203,7 +223,11 @@ void ABattlePlayerController::HandleSelectPreviousUnit()
 void ABattlePlayerController::HandleSelectNextAction()
 {
 	UE_LOG(LogTemp, Warning, TEXT("[BattlePlayerController] Inputs select next action..."));
-	if (BattleInputManager)
+	if (!BattleInputManager)
+	{
+		return;
+	}	
+	if (BattleInputManager->CanAcceptInput())
 	{
 		BattleInputManager->OnSelectNextAction();
 	}
@@ -212,7 +236,11 @@ void ABattlePlayerController::HandleSelectNextAction()
 void ABattlePlayerController::HandleSelectPreviousAction()
 {
 	UE_LOG(LogTemp, Warning, TEXT("[BattlePlayerController] Inputs select previous action..."));
-	if (BattleInputManager)
+	if (!BattleInputManager)
+	{
+		return;
+	}	
+	if (BattleInputManager->CanAcceptInput())
 	{
 		BattleInputManager->OnSelectPreviousAction();
 	}
@@ -220,7 +248,11 @@ void ABattlePlayerController::HandleSelectPreviousAction()
 
 void ABattlePlayerController::HandleEndTurn()
 {
-	if (BattleInputManager)
+	if (!BattleInputManager)
+	{
+		return;
+	}	
+	if (BattleInputManager->CanAcceptInput())
 	{
 		BattleInputManager->OnEndTurn();
 	}
@@ -228,8 +260,11 @@ void ABattlePlayerController::HandleEndTurn()
 
 void ABattlePlayerController::HandleCameraMove(const FInputActionValue& Value)
 {
-	UE_LOG(LogTemp, Warning, TEXT("Inputing Camera move..."));
-	if (BattleInputManager)
+	if (!BattleInputManager)
+	{
+		return;
+	}	
+	if (BattleInputManager->CanCameraAcceptInput())
 	{
 		BattleInputManager->OnCameraMove(Value.Get<FVector2D>());
 	}
@@ -237,7 +272,11 @@ void ABattlePlayerController::HandleCameraMove(const FInputActionValue& Value)
 
 void ABattlePlayerController::HandleCameraZoom(const FInputActionValue& Value)
 {
-	if (BattleInputManager)
+	if (!BattleInputManager)
+	{
+		return;
+	}	
+	if (BattleInputManager->CanCameraAcceptInput())
 	{
 		BattleInputManager->OnCameraZoom(Value.Get<float>());
 	}
@@ -245,7 +284,11 @@ void ABattlePlayerController::HandleCameraZoom(const FInputActionValue& Value)
 
 void ABattlePlayerController::HandleCameraRotate(const FInputActionValue& Value)
 {
-	if (BattleInputManager)
+	if (!BattleInputManager)
+	{
+		return;
+	}	
+	if (BattleInputManager->CanCameraAcceptInput())
 	{
 		BattleInputManager->OnCameraRotate(Value.Get<float>());
 	}

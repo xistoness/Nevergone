@@ -21,6 +21,20 @@ struct NEVERGONE_API FGeneratedPlayerData
 	int32 Level = 1;
 };
 
+UENUM()
+enum class EBattleAbilitySelectionMode : uint8
+{
+	SingleConfirm,
+	TargetThenConfirmApproach
+};
+
+UENUM()
+enum class EBattleActionSelectionPhase : uint8
+{
+	None,
+	SelectingTarget,
+	SelectingApproachTile
+};
 
 USTRUCT(BlueprintType)
 struct NEVERGONE_API FGeneratedEnemyData
@@ -67,7 +81,8 @@ UENUM()
 enum class EBattleUnitTeam : uint8
 {
 	Ally,
-	Enemy
+	Enemy,
+	None
 };
 
 USTRUCT()
@@ -158,6 +173,24 @@ struct FActionContext
 
 	UPROPERTY()
 	FGridTraversalParams TraversalParams;
+	
+	UPROPERTY()
+	AActor* LockedTargetActor = nullptr;
+
+	UPROPERTY()
+	FIntPoint LockedTargetGridCoord;
+
+	UPROPERTY()
+	FIntPoint SelectedApproachGridCoord;
+
+	UPROPERTY()
+	bool bHasLockedTarget = false;
+
+	UPROPERTY()
+	bool bHasSelectedApproachTile = false;
+
+	UPROPERTY()
+	EBattleActionSelectionPhase SelectionPhase = EBattleActionSelectionPhase::None;
 
 	UPROPERTY()
 	int32 CachedPathCost = INDEX_NONE;
@@ -228,5 +261,68 @@ struct FGameplayAbilityTargetData_Tile : public FGameplayAbilityTargetData
 	virtual UScriptStruct* GetScriptStruct() const override
 	{
 		return StaticStruct();
+	}
+};
+
+USTRUCT(BlueprintType)
+struct NEVERGONE_API FBattleSessionData
+{
+	GENERATED_BODY()
+
+public:
+
+	// Whether this session is currently valid
+	UPROPERTY()
+	bool bSessionActive = false;
+
+	// The encounter volume that triggered the combat
+	UPROPERTY()
+	TWeakObjectPtr<class AFloorEncounterVolume> EncounterSource;
+
+	// Exploration character class
+	UPROPERTY()
+	TSubclassOf<ACharacterBase> ExplorationCharacterClass;
+	
+	UPROPERTY()
+	ACharacterBase* ExplorationCharacter;
+
+	// Transform of the exploration character before combat
+	UPROPERTY()
+	FTransform ExplorationCharacterTransform;
+
+	// Final winner team
+	UPROPERTY()
+	EBattleUnitTeam WinningTeam = EBattleUnitTeam::None;
+
+	// Number of surviving allies
+	UPROPERTY()
+	int32 SurvivingAllies = 0;
+
+	// Number of surviving enemies
+	UPROPERTY()
+	int32 SurvivingEnemies = 0;
+
+	// Whether combat has finished
+	UPROPERTY()
+	bool bCombatFinished = false;
+	
+	UPROPERTY()
+	FRotator ExplorationControlRotation = FRotator::ZeroRotator;
+
+	UPROPERTY()
+	float ExplorationArmLength = 400.f;
+
+	void Reset()
+	{
+		bSessionActive = false;
+		EncounterSource = nullptr;
+		ExplorationCharacterClass = nullptr;
+		ExplorationCharacterTransform = FTransform::Identity;
+		WinningTeam = EBattleUnitTeam::None;
+		SurvivingAllies = 0;
+		SurvivingEnemies = 0;
+		bCombatFinished = false;
+		ExplorationControlRotation = FRotator::ZeroRotator;
+		ExplorationArmLength = 400.f;
 	}
 };
