@@ -8,7 +8,9 @@
 #include "Characters/Abilities/AbilityPreview/Preview_Attack_Melee.h"
 #include "Characters/Abilities/BattleMovementAbility.h"
 #include "Characters/Abilities/TargetingRules/FactionRule.h"
+#include "GameMode/Combat/CombatEventBus.h"
 #include "Level/GridManager.h"
+#include "Nevergone.h"
 #include "Types/BattleTypes.h"
 
 UGA_Attack_Melee::UGA_Attack_Melee()
@@ -16,24 +18,19 @@ UGA_Attack_Melee::UGA_Attack_Melee()
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 
 	FGameplayTagContainer AssetTags;
-	AssetTags.AddTag(FGameplayTag::RequestGameplayTag(FName("Ability.Attack.Melee")));
+	AssetTags.AddTag(TAG_Ability_Attack_Melee);
 	SetAssetTags(AssetTags);
 
-	ActivationRequiredTags.AddTag(
-		FGameplayTag::RequestGameplayTag(FName("Mode.Combat"))
-	);
-
-	ActivationRequiredTags.AddTag(
-		FGameplayTag::RequestGameplayTag(FName("Turn.CanAct"))
-	);
-
-	ActivationBlockedTags.AddTag(
-		FGameplayTag::RequestGameplayTag(FName("State.Stunned"))
-	);
+	ActivationBlockedTags.AddTag(TAG_State_Stunned);
 
 	TargetPolicy.AddRule(MakeUnique<FactionRule>(EFactionType::Enemy));
 	
 	PreviewRendererClass = UPreview_Attack_Melee::StaticClass();
+}
+
+EBattleAbilitySelectionMode UGA_Attack_Melee::GetSelectionMode() const
+{
+	return EBattleAbilitySelectionMode::TargetThenConfirmApproach;
 }
 
 FActionResult UGA_Attack_Melee::BuildPreview(const FActionContext& Context) const
@@ -55,9 +52,25 @@ bool UGA_Attack_Melee::BuildAttackResult(const FActionContext& Context, FActionR
 	OutResult = FActionResult();
 
 	ACharacterBase* SourceCharacter = Cast<ACharacterBase>(Context.SourceActor);
-	ACharacterBase* TargetCharacter = Cast<ACharacterBase>(Context.TargetActor);
-	
-	// If the approach tile is the same as source tile, path may be empty or trivial. That's okay.
+
+	ACharacterBase* TargetCharacter = nullptr;
+	FIntPoint TargetGridCoord = FIntPoint::ZeroValue;
+
+	if (Context.SelectionPhase == EBattleActionSelectionPhase::SelectingTarget)
+	{
+		TargetCharacter = Cast<ACharacterBase>(Context.TargetActor);
+		TargetGridCoord = Context.HoveredGridCoord;
+	}
+	else if (Context.SelectionPhase == EBattleActionSelectionPhase::SelectingApproachTile)
+	{
+		TargetCharacter = Cast<ACharacterBase>(Context.LockedTargetActor);
+		TargetGridCoord = Context.LockedTargetGridCoord;
+	}
+	else
+	{
+		return false;
+	}
+
 	if (!SourceCharacter || !TargetCharacter)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[Attack_Melee]: No SourceCharacter or NoTargetCharacter"));
@@ -73,36 +86,25 @@ bool UGA_Attack_Melee::BuildAttackResult(const FActionContext& Context, FActionR
 	UUnitStatsComponent* SourceStats = SourceCharacter->GetUnitStats();
 	UUnitStatsComponent* TargetStats = TargetCharacter->GetUnitStats();
 
-	if (!SourceStats || !TargetStats)
+	if (!SourceStats || !TargetStats || !TargetStats->IsAlive())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Attack_Melee]: No SourceStats or no TargetStats"));
 		return false;
 	}
 
-	if (!TargetStats->IsAlive())
+	// Phase 1: only validate and lock the target
+	if (Context.SelectionPhase == EBattleActionSelectionPhase::SelectingTarget)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Attack_Melee]: Target is not alive"));
-		return false;
-	}
-
-	if (IsAdjacent(Context.SourceGridCoord, Context.HoveredGridCoord))
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[Attack_Melee]: Final tile is adjacent"));
 		OutResult.bIsValid = true;
-		OutResult.bRequiresMovement = false;
-		OutResult.MovementTargetGridCoord = Context.SourceGridCoord;
-		OutResult.MovementTargetWorldPosition = SourceCharacter->GetActorLocation();
-		OutResult.ActionPointsCost = BaseActionPointsCost;
+		OutResult.ResolvedAttackTarget = TargetCharacter;
 		OutResult.ExpectedDamage = SourceStats->GetMeleeAttack();
 		OutResult.HitChance = 1.0f;
-		OutResult.ResolvedAttackTarget = TargetCharacter;
 		OutResult.AffectedActors.Add(TargetCharacter);
 		return true;
 	}
 
-	if (!TryBuildApproachResult(Context, SourceCharacter, TargetCharacter, OutResult))
+	// Phase 2: player must explicitly choose the approach tile
+	if (!TryBuildManualApproachResult(Context, SourceCharacter, TargetCharacter, OutResult))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Attack_Melee]: Couldn't build approach result"));
 		return false;
 	}
 
@@ -112,6 +114,111 @@ bool UGA_Attack_Melee::BuildAttackResult(const FActionContext& Context, FActionR
 	OutResult.AffectedActors.Add(TargetCharacter);
 
 	return OutResult.bIsValid;
+}
+
+bool UGA_Attack_Melee::TryBuildManualApproachResult(
+	const FActionContext& Context,
+	ACharacterBase* SourceCharacter,
+	ACharacterBase* TargetCharacter,
+	FActionResult& OutResult
+) const
+{
+	if (!SourceCharacter || !TargetCharacter || !Context.bHasLockedTarget)
+	{
+		return false;
+	}
+
+	UWorld* World = SourceCharacter->GetWorld();
+	if (!World)
+	{
+		return false;
+	}
+
+	UGridManager* Grid = World->GetSubsystem<UGridManager>();
+	if (!Grid)
+	{
+		return false;
+	}
+
+	const FIntPoint CandidateCoord = Context.SelectedApproachGridCoord;
+
+	// The chosen tile must be adjacent to the locked target
+	if (!IsAdjacent(CandidateCoord, Context.LockedTargetGridCoord))
+	{
+		return false;
+	}
+
+	// If the player selected the current tile, attack from current position
+	if (CandidateCoord == Context.SourceGridCoord)
+	{
+		OutResult.bIsValid = true;
+		OutResult.bRequiresMovement = false;
+		OutResult.MovementTargetGridCoord = Context.SourceGridCoord;
+		OutResult.MovementTargetWorldPosition = SourceCharacter->GetActorLocation();
+		OutResult.ActionPointsCost = BaseActionPointsCost;
+		OutResult.ResolvedAttackTarget = TargetCharacter;
+		return true;
+	}
+
+	UBattleModeComponent* BattleMode = SourceCharacter->GetBattleModeComponent();
+	if (!BattleMode)
+	{
+		return false;
+	}
+
+	const TSubclassOf<UBattleMovementAbility> MovementClass =
+		BattleMode->GetEquippedMovementAbilityClass();
+
+	if (!MovementClass)
+	{
+		return false;
+	}
+
+	const UBattleMovementAbility* MovementCDO =
+		MovementClass->GetDefaultObject<UBattleMovementAbility>();
+
+	if (!MovementCDO)
+	{
+		return false;
+	}
+
+	FActionContext MovementContext{};
+	MovementContext.SourceActor = Context.SourceActor;
+
+	// IMPORTANT: this must refer to the candidate tile occupant, not the locked target
+	MovementContext.TargetActor = Grid->GetActorAt(CandidateCoord);
+
+	MovementContext.SourceGridCoord = Context.SourceGridCoord;
+	MovementContext.HoveredGridCoord = CandidateCoord;
+	MovementContext.MovementTargetGridCoord = CandidateCoord;
+	MovementContext.SourceWorldPosition = Context.SourceWorldPosition;
+	MovementContext.HoveredWorldPosition = Grid->GridToWorld(CandidateCoord);
+	MovementContext.MovementTargetWorldPosition = Grid->GridToWorld(CandidateCoord);
+	MovementContext.TraversalParams = Context.TraversalParams;
+	MovementContext.CachedPathCost = Grid->CalculatePathCost(
+		Context.SourceGridCoord,
+		CandidateCoord,
+		Context.TraversalParams
+	);
+
+	if (MovementContext.CachedPathCost == INDEX_NONE || MovementContext.CachedPathCost < 0)
+	{
+		return false;
+	}
+
+	const FActionResult MovementResult = MovementCDO->BuildMovementExecution(MovementContext);
+	if (!MovementResult.bIsValid)
+	{
+		return false;
+	}
+
+	OutResult = MovementResult;
+	OutResult.bIsValid = true;
+	OutResult.bRequiresMovement = true;
+	OutResult.ActionPointsCost = FMath::Max(BaseActionPointsCost, MovementResult.ActionPointsCost);
+	OutResult.ResolvedAttackTarget = TargetCharacter;
+
+	return true;
 }
 
 bool UGA_Attack_Melee::TryBuildApproachResult(
@@ -376,18 +483,24 @@ void UGA_Attack_Melee::ApplyResolvedAttack()
 	UUnitStatsComponent* SourceStats = CachedCharacter->GetUnitStats();
 	UUnitStatsComponent* TargetStats = CachedTargetCharacter->GetUnitStats();
 
-	if (!SourceStats || !TargetStats)
+	if (!SourceStats || !TargetStats || !TargetStats->IsAlive())
 	{
 		return;
 	}
 
-	if (!TargetStats->IsAlive())
+	// Route through the event bus so BattleState, floating text,
+	// and all other listeners are notified in one place
+	UBattleModeComponent* BattleMode = CachedCharacter->GetBattleModeComponent();
+	if (UCombatEventBus* Bus = BattleMode ? BattleMode->GetCombatEventBus() : nullptr)
 	{
+		Bus->NotifyDamageApplied(CachedCharacter, CachedTargetCharacter, SourceStats->GetMeleeAttack());
 		return;
 	}
 
-	const float Damage = SourceStats->GetMeleeAttack();
-	TargetStats->SetCurrentHP(TargetStats->GetCurrentHP() - Damage);
+	UE_LOG(LogTemp, Error,
+		TEXT("[GA_Attack_Melee] CombatEventBus not found — damage not applied for %s"),
+		*CachedCharacter->GetName()
+	);
 }
 
 void UGA_Attack_Melee::FinalizeAttackAction()

@@ -2,6 +2,8 @@
 
 
 #include "Characters/CharacterBase.h"
+
+#include "AITestsCommon.h"
 #include "ActorComponents/UnitStatsComponent.h"
 #include "ActorComponents/CharacterModeComponent.h"
 #include "ActorComponents/SaveableComponent.h"
@@ -16,6 +18,8 @@
 #include "Components/CapsuleComponent.h"
 #include "Debug/DebugDrawHelper.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Kismet/GameplayStatics.h"
+#include "Widgets/FloatingCombatTextWidget.h"
 
 
 ACharacterBase::ACharacterBase()
@@ -107,6 +111,30 @@ void ACharacterBase::Tick(float DeltaTime)
 	}
 }
 
+void ACharacterBase::BeginDestroy()
+{
+	UE_LOG(LogTemp, Error, TEXT("[BaseCharacter]: BeginDestroy -> %s"), *GetNameSafe(this));
+	Super::BeginDestroy();
+}
+
+void ACharacterBase::Destroyed()
+{
+	UE_LOG(LogTemp, Error, TEXT("[BaseCharacter]: Destroyed -> %s"), *GetNameSafe(this));
+	Super::Destroyed();
+}
+
+void ACharacterBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	UE_LOG(LogTemp, Error, TEXT("[BaseCharacter]: EndPlay -> %s | Reason=%d"), *GetNameSafe(this), (int32)EndPlayReason);
+	Super::EndPlay(EndPlayReason);
+}
+
+void ACharacterBase::UnPossessed()
+{
+	UE_LOG(LogTemp, Warning, TEXT("[BaseCharacter]: UnPossessed -> %s"), *GetNameSafe(this));
+	Super::UnPossessed();
+}
+
 void ACharacterBase::WriteSaveData_Implementation(FActorSaveData& OutData) const
 {	
 	FSavePayload Payload;
@@ -172,6 +200,27 @@ void ACharacterBase::MoveToLocation(const FVector& InLocation, const TArray<FVec
 	//SetActorLocation(InLocation);
 }
 
+void ACharacterBase::SpawnFloatingText(const FString& Text, EFloatingTextType Type, UTexture2D* Icon)
+{
+	APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
+	if (!PC || !FloatingTextClass)
+	{
+		return;
+	}
+
+	UFloatingCombatTextWidget* Widget = CreateWidget<UFloatingCombatTextWidget>(PC, FloatingTextClass);
+	if (!Widget)
+	{
+		return;
+	}
+
+	// Add to the viewport before Init so Tick is already active
+	// when OnFloatingTextReady() triggers the animation in the Blueprint
+	Widget->AddToViewport();
+	Widget->SetAlignmentInViewport(FVector2D(0.5f, 1.f)); // anchor at the bottom-center of the text
+	Widget->InitFloatingText(GetActorLocation(), Text, Type, Icon);
+}
+
 void ACharacterBase::MoveAlongPath_Lerped(const TArray<FVector>& WorldPoints)
 {
 	StopPathMove();
@@ -235,6 +284,24 @@ void ACharacterBase::FinishPathMove()
 UMyAbilitySystemComponent* ACharacterBase::GetAbilitySystemComponent()
 {
 	return AbilitySystemComponent;
+}
+
+bool ACharacterBase::IsInExplorationMode()
+{
+	if (ActiveMode == ExplorationMode)
+	{
+		return true;
+	}
+	return false;
+}
+
+bool ACharacterBase::IsInBattleMode()
+{
+	if (ActiveMode == BattleMode)
+	{
+		return true;
+	}
+	return false;
 }
 
 void ACharacterBase::ResetCamera()

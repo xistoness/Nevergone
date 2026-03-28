@@ -49,6 +49,11 @@ public:
 	/* ----- Input Config ----- */
 	
 	bool CanAcceptInput() const;
+	bool CanCameraAcceptInput() const;
+	
+	/* ----- Getters ----- */
+	
+	ABattleCameraPawn* GetBattleCameraPawn() const { return BattleCameraPawn; };
 
 private:
 	/* ----- Routing ----- */

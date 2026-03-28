@@ -10,12 +10,18 @@
 #include "Characters/Abilities/BattleMovementAbility.h"
 #include "Characters/Abilities/AbilityPreview/AbilityPreviewRenderer.h"
 #include "Data/UnitDefinition.h"
+#include "GameMode/Combat/CombatEventBus.h"
 #include "GameMode/Combat/Resolvers/ActionResolver.h"
 #include "Level/GridManager.h"
 
 UBattleModeComponent::UBattleModeComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
+}
+
+void UBattleModeComponent::SetCombatEventBus(UCombatEventBus* InBus)
+{
+	CombatEventBus = InBus;
 }
 
 void UBattleModeComponent::TickComponent(
@@ -167,9 +173,72 @@ void UBattleModeComponent::SetSelectedAbilityFromEntry(const FUnitAbilityEntry& 
 	CurrentContext.SourceActor = GetOwner();
 	CurrentContext.AbilityClass = Entry.AbilityClass;
 	CurrentContext.Ability = Entry.AbilityData;
+
+	const UBattleGameplayAbility* AbilityCDO =
+		Entry.AbilityClass
+			? Entry.AbilityClass->GetDefaultObject<UBattleGameplayAbility>()
+			: nullptr;
+
+	if (AbilityCDO &&
+		AbilityCDO->GetSelectionMode() == EBattleAbilitySelectionMode::TargetThenConfirmApproach)
+	{
+		CurrentContext.SelectionPhase = EBattleActionSelectionPhase::SelectingTarget;
+	}
+	else
+	{
+		CurrentContext.SelectionPhase = EBattleActionSelectionPhase::None;
+	}
+
 	UE_LOG(LogTemp, Warning, TEXT("[BattleModeComponent]: Selected ability: %s"), *Entry.AbilityClass->GetName());
 
 	HandleAbilitySelected();
+}
+
+EBattleAbilitySelectionMode UBattleModeComponent::GetCurrentAbilitySelectionMode() const
+{
+	if (!CurrentContext.AbilityClass)
+	{
+		return EBattleAbilitySelectionMode::SingleConfirm;
+	}
+
+	const UBattleGameplayAbility* AbilityCDO =
+		CurrentContext.AbilityClass->GetDefaultObject<UBattleGameplayAbility>();
+
+	if (!AbilityCDO)
+	{
+		return EBattleAbilitySelectionMode::SingleConfirm;
+	}
+
+	return AbilityCDO->GetSelectionMode();
+}
+
+bool UBattleModeComponent::TryLockCurrentTarget()
+{
+	if (!CurrentContext.TargetActor)
+	{
+		return false;
+	}
+
+	CurrentContext.LockedTargetActor = CurrentContext.TargetActor;
+	CurrentContext.LockedTargetGridCoord = CurrentContext.HoveredGridCoord;
+	CurrentContext.bHasLockedTarget = true;
+	CurrentContext.SelectionPhase = EBattleActionSelectionPhase::SelectingApproachTile;
+	return true;
+}
+
+void UBattleModeComponent::ClearLockedTarget()
+{
+	CurrentContext.LockedTargetActor = nullptr;
+	CurrentContext.LockedTargetGridCoord = FIntPoint::ZeroValue;
+	CurrentContext.SelectedApproachGridCoord = FIntPoint::ZeroValue;
+	CurrentContext.bHasLockedTarget = false;
+	CurrentContext.bHasSelectedApproachTile = false;
+	CurrentContext.SelectionPhase = EBattleActionSelectionPhase::SelectingTarget;
+}
+
+bool UBattleModeComponent::IsCurrentAbilityInApproachSelection() const
+{
+	return CurrentContext.SelectionPhase == EBattleActionSelectionPhase::SelectingApproachTile;
 }
 
 bool UBattleModeComponent::SelectAbilityByIndex(int32 AbilityIndex)
@@ -314,18 +383,77 @@ void UBattleModeComponent::PreviewCurrentAbility(FActionResult& PreviewResult)
 
 void UBattleModeComponent::Input_Confirm()
 {
-	FActionResult ExecutionResult;
-	if (!PreviewCurrentAbilityExecution(ExecutionResult))
+	if (!CurrentContext.AbilityClass)
 	{
 		return;
 	}
 
-	CurrentContext.ActionPointsCost = ExecutionResult.ActionPointsCost;
-	ExecuteCurrentAction(CurrentContext, ExecutionResult);
+	const EBattleAbilitySelectionMode SelectionMode = GetCurrentAbilitySelectionMode();
+
+	// Standard abilities: execute immediately on confirm
+	if (SelectionMode == EBattleAbilitySelectionMode::SingleConfirm)
+	{
+		FActionResult ExecutionResult;
+		if (!PreviewCurrentAbilityExecution(ExecutionResult))
+		{
+			return;
+		}
+
+		CurrentContext.ActionPointsCost = ExecutionResult.ActionPointsCost;
+		ExecuteCurrentAction(CurrentContext, ExecutionResult);
+		return;
+	}
+
+	// Two-step abilities: first lock target, then confirm approach tile
+	if (SelectionMode == EBattleAbilitySelectionMode::TargetThenConfirmApproach)
+	{
+		if (CurrentContext.SelectionPhase == EBattleActionSelectionPhase::SelectingTarget)
+		{
+			FActionResult PreviewResult;
+			PreviewCurrentAbility(PreviewResult);
+
+			if (!PreviewResult.bIsValid)
+			{
+				return;
+			}
+
+			if (!TryLockCurrentTarget())
+			{
+				return;
+			}
+
+			PreviewCurrentAbility(PreviewResult);
+			return;
+		}
+
+		if (CurrentContext.SelectionPhase == EBattleActionSelectionPhase::SelectingApproachTile)
+		{
+			FActionResult ExecutionResult;
+			if (!PreviewCurrentAbilityExecution(ExecutionResult))
+			{
+				return;
+			}
+
+			CurrentContext.ActionPointsCost = ExecutionResult.ActionPointsCost;
+			ExecuteCurrentAction(CurrentContext, ExecutionResult);
+		}
+	}
 }
 
 void UBattleModeComponent::Input_Cancel()
 {
+	const EBattleAbilitySelectionMode SelectionMode = GetCurrentAbilitySelectionMode();
+
+	if (SelectionMode == EBattleAbilitySelectionMode::TargetThenConfirmApproach &&
+		CurrentContext.SelectionPhase == EBattleActionSelectionPhase::SelectingApproachTile)
+	{
+		ClearLockedTarget();
+
+		FActionResult PreviewResult;
+		PreviewCurrentAbility(PreviewResult);
+		return;
+	}
+
 	IBattleInputReceiver::Input_Cancel();
 }
 
@@ -343,7 +471,26 @@ void UBattleModeComponent::Input_Hover(const FVector& WorldLocation)
 	CurrentContext.SourceGridCoord = GridManager->WorldToGrid(CurrentContext.SourceWorldPosition);
 	CurrentContext.HoveredGridCoord = GridManager->WorldToGrid(WorldLocation);
 
-	CurrentContext.TargetActor = GridManager->GetActorAt(CurrentContext.HoveredGridCoord);
+	const EBattleAbilitySelectionMode SelectionMode = GetCurrentAbilitySelectionMode();
+
+	if (SelectionMode == EBattleAbilitySelectionMode::TargetThenConfirmApproach)
+	{
+		if (CurrentContext.SelectionPhase == EBattleActionSelectionPhase::SelectingTarget)
+		{
+			CurrentContext.TargetActor = GridManager->GetActorAt(CurrentContext.HoveredGridCoord);
+		}
+		else if (CurrentContext.SelectionPhase == EBattleActionSelectionPhase::SelectingApproachTile)
+		{
+			CurrentContext.TargetActor = CurrentContext.LockedTargetActor;
+			CurrentContext.SelectedApproachGridCoord = CurrentContext.HoveredGridCoord;
+			CurrentContext.bHasSelectedApproachTile = true;
+		}
+	}
+	else
+	{
+		// Standard abilities keep using hovered tile / hovered actor directly
+		CurrentContext.TargetActor = GridManager->GetActorAt(CurrentContext.HoveredGridCoord);
+	}
 
 	ACharacterBase* Character = Cast<ACharacterBase>(GetOwner());
 	if (!Character || !Character->GetUnitStats())
@@ -399,62 +546,97 @@ void UBattleModeComponent::Input_SelectPreviousAction()
 	SelectAbilityByIndex(SelectedAbilityIndex);	
 }
 
-void UBattleModeComponent::ExecuteCurrentAction(const FActionContext& Context, const FActionResult& Result)
+
+bool UBattleModeComponent::ExecuteActionFromAI(const FActionContext& InContext)
+{
+	CurrentContext = InContext;
+
+	FActionResult ExecutionResult;
+	if (!PreviewCurrentAbilityExecution(ExecutionResult))
+	{
+		return false;
+	}
+
+	CurrentContext.ActionPointsCost = ExecutionResult.ActionPointsCost;
+
+	// ExecuteCurrentAction can fail if TryActivateAbilityByClass rejects the
+	// ability (e.g. tag requirements not met). Propagate the result so the
+	// AI executor knows whether to wait for OnActionUseFinished or bail out.
+	return ExecuteCurrentAction(CurrentContext, ExecutionResult);
+}
+
+bool UBattleModeComponent::ExecuteCurrentAction(const FActionContext& Context, const FActionResult& Result)
 {
 	UE_LOG(LogTemp, Warning, TEXT("[BattleModeComponent]: Trying to execute ability..."));
 
-	if (!Context.AbilityClass)
-	{
-		return;
-	}
+	if (!Context.AbilityClass) return false;
 
 	ACharacterBase* Character = Cast<ACharacterBase>(Context.SourceActor);
-	if (!Character)
-	{
-		return;
-	}
+	if (!Character) return false;
 
 	UMyAbilitySystemComponent* ASC = Character->GetAbilitySystemComponent();
-	if (!ASC)
-	{
-		return;
-	}
-
-	UBattleGameplayAbility* AbilityCDO =
-		Context.AbilityClass->GetDefaultObject<UBattleGameplayAbility>();
-
-	if (!AbilityCDO)
-	{
-		return;
-	}
+	if (!ASC) return false;
 
 	UE_LOG(LogTemp, Warning, TEXT("[BattleModeComponent]: Calling ASC to activate ability!"));
 
-	if (ASC->TryActivateAbilityByClass(Context.AbilityClass))
+	// Start must be flagged before activation — synchronous abilities call
+	// HandleActionFinished during TryActivateAbilityByClass, before this
+	// function returns, so the order here is critical
+	HandleActionStarted();
+
+	const bool bActivated = ASC->TryActivateAbilityByClass(Context.AbilityClass);
+
+	if (!bActivated)
 	{
-		HandleActionStarted();
+		// Activation failed — roll back the started state
+		bActionInProgress = false;
+		UE_LOG(LogTemp, Error, TEXT("[BattleModeComponent]: Failed to activate ability %s for %s"),
+			*GetNameSafe(Context.AbilityClass),
+			*GetNameSafe(Character));
 	}
+
+	return bActivated;
 }
 
 void UBattleModeComponent::HandleActionStarted()
 {
+	if (bActionInProgress)
+	{
+		return;
+	}
+
+	bActionInProgress = true;
+	
+	ACharacterBase* Character = Cast<ACharacterBase>(GetOwner());
+
 	UE_LOG(LogTemp, Warning, TEXT("[BattleModeComponent]: Broadcasting ActionStarted!"));
-	OnActionUseStarted.Broadcast();
+	OnActionUseStarted.Broadcast(Character);
 }
 
 void UBattleModeComponent::HandleActionFinished()
 {
-	UE_LOG(LogTemp, Warning, TEXT("[BattleModeComponent]: Broadcasting ActionFinished!"));
-	OnActionUseFinished.Broadcast();
-
-	if (ACharacterBase* Character = Cast<ACharacterBase>(GetOwner()))
+	if (!bActionInProgress)
 	{
-		if (UUnitStatsComponent* UnitStats = Character->GetUnitStats())
+		UE_LOG(LogTemp, Warning, TEXT("[BattleModeComponent]: Ignoring duplicate ActionFinished."));
+		return;
+	}
+
+	bActionInProgress = false;
+
+	// Reset selection state so the next confirm starts a fresh target
+	// selection instead of falling into the approach-tile branch with stale data
+	ClearLockedTarget();
+
+	ACharacterBase* Character = Cast<ACharacterBase>(GetOwner());
+
+	UE_LOG(LogTemp, Warning, TEXT("[BattleModeComponent]: Broadcasting ActionFinished!"));
+	OnActionUseFinished.Broadcast(Character);
+
+	if (UUnitStatsComponent* UnitStats = Character->GetUnitStats())
+	{
+		if (UnitStats->GetCurrentActionPoints() == 0)
 		{
-			if (UnitStats->GetCurrentActionPoints() == 0)
-			{
-				OnActionPointsDepleted.Broadcast(Character);
-			}
+			OnActionPointsDepleted.Broadcast(Character);
 		}
 	}
 }

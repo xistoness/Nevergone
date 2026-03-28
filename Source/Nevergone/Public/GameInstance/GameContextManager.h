@@ -12,6 +12,7 @@ class UCombatManager;
 class UBattlePreparationContext;
 class UGridManager;
 class AFloorEncounterVolume;
+class UBattleResultsContext;
 
 UENUM(BlueprintType)
 enum class EGameContextState : uint8
@@ -20,6 +21,7 @@ enum class EGameContextState : uint8
 	Exploration,
 	BattlePreparation,
 	Battle,
+	BattleResults,
 	Transition
 };
 
@@ -37,9 +39,17 @@ public:
 	void RequestBattleStart();
 	void RequestBattleEnd();
 	void RequestTransition();
+	void EnterBattleResults();
+	void ReturnToExploration();
 	void AbortBattle();
 	
+	ACharacterBase* GetSavedExplorationCharacter() const;
+	FTransform GetSavedExplorationTransform() const;
+	void ClearBattleSession();
+	
 	EGameContextState GetCurrentState() const { return CurrentState; }
+	FRotator GetSavedExplorationControlRotation() const;
+	void DestroyExplorationCharacter(ACharacterBase* Character);
 	FOnGameContextChanged OnGameContextChanged;
 
 private:
@@ -48,7 +58,6 @@ private:
 	void ExitState(EGameContextState OldState);
 	
 	void CreateCombatManager();
-	void DestroyCombatManager();
 	
 	UFUNCTION()
 	void HandleCombatFinished(EBattleUnitTeam WinningTeam);
@@ -62,4 +71,8 @@ private:
 	UCombatManager* ActiveCombatManager = nullptr;
 	UPROPERTY()
 	UBattlePreparationContext* ActiveBattlePrepContext = nullptr;
+	
+	// Active battle session
+	UPROPERTY()
+	FBattleSessionData ActiveBattleSession;
 };

@@ -33,6 +33,39 @@ void ANevergonePlayerController::BeginPlay()
 	}
 }
 
+void ANevergonePlayerController::ApplyDefaultInputMappings()
+{
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
+
+	if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
+		ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
+	{
+		Subsystem->ClearAllMappings();
+
+		for (UInputMappingContext* CurrentContext : DefaultMappingContexts)
+		{
+			if (CurrentContext)
+			{
+				Subsystem->AddMappingContext(CurrentContext, 0);
+			}
+		}
+
+		if (!ShouldUseTouchControls())
+		{
+			for (UInputMappingContext* CurrentContext : MobileExcludedMappingContexts)
+			{
+				if (CurrentContext)
+				{
+					Subsystem->AddMappingContext(CurrentContext, 0);
+				}
+			}
+		}
+	}
+}
+
 void ANevergonePlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();

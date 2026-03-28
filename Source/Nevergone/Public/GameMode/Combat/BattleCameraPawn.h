@@ -16,25 +16,19 @@ class NEVERGONE_API ABattleCameraPawn
 	GENERATED_BODY()
 
 protected:
-
-	// Root
 	UPROPERTY(VisibleAnywhere)
 	USceneComponent* Root;
 
-	// Camera boom
 	UPROPERTY(VisibleAnywhere)
 	USpringArmComponent* SpringArm;
 
-	// Camera
 	UPROPERTY(VisibleAnywhere)
 	UCameraComponent* Camera;
 
-	// Cached per-frame input
 	FVector2D MovementInput = FVector2D::ZeroVector;
 	float ZoomInput = 0.f;
 	float RotationInput = 0.f;
 
-	// Movement tuning
 	UPROPERTY(EditAnywhere, Category = "Camera|Movement")
 	float PanSpeed = 2000.0f;
 
@@ -53,29 +47,38 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Camera|Rotation")
 	bool bAllowRotation = false;
 
-	// Battlefield limits
 	FBox BattlefieldBounds;
 
 	bool bCameraInputEnabled = true;
-	
-	// Focus state
-	bool bIsFocusing = false;
 
+	// One-shot focus
+	bool bIsFocusing = false;
 	FVector FocusTargetLocation;
-	
+
 	UPROPERTY(EditAnywhere, Category = "Camera|Focus")
 	float FocusInterpSpeed = 5.0f;
+
+	// Persistent actor lock
+	UPROPERTY()
+	TObjectPtr<AActor> LockedActor = nullptr;
+
+	UPROPERTY(EditAnywhere, Category = "Camera|Lock")
+	FVector LockOffset = FVector(0.f, 0.f, 0.f);
+
+	UPROPERTY(EditAnywhere, Category = "Camera|Lock")
+	float LockInterpSpeed = 6.0f;
 
 public:
 	ABattleCameraPawn();
 
-	// Camera control API (non-input)
 	void SetBattlefieldBounds(const FBox& InBounds);
 	void FocusOnLocationSmooth(const FVector& WorldLocation);
 	void FocusOnBounds(const FBox& Bounds);
 	void ResetView();
-	
-	/* ----- IBattleInputReceiver (camera) ----- */
+
+	void LockOnActor(AActor* InActor);
+	void ClearLockOnActor();
+	bool HasLockedActor() const;
 
 	virtual void Input_CameraMove(const FVector2D& Input) override;
 	virtual void Input_CameraZoom(float Value) override;
@@ -89,9 +92,7 @@ protected:
 	virtual void Tick(float DeltaTime) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 
-
-
-	// Internal helpers
 	void ClampToBounds();
 	void ApplyMovement(float DeltaTime);
+	void UpdateActorLock(float DeltaTime);
 };

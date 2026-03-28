@@ -15,17 +15,14 @@ void UTurnManager::StartCombat()
 
 void UTurnManager::BeginPlayerTurn()
 {
-	UE_LOG(LogTemp, Warning, TEXT("[TurnManager] Starting Player turn"));
+	UE_LOG(LogTemp, Error, TEXT("[TurnManager] Starting Player turn"));
 	SetTurnState(EBattleTurnOwner::Player, EBattleTurnPhase::AwaitingOrders);
 }
 
 void UTurnManager::BeginEnemyTurn()
 {
-	UE_LOG(LogTemp, Warning, TEXT("[TurnManager] Starting Enemy turn"));
+	UE_LOG(LogTemp, Error, TEXT("[TurnManager] Starting Enemy turn"));
 	SetTurnState(EBattleTurnOwner::Enemy, EBattleTurnPhase::ExecutingActions);
-
-	// Enemy AI execution would be triggered here
-	// When finished, EndCurrentTurn() must be called
 }
 
 void UTurnManager::EndCurrentTurn()

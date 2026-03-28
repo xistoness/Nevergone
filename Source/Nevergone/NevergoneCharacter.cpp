@@ -75,18 +75,7 @@ void ANevergoneCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInput
 void ANevergoneCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-	
-	if (APlayerController* PC = Cast<APlayerController>(GetController()))
-	{
-		if (ULocalPlayer* LP = PC->GetLocalPlayer())
-		{
-			if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
-				LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
-			{
-				Subsystem->AddMappingContext(DefaultMappingContext, 0);
-			}
-		}
-	}
+	ApplyCharacterInputMapping();
 }
 
 void ANevergoneCharacter::Move(const FInputActionValue& Value)
@@ -105,6 +94,24 @@ void ANevergoneCharacter::Look(const FInputActionValue& Value)
 
 	// route the input
 	DoLook(LookAxisVector.X, LookAxisVector.Y);
+}
+
+void ANevergoneCharacter::ApplyCharacterInputMapping()
+{
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		if (ULocalPlayer* LP = PC->GetLocalPlayer())
+		{
+			if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
+				LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
+			{
+				if (DefaultMappingContext)
+				{
+					Subsystem->AddMappingContext(DefaultMappingContext, 0);
+				}
+			}
+		}
+	}
 }
 
 void ANevergoneCharacter::DoMove(float Right, float Forward)

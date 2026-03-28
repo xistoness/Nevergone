@@ -69,4 +69,10 @@ protected:
 
 	void SwitchPlayerController(TSubclassOf<APlayerController> NewControllerClass);
 	
+	void SwitchToExplorationController();
+	void SwitchToBattlePreparationController();
+	void SwitchToBattleController();
+
+	APlayerController* SpawnAndSwapPlayerController(TSubclassOf<APlayerController> NewControllerClass);
+	
 };

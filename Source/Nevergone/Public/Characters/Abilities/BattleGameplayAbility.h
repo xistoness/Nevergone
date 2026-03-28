@@ -20,6 +20,7 @@ public:
 	
 	virtual FActionResult BuildPreview(const FActionContext& Context) const;
 	virtual FActionResult BuildExecution(const FActionContext& Context) const;
+	virtual EBattleAbilitySelectionMode GetSelectionMode() const;
 	virtual void FinalizeAbilityExecution();
 	virtual void ApplyAbilityCompletionEffects();
 	

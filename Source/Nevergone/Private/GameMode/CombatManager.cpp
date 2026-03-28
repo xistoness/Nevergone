@@ -5,14 +5,17 @@
 
 #include "ActorComponents/BattleModeComponent.h"
 #include "ActorComponents/UnitStatsComponent.h"
+#include "GameInstance/MyGameInstance.h"
 #include "GameMode/BattlePreparationContext.h"
 #include "GameMode/Combat/BattleInputManager.h"
 #include "GameMode/Combat/BattleCameraPawn.h"
+#include "GameMode/Combat/BattleState.h"
+#include "GameMode/Combat/CombatEventBus.h"
+#include "GameMode/Combat/AI/BattleTeamAIPlanner.h"
 #include "Characters/CharacterBase.h"
 #include "Characters/PlayerControllers/BattlePlayerController.h"
 #include "GameMode/TurnManager.h"
 #include "GameMode/Combat/BattleInputContextBuilder.h"
-#include "GameMode/Combat/BattleState.h"
 #include "Level/GridManager.h"
 #include "Types/BattleTypes.h"
 
@@ -28,6 +31,143 @@ void UCombatManager::EnterPreparation(UBattlePreparationContext& BattlePrepConte
 	// Initialize preview systems
 }
 
+void UCombatManager::SpawnAllies(UBattlePreparationContext& BattlePrepContext, UGridManager* Grid)
+{
+	for (int32 i = 0; i < BattlePrepContext.PlayerPlannedSpawns.Num(); ++i)
+	{
+		const FPlannedSpawn& Spawn = BattlePrepContext.PlayerPlannedSpawns[i];
+
+		FIntPoint SpawnCoord;
+		if (!Grid->FindClosestValidTileToWorld(Spawn.PlannedTransform.GetLocation(), SpawnCoord, true))
+		{
+			UE_LOG(
+				LogTemp,
+				Warning,
+				TEXT("[CombatManager]: Failed to find valid ally spawn tile for index %d"),
+				i
+			);
+			continue;
+		}
+
+		FTransform FinalSpawnTransform = Spawn.PlannedTransform;
+		FinalSpawnTransform.SetLocation(Grid->GetTileCenterWorld(SpawnCoord));
+
+		AActor* SpawnedAlly = GetWorld()->SpawnActor<AActor>(
+			Spawn.ActorClass,
+			FinalSpawnTransform
+		);
+
+		ACharacterBase* Character = Cast<ACharacterBase>(SpawnedAlly);
+		if (!Character)
+		{
+			continue;
+		}
+
+		BindToCombatUnitActionEvents(Character);
+		SpawnedAllies.Add(Character);
+
+		UUnitStatsComponent* CharacterUnitStats = Character->GetUnitStats();
+		if (CharacterUnitStats)
+		{
+			CharacterUnitStats->SetCurrentActionPoints(CharacterUnitStats->GetActionPoints());
+			// Death notification is now handled by EventBus::OnUnitDied —
+			// no direct OnUnitDeath binding here
+		}
+
+		// Inject the event bus so this unit's abilities can route through it
+		if (UBattleModeComponent* BattleComp = Character->GetBattleModeComponent())
+		{
+			BattleComp->SetCombatEventBus(EventBus);
+		}
+
+		FSpawnedBattleUnit Entry;
+		Entry.UnitActor = Character;
+		Entry.SourceIndex = i;
+		Entry.Team = EBattleUnitTeam::Ally;
+
+		InitializeSpawnedUnitForBattle(Character, EBattleUnitTeam::Ally, Grid);
+
+		BattlePrepContext.SpawnedUnits.Add(Entry);
+		
+		const FVector TileCenter = Grid->GridToWorld(SpawnCoord);
+
+		UE_LOG(LogTemp, Warning, TEXT("TileCenter: %s"), *TileCenter.ToString());
+		UE_LOG(LogTemp, Warning, TEXT("ActorLocation: %s"), *Character->GetActorLocation().ToString());
+
+		DrawDebugSphere(GetWorld(), TileCenter, 20.f, 12, FColor::Yellow, false, 10.f);
+		DrawDebugSphere(GetWorld(), Character->GetActorLocation(), 20.f, 12, FColor::Blue, false, 10.f);
+		
+	}
+}
+
+void UCombatManager::SpawnEnemies(UBattlePreparationContext& BattlePrepContext, UGridManager* Grid)
+{
+	for (int32 i = 0; i < BattlePrepContext.EnemyPlannedSpawns.Num(); ++i)
+	{
+		const FPlannedSpawn& Spawn = BattlePrepContext.EnemyPlannedSpawns[i];
+
+		FIntPoint SpawnCoord;
+		if (!Grid->FindClosestValidTileToWorld(Spawn.PlannedTransform.GetLocation(), SpawnCoord, true))
+		{
+			UE_LOG(
+				LogTemp,
+				Warning,
+				TEXT("[CombatManager]: Failed to find valid enemy spawn tile for index %d"),
+				i
+			);
+			continue;
+		}
+
+		FTransform FinalSpawnTransform = Spawn.PlannedTransform;
+		FinalSpawnTransform.SetLocation(Grid->GetTileCenterWorld(SpawnCoord));
+
+		AActor* SpawnedEnemy = GetWorld()->SpawnActor<AActor>(
+			Spawn.ActorClass,
+			FinalSpawnTransform
+		);
+
+		ACharacterBase* Character = Cast<ACharacterBase>(SpawnedEnemy);
+		if (!Character)
+		{
+			continue;
+		}
+
+		BindToCombatUnitActionEvents(Character);
+		SpawnedEnemies.Add(Character);
+
+		UUnitStatsComponent* CharacterUnitStats = Character->GetUnitStats();
+		if (CharacterUnitStats)
+		{
+			CharacterUnitStats->SetCurrentActionPoints(CharacterUnitStats->GetActionPoints());
+			// Death notification is now handled by EventBus::OnUnitDied —
+			// no direct OnUnitDeath binding here
+		}
+
+		// Inject the event bus so this unit's abilities can route through it
+		if (UBattleModeComponent* BattleComp = Character->GetBattleModeComponent())
+		{
+			BattleComp->SetCombatEventBus(EventBus);
+		}
+
+		FSpawnedBattleUnit Entry;
+		Entry.UnitActor = Character;
+		Entry.SourceIndex = i;
+		Entry.Team = EBattleUnitTeam::Enemy;
+		
+		InitializeSpawnedUnitForBattle(Character, EBattleUnitTeam::Enemy, Grid);
+
+		BattlePrepContext.SpawnedUnits.Add(Entry);
+		
+		const FVector TileCenter = Grid->GridToWorld(SpawnCoord);
+
+		UE_LOG(LogTemp, Warning, TEXT("TileCenter: %s"), *TileCenter.ToString());
+		UE_LOG(LogTemp, Warning, TEXT("ActorLocation: %s"), *Character->GetActorLocation().ToString());
+
+		DrawDebugSphere(GetWorld(), TileCenter, 20.f, 12, FColor::Yellow, false, 10.f);
+		DrawDebugSphere(GetWorld(), Character->GetActorLocation(), 20.f, 12, FColor::Blue, false, 10.f);
+	}
+}
+
 void UCombatManager::StartCombat(UBattlePreparationContext& BattlePrepContext)
 {	
 	UE_LOG(LogTemp, Warning, TEXT("=== StartCombat ==="));
@@ -40,65 +180,15 @@ void UCombatManager::StartCombat(UBattlePreparationContext& BattlePrepContext)
 		return;
 	}
 	
-	// Spawn allies
-	for (int32 i = 0; i < BattlePrepContext.PlayerPlannedSpawns.Num(); ++i)
-	{
-		const FPlannedSpawn& Spawn = BattlePrepContext.PlayerPlannedSpawns[i];
+	// EventBus must exist before spawning so units receive the reference
+	// during SetCombatEventBus() calls inside SpawnAllies/SpawnEnemies.
+	// BattleState is initialized after spawning because Initialize() reads
+	// BattlePrepContext.SpawnedUnits, which is populated during the spawn loop.
+	EventBus = NewObject<UCombatEventBus>(this);
+	EventBus->OnUnitDied.AddUObject(this, &UCombatManager::HandleUnitDeath);
 
-		AActor* SpawnedAlly = GetWorld()->SpawnActor<AActor>(
-			Spawn.ActorClass,
-			Spawn.PlannedTransform
-		);
-
-		ACharacterBase* Character = Cast<ACharacterBase>(SpawnedAlly);
-		if (!Character)
-		{
-			continue;
-		}
-
-		SpawnedAllies.Add(Character);
-		Grid->RegisterActorToGrid(Character);
-		UUnitStatsComponent* CharacterUnitStats = Character->GetUnitStats();
-		CharacterUnitStats->SetCurrentActionPoints(CharacterUnitStats->GetActionPoints());
-		CharacterUnitStats->OnUnitDeath.AddUObject(this, &UCombatManager::HandleUnitDeath);
-
-		FSpawnedBattleUnit Entry;
-		Entry.UnitActor = Character;
-		Entry.SourceIndex = i;
-		InitializeSpawnedUnitForBattle(Character, EBattleUnitTeam::Ally, Grid);
-		
-		BattlePrepContext.SpawnedUnits.Add(Entry);
-	}
-
-	// Spawn enemies
-	for (int32 i = 0; i < BattlePrepContext.EnemyPlannedSpawns.Num(); ++i)
-	{
-		const FPlannedSpawn& Spawn = BattlePrepContext.EnemyPlannedSpawns[i];
-
-		AActor* SpawnedEnemy = GetWorld()->SpawnActor<AActor>(
-			Spawn.ActorClass,
-			Spawn.PlannedTransform
-		);
-
-		ACharacterBase* Character = Cast<ACharacterBase>(SpawnedEnemy);
-		if (!Character)
-		{
-			continue;
-		}
-		
-		SpawnedEnemies.Add(Character);
-		Grid->RegisterActorToGrid(Character);
-		UUnitStatsComponent* CharacterUnitStats = Character->GetUnitStats();
-		CharacterUnitStats->SetCurrentActionPoints(CharacterUnitStats->GetActionPoints());
-		CharacterUnitStats->OnUnitDeath.AddUObject(this, &UCombatManager::HandleUnitDeath);
-
-		FSpawnedBattleUnit Entry;
-		Entry.UnitActor = Character;
-		Entry.SourceIndex = i;
-		InitializeSpawnedUnitForBattle(Character, EBattleUnitTeam::Enemy, Grid);
-		
-		BattlePrepContext.SpawnedUnits.Add(Entry);
-	}
+	SpawnAllies(BattlePrepContext, Grid);
+	SpawnEnemies(BattlePrepContext, Grid);
 
 	TArray<AActor*> AllCombatants;
 	AllCombatants.Append(SpawnedAllies);
@@ -107,6 +197,10 @@ void UCombatManager::StartCombat(UBattlePreparationContext& BattlePrepContext)
 	// Create turn manager
 	TurnManager = NewObject<UTurnManager>(this);
 	TurnManager->Initialize(AllCombatants);
+	
+	// Create battle team AI planner
+	BattleTeamAIPlanner = NewObject<UBattleTeamAIPlanner>(this);
+	BattleTeamAIPlanner->Initialize(AllCombatants);
 
 	// Create input manager
 	BattleInputManager = NewObject<UBattleInputManager>(this);
@@ -116,10 +210,13 @@ void UCombatManager::StartCombat(UBattlePreparationContext& BattlePrepContext)
 	InputContextBuilder = NewObject<UBattleInputContextBuilder>(this);
 	InputContextBuilder->SetTurnManager(TurnManager);
 	UpdateInputContext();
-	
-	// Create battle state data
+
+	// BattleState is initialized here — SpawnedUnits is now fully populated
 	BattleState = NewObject<UBattleState>();
 	BattleState->Initialize(BattlePrepContext);
+
+	// Wire BattleState into the bus now that both exist
+	EventBus->Initialize(BattleState);
 
 	// Bind turn events
 	TurnManager->OnTurnStateChanged.AddUObject(
@@ -255,7 +352,7 @@ bool UCombatManager::IsTeamDefeated(EBattleUnitTeam Team) const
 
 void UCombatManager::UpdateInputContext()
 {
-	if (!InputContextBuilder || !BattleInputManager)
+	if (!InputContextBuilder || !BattleInputManager || bCombatEnding)
 	{
 		return;
 	}
@@ -279,10 +376,13 @@ void UCombatManager::RegisterBattleCamera(ABattleCameraPawn* InCameraPawn)
 void UCombatManager::OnPlayerTurnStarted()
 {
 	UE_LOG(LogTemp, Warning, TEXT("[CombatManager]: Player turn started"));
-	if (!InputContextBuilder) return;
+	if (!InputContextBuilder || bCombatEnding) return;
+	
+	ClearCurrentSelectedUnit();
 	
 	RestoreTeamActionPoints(EBattleUnitTeam::Ally);
 	
+	InputContextBuilder->SetUnitInputEnabled(true);
 	InputContextBuilder->SetCameraInputEnabled(true);
 	InputContextBuilder->SetHardLock(false);
 	UpdateInputContext();
@@ -294,7 +394,9 @@ void UCombatManager::OnPlayerTurnStarted()
 void UCombatManager::OnEnemyTurnStarted()
 {
 	UE_LOG(LogTemp, Warning, TEXT("[CombatManager]: Enemy turn started"));
-	if (!InputContextBuilder) return;
+	if (!InputContextBuilder || bCombatEnding) return;
+	
+	ClearCurrentSelectedUnit();
 	
 	RestoreTeamActionPoints(EBattleUnitTeam::Enemy);
 
@@ -302,11 +404,12 @@ void UCombatManager::OnEnemyTurnStarted()
 	InputContextBuilder->SetHardLock(true);
 	UpdateInputContext();
 	
-	EndEnemyTurn();
+	BattleTeamAIPlanner->StartTeamTurn();
 }
 
 void UCombatManager::SelectFirstAvailableUnit()
 {
+	if (bCombatEnding) return;
 	for (int32 i = 0; i < SpawnedAllies.Num(); ++i)
 	{
 		ACharacterBase* Unit = Cast<ACharacterBase>(SpawnedAllies[i]);
@@ -329,7 +432,7 @@ void UCombatManager::SelectFirstAvailableUnit()
 
 void UCombatManager::SelectNextControllableUnit()
 {
-	if (SpawnedAllies.Num() == 0 || !BattleState)
+	if (SpawnedAllies.Num() == 0 || !BattleState || bCombatEnding)
 	{
 		return;
 	}
@@ -362,6 +465,8 @@ void UCombatManager::SelectNextControllableUnit()
 
 void UCombatManager::SelectPreviousControllableUnit()
 {
+	if (bCombatEnding) return;
+	
 	if (SpawnedAllies.Num() == 0 || !BattleState)
 	{
 		return;
@@ -398,7 +503,13 @@ void UCombatManager::SelectPreviousControllableUnit()
 
 void UCombatManager::HandleActiveUnitChanged(ACharacterBase* NewActiveUnit)
 {
+	if (!NewActiveUnit || !BattleCameraPawn || !TurnManager || bCombatEnding)
+	{
+		return;
+	}
+
 	UE_LOG(LogTemp, Warning, TEXT("[CombatManager] Tries to handle active unit changed..."));
+
 	if (InputContextBuilder)
 	{
 		InputContextBuilder->SetInteractionMode(EBattleInteractionMode::Targeting);
@@ -408,20 +519,28 @@ void UCombatManager::HandleActiveUnitChanged(ACharacterBase* NewActiveUnit)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[CombatManager] InputContextBuilder invalid"));
 	}
-	
+
 	if (CurrentSelectedUnit)
 	{
-		UnbindFromSelectedUnitBattleEvents(CurrentSelectedUnit);
-		CurrentSelectedUnit = nullptr;
+		if (UBattleModeComponent* OldBattleComp = CurrentSelectedUnit->FindComponentByClass<UBattleModeComponent>())
+		{
+			OldBattleComp->OnActionPointsDepleted.RemoveDynamic(
+				this,
+				&UCombatManager::HandleUnitOutOfAP
+			);
+		}
 	}
-	
-	if (!NewActiveUnit) return;
-	
+
 	CurrentSelectedUnit = NewActiveUnit;
-	CurrentSelectedUnit->GetBattleModeComponent()->OnActionPointsDepleted.AddDynamic(this, &UCombatManager::HandleUnitOutOfAP);
-	
-	BindToSelectedUnitBattleEvents(CurrentSelectedUnit);
-	
+
+	if (UBattleModeComponent* NewBattleComp = CurrentSelectedUnit->FindComponentByClass<UBattleModeComponent>())
+	{
+		NewBattleComp->OnActionPointsDepleted.AddUniqueDynamic(
+			this,
+			&UCombatManager::HandleUnitOutOfAP
+		);
+	}
+
 	if (BattleInputManager)
 	{
 		BattleInputManager->OnActiveUnitChanged(CurrentSelectedUnit);
@@ -430,46 +549,113 @@ void UCombatManager::HandleActiveUnitChanged(ACharacterBase* NewActiveUnit)
 
 void UCombatManager::HandleUnitOutOfAP(ACharacterBase* Unit)
 {
+	if (bCombatEnding || !TurnManager || !BattleState)
+	{
+		return;
+	}
+
+	if (TurnManager->GetCurrentTurnOwner() != EBattleTurnOwner::Player)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CombatManager] Ignoring OutOfAP: not player's turn."));
+		return;
+	}
+
+	if (Unit != CurrentSelectedUnit)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CombatManager] Ignoring OutOfAP: unit is not current selected unit."));
+		return;
+	}
+
 	SelectNextControllableUnit();
 }
 
 void UCombatManager::EndPlayerTurn()
 {
+	if (bCombatEnding || !TurnManager)
+	{
+		return;
+	}
+
+	if (TurnManager->GetCurrentTurnOwner() != EBattleTurnOwner::Player)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CombatManager] Ignoring EndPlayerTurn: current turn is not Player."));
+		return;
+	}
+
 	UE_LOG(LogTemp, Log, TEXT("[CombatManager] No units left. Ending player turn."));
-	
-	SelectedUnit = INDEX_NONE;
-	
+
+	ClearCurrentSelectedUnit();
+
 	if (BattleInputManager)
 	{
 		BattleInputManager->OnActiveUnitChanged(nullptr);
 	}
 
-	if (TurnManager)
-	{
-		TurnManager->EndCurrentTurn();
-	}
+	TurnManager->EndCurrentTurn();
 }
 
 void UCombatManager::EndEnemyTurn()
 {
+	if (bCombatEnding || !TurnManager)
+	{
+		return;
+	}
+
+	if (TurnManager->GetCurrentTurnOwner() != EBattleTurnOwner::Enemy)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CombatManager] Ignoring EndEnemyTurn: current turn is not Enemy."));
+		return;
+	}
+
 	UE_LOG(LogTemp, Log, TEXT("[CombatManager] No AI actions left. Finishing enemy turn."));
-	
-	SelectedUnit = INDEX_NONE;
+
+	ClearCurrentSelectedUnit();
 	
 	if (BattleInputManager)
 	{
 		BattleInputManager->OnActiveUnitChanged(nullptr);
 	}
-
-	if (TurnManager)
+	
+	if (BattleCameraPawn)
 	{
-		TurnManager->EndCurrentTurn();
+		BattleCameraPawn->ClearLockOnActor();
 	}
+	
+	if (InputContextBuilder)
+	{
+		InputContextBuilder->SetUnitInputEnabled(false);
+		InputContextBuilder->SetCameraInputEnabled(true);
+		InputContextBuilder->SetHardLock(false);		
+	}
+	
+	TurnManager->EndCurrentTurn();
+}
+
+void UCombatManager::RequestEndEnemyTurn()
+{
+	EndEnemyTurn();
 }
 
 void UCombatManager::CancelPreparation()
 {
 	Cleanup();
+}
+
+void UCombatManager::ClearCurrentSelectedUnit()
+{
+	if (!CurrentSelectedUnit)
+	{
+		SelectedUnit = INDEX_NONE;
+		return;
+	}
+
+	if (UBattleModeComponent* BattleComp = CurrentSelectedUnit->FindComponentByClass<UBattleModeComponent>())
+	{
+		BattleComp->OnActionPointsDepleted.RemoveAll(this);
+	}
+
+	CurrentSelectedUnit = nullptr;
+	SelectedUnit = INDEX_NONE;
 }
 
 void UCombatManager::EndCombatWithWinner(EBattleUnitTeam WinningTeam)
@@ -496,8 +682,62 @@ void UCombatManager::EndCombatWithWinner(EBattleUnitTeam WinningTeam)
 	OnCombatFinished.Broadcast(WinningTeam);
 }
 
+int32 UCombatManager::GetAliveAllies() const
+{
+	int32 Count = 0;
+
+	for (ACharacterBase* Ally : SpawnedAllies)
+	{
+		if (!IsValid(Ally))
+		{
+			continue;
+		}
+
+		const UUnitStatsComponent* Stats = Ally->GetUnitStats();
+		if (!Stats)
+		{
+			continue;
+		}
+
+		if (Stats->IsAlive())
+		{
+			++Count;
+		}
+	}
+
+	return Count;
+}
+
+int32 UCombatManager::GetAliveEnemies() const
+{
+	int32 Count = 0;
+
+	for (ACharacterBase* Enemy : SpawnedEnemies)
+	{
+		if (!IsValid(Enemy))
+		{
+			continue;
+		}
+
+		const UUnitStatsComponent* Stats = Enemy->GetUnitStats();
+		if (!Stats)
+		{
+			continue;
+		}
+
+		if (Stats->IsAlive())
+		{
+			++Count;
+		}
+	}
+
+	return Count;
+}
+
 void UCombatManager::RestoreTeamActionPoints(EBattleUnitTeam Team)
 {
+	if (bCombatEnding) return;
+	
 	const TArray<ACharacterBase*>* TeamUnits = nullptr;
 
 	switch (Team)
@@ -546,21 +786,84 @@ void UCombatManager::RestoreTeamActionPoints(EBattleUnitTeam Team)
 
 void UCombatManager::Cleanup()
 {
-	if (TurnManager)
+	bCombatEnding = true;
+
+	if (CurrentSelectedUnit)
 	{
-		TurnManager = nullptr;
+		if (UBattleModeComponent* BattleComp = CurrentSelectedUnit->FindComponentByClass<UBattleModeComponent>())
+		{
+			BattleComp->OnActionPointsDepleted.RemoveAll(this);
+		}
+
+		CurrentSelectedUnit = nullptr;
 	}
 
-	BattleInputManager = nullptr;
-	BattleCameraPawn = nullptr;
-	BattleState = nullptr;
+	if (TurnManager)
+	{
+		TurnManager->OnTurnStateChanged.RemoveAll(this);
+	}
+
+	if (UGridManager* Grid = GetWorld()->GetSubsystem<UGridManager>())
+	{
+		for (ACharacterBase* Ally : SpawnedAllies)
+		{
+			if (IsValid(Ally))
+			{
+				UnbindFromCombatUnitActionEvents(Ally);
+				Grid->RemoveActorFromGrid(Ally);
+				UE_LOG(LogTemp, Error, TEXT("[CombatManager]: Destroying ally -> %s"), *GetNameSafe(Ally));
+				Ally->Destroy();
+			}
+		}
+
+		for (ACharacterBase* Enemy : SpawnedEnemies)
+		{
+			if (IsValid(Enemy))
+			{
+				UnbindFromCombatUnitActionEvents(Enemy);
+				Grid->RemoveActorFromGrid(Enemy);
+				UE_LOG(LogTemp, Error, TEXT("[CombatManager]: Destroying enemy -> %s"), *GetNameSafe(Enemy));
+				Enemy->Destroy();
+			}
+		}
+	}
+	else
+	{
+		for (ACharacterBase* Ally : SpawnedAllies)
+		{
+			if (IsValid(Ally))
+			{
+				Ally->Destroy();
+			}
+		}
+
+		for (ACharacterBase* Enemy : SpawnedEnemies)
+		{
+			if (IsValid(Enemy))
+			{
+				Enemy->Destroy();
+			}
+		}
+	}
 
 	SpawnedAllies.Empty();
 	SpawnedEnemies.Empty();
-	
+
+	if (IsValid(BattleCameraPawn))
+	{
+		BattleCameraPawn->Destroy();
+		BattleCameraPawn = nullptr;
+	}
+
+	SelectedUnit = INDEX_NONE;
+	InputContextBuilder = nullptr;
+	BattleInputManager = nullptr;
+	TurnManager = nullptr;
+	BattleState = nullptr;
+	EventBus = nullptr;
 }
 
-void UCombatManager::BindToSelectedUnitBattleEvents(ACharacterBase* Unit)
+void UCombatManager::BindToCombatUnitActionEvents(ACharacterBase* Unit)
 {
 	if (!Unit)
 	{
@@ -569,12 +872,15 @@ void UCombatManager::BindToSelectedUnitBattleEvents(ACharacterBase* Unit)
 
 	if (UBattleModeComponent* BattleComp = Unit->FindComponentByClass<UBattleModeComponent>())
 	{
+		BattleComp->OnActionUseStarted.RemoveDynamic(this, &UCombatManager::HandleUnitActionStarted);
+		BattleComp->OnActionUseFinished.RemoveDynamic(this, &UCombatManager::HandleUnitActionFinished);
+
 		BattleComp->OnActionUseStarted.AddDynamic(this, &UCombatManager::HandleUnitActionStarted);
 		BattleComp->OnActionUseFinished.AddDynamic(this, &UCombatManager::HandleUnitActionFinished);
 	}
 }
 
-void UCombatManager::UnbindFromSelectedUnitBattleEvents(ACharacterBase* Unit)
+void UCombatManager::UnbindFromCombatUnitActionEvents(ACharacterBase* Unit)
 {
 	if (!Unit)
 	{
@@ -583,27 +889,94 @@ void UCombatManager::UnbindFromSelectedUnitBattleEvents(ACharacterBase* Unit)
 
 	if (UBattleModeComponent* BattleComp = Unit->FindComponentByClass<UBattleModeComponent>())
 	{
-		BattleComp->OnActionUseStarted.RemoveAll(this);
-		BattleComp->OnActionUseFinished.RemoveAll(this);
+		BattleComp->OnActionUseStarted.RemoveDynamic(this, &UCombatManager::HandleUnitActionStarted);
+		BattleComp->OnActionUseFinished.RemoveDynamic(this, &UCombatManager::HandleUnitActionFinished);
 	}
 }
 
-void UCombatManager::HandleUnitActionStarted()
+void UCombatManager::HandleUnitActionStarted(ACharacterBase* ActingUnit)
 {
-	UE_LOG(LogTemp, Warning, TEXT("[CombatManager] Action started -> locking unit orders"));
-	
-	InputContextBuilder->SetUnitInputEnabled(false);
-	InputContextBuilder->SetCameraInputEnabled(true);
+	if (bCombatEnding || !InputContextBuilder || !TurnManager)
+	{
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[CombatManager] Action started -> updating input state"));
+
+	const EBattleTurnOwner TurnOwner = TurnManager->GetCurrentTurnOwner();
+
+	if (TurnOwner == EBattleTurnOwner::Player)
+	{
+		InputContextBuilder->SetUnitInputEnabled(false);
+		InputContextBuilder->SetCameraInputEnabled(true);
+		InputContextBuilder->SetHardLock(false);
+	}
+	else
+	{
+		InputContextBuilder->SetUnitInputEnabled(false);
+		InputContextBuilder->SetCameraInputEnabled(false);
+		InputContextBuilder->SetHardLock(true);
+		BattleCameraPawn->LockOnActor(ActingUnit);
+
+		UE_LOG(LogTemp, Warning, TEXT("[CombatManager] Action started -> focusing camera on acting enemy"));
+		FocusCameraOnActingEnemy(ActingUnit);
+	}
+
 	UpdateInputContext();
 }
 
-void UCombatManager::HandleUnitActionFinished()
+void UCombatManager::HandleUnitActionFinished(ACharacterBase* ActingUnit)
 {
-	UE_LOG(LogTemp, Warning, TEXT("[CombatManager] Action finished -> unlocking unit orders"));
+	if (bCombatEnding || !InputContextBuilder || !TurnManager)
+	{
+		return;
+	}
 
-	InputContextBuilder->SetUnitInputEnabled(true);
-	InputContextBuilder->SetCameraInputEnabled(true);
+	UE_LOG(LogTemp, Warning, TEXT("[CombatManager] Action finished -> updating input state"));
+
+	if (TurnManager->GetCurrentTurnOwner() == EBattleTurnOwner::Player)
+	{
+		InputContextBuilder->SetUnitInputEnabled(true);
+		InputContextBuilder->SetCameraInputEnabled(true);
+		InputContextBuilder->SetHardLock(false);
+
+		// Restore targeting mode so the player can act again with the same unit
+		// If the unit is out of AP, HandleUnitOutOfAP will have already
+		// (or will shortly) call SelectNextControllableUnit — this is safe to call regardless
+		if (ActingUnit && BattleState && BattleState->CanUnitAct(ActingUnit))
+		{
+			InputContextBuilder->SetInteractionMode(EBattleInteractionMode::Targeting);
+		}
+	}
+	else
+	{
+		InputContextBuilder->SetUnitInputEnabled(false);
+		InputContextBuilder->SetCameraInputEnabled(false);
+		InputContextBuilder->SetHardLock(true);
+		BattleCameraPawn->ClearLockOnActor();
+	}
+
 	UpdateInputContext();
+}
+
+void UCombatManager::FocusCameraOnActingEnemy(ACharacterBase* ActingUnit)
+{
+	if (!ActingUnit || !BattleInputManager)
+	{
+		return;
+	}
+	
+	BattleCameraPawn = BattleInputManager->GetBattleCameraPawn();
+	if (!IsValid(BattleCameraPawn))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CombatManager] Battle camera pawn is invalid!"));
+		return;
+	}
+	
+	UE_LOG(LogTemp, Warning, TEXT("[CombatManager] Locking camera to enemy unit"));
+
+	const FVector FocusLocation = ActingUnit->GetActorLocation();
+	BattleCameraPawn->FocusOnLocationSmooth(FocusLocation);
 }
 
 void UCombatManager::LogActivePlayerController(UWorld* World, const FString& Context)

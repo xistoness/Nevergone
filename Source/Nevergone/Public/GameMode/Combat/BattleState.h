@@ -27,12 +27,26 @@ public:
 	
 	/* ----- Mutations ----- */
 	void ResetTurnStateForTeam(EBattleUnitTeam Team);
-	
+
 	void MarkUnitAsActed(ACharacterBase* Unit);
 	void MarkUnitMoved(ACharacterBase* Unit);
 	void ConsumeActionPoints(ACharacterBase* Unit, int32 Amount);
-	
+
+	/**
+	 * Syncs the combat-session HP mirror in FBattleUnitState.
+	 * Must only be called from UCombatEventBus::NotifyDamageApplied —
+	 * never directly from abilities. The authoritative HP value lives
+	 * in UUnitStatsComponent; this copy is used by AI queries and
+	 * BattleState::IsUnitExhausted without touching the actor.
+	 */
 	void ApplyDamage(ACharacterBase* Unit, float Amount);
+
+	/**
+	 * Syncs the combat-session HP mirror after a heal.
+	 * Same contract as ApplyDamage — route through UCombatEventBus.
+	 */
+	void ApplyHeal(ACharacterBase* Unit, float Amount);
+
 	void ApplyStatusTag(ACharacterBase* Unit, const FGameplayTag& StatusTag);
 	void ClearStatusTag(ACharacterBase* Unit, const FGameplayTag& StatusTag);
 

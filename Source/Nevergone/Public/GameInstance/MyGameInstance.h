@@ -29,12 +29,27 @@ class NEVERGONE_API UMyGameInstance : public UGameInstance
 	GENERATED_BODY()
 public:
 	
+	// Returns true if a save file exists in the default slot
+	UFUNCTION(BlueprintCallable)
+	bool HasSaveGame() const;
+ 
+	// Starts a fresh playthrough — wipes the existing slot and opens the first level
+	UFUNCTION(BlueprintCallable)
+	void RequestNewGame();
+ 
+	// Loads the existing save and opens the saved level
+	UFUNCTION(BlueprintCallable)
+	void RequestContinue();
+	
 	UFUNCTION(BlueprintCallable)
 	void RequestSaveGame();
 	
 	// Loads the save from disk and applies it to the current world
 	UFUNCTION(BlueprintCallable)
 	void RequestLoadGame();
+	
+	UFUNCTION(BlueprintCallable, Category = "Save")
+	FSaveSlotInfo GetMostRecentSaveInfo() const;
 	
 	// Applies current ActiveSave to the world (no disk I/O)
 	UFUNCTION(BlueprintCallable)
@@ -56,9 +71,8 @@ public:
 	void SetGlobalFlag(FName Flag, bool bValue);
 	
 	// Saved Actors
-	const TArray<FActorSaveData>& GetSavedActors() const;
-	void SetSavedActors(const TArray<FActorSaveData>& NewActors) const;
-	void AddOrUpdateSavedActor(const FActorSaveData& ActorData) const;
+	const TArray<FActorSaveData>& GetSavedActorsForLevel(FName LevelName) const;
+	void SetSavedActorsForLevel(FName LevelName, const TArray<FActorSaveData>& Actors) const;
 	
 	// Level Transition
 	void RequestLevelChange(FName TargetLevel, const FLevelTransitionContext& Context);
@@ -69,6 +83,34 @@ public:
 	
 	// Called after the level has successfully loaded
 	void ApplyPersistentStateToWorld(UWorld* World) const;
+	
+	// Total number of save slots available to the player
+	UPROPERTY(EditDefaultsOnly, Category = "Save")
+	int32 MaxSaveSlots = 3;
+ 
+	// Returns metadata for all slots (occupied and empty) for the Load Game panel
+	UFUNCTION(BlueprintCallable, Category = "Save")
+	TArray<FSaveSlotInfo> GetAllSaveSlots() const;
+ 
+	// Load a specific slot by index (used by Load Game panel)
+	UFUNCTION(BlueprintCallable, Category = "Save")
+	bool LoadSlotByIndex(int32 SlotIndex);
+ 
+	// Delete a specific slot by index
+	UFUNCTION(BlueprintCallable, Category = "Save")
+	void DeleteSlotByIndex(int32 SlotIndex);
+ 
+	// Returns the slot name string for a given index
+	UFUNCTION(BlueprintCallable, Category = "Save")
+	FString GetSlotNameForIndex(int32 SlotIndex) const;
+ 
+	// Updates the active save's display metadata before writing to disk
+	// Call this right before RequestSaveGame() to keep the slot info fresh
+	UFUNCTION(BlueprintCallable, Category = "Save")
+	void UpdateSaveMetadata(const FString& DisplayName, FName CurrentLevelName);
+	
+	UFUNCTION(BlueprintCallable, Category = "Save")
+	FName GetActiveSavedLevelName() const;
 	
 	// Event Broadcasting
 	//OnRestoreParty.Broadcast(PartyData);
@@ -126,7 +168,7 @@ private:
 	UMySaveGame* ActiveSave;
 	
 	UPROPERTY()
-	FString ActiveSlotName = TEXT("MainSlot");
+	FString ActiveSlotName;
 
 	UPROPERTY()
 	FPartyData PartyData;
@@ -145,6 +187,8 @@ private:
 	bool bHasPendingEntryPoint = false;
 
 	void ApplyPendingEntryPoint(UWorld* World);
+	
+	int32 FindNextAvailableSlot() const;
 	
 	
 	// LEVEL TRANSITION // 
