@@ -10,6 +10,7 @@
 #include "Characters/Abilities/TargetingRules/TileNotBlockedRule.h"
 #include "Characters/Abilities/TargetingRules/TileNotOccupiedRule.h"
 #include "Level/GridManager.h"
+#include "Nevergone.h"
 #include "Types/BattleTypes.h"
 
 UGA_Move_Simple::UGA_Move_Simple()
@@ -17,7 +18,7 @@ UGA_Move_Simple::UGA_Move_Simple()
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 
 	FGameplayTagContainer Tags;
-	Tags.AddTag(FGameplayTag::RequestGameplayTag(FName("Ability.Move")));
+	Tags.AddTag(TAG_Ability_Move);
 	SetAssetTags(Tags);
 
 	TargetPolicy.AddRule(MakeUnique<MoveRangeRule>());
@@ -236,7 +237,6 @@ void UGA_Move_Simple::ApplyAbilityCompletionEffects()
 		UE_LOG(LogTemp, Warning, TEXT("[GA_Move_Simple]: Ability calling BattleMode functions"));
 		BattleMode->UpdateOccupancy(CachedDestinationGridCoord);
 		BattleMode->ConsumeActionPoints(CachedActionPointsCost);
-		BattleMode->HandleActionFinished();
 	}
 }
 

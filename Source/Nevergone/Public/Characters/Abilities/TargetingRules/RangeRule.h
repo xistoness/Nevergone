@@ -5,12 +5,13 @@
 class RangeRule : public ITargetRule
 {
 public:
-	RangeRule(int32 InMaxRange)
+	explicit RangeRule(int32 InMaxRange)
 		: MaxRange(InMaxRange)
-	{}
+	{
+	}
 
 	virtual bool IsSatisfied(const FActionContext& Context) const override;
 
 private:
-	int32 MaxRange;
+	int32 MaxRange = 1;
 };

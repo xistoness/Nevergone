@@ -29,19 +29,24 @@ FActionResult UBattleGameplayAbility::BuildExecution(const FActionContext& Conte
 	return BuildPreview(Context);
 }
 
+EBattleAbilitySelectionMode UBattleGameplayAbility::GetSelectionMode() const
+{
+	return EBattleAbilitySelectionMode::SingleConfirm;
+}
+
 void UBattleGameplayAbility::FinalizeAbilityExecution()
 {
+	ACharacterBase* Character = Cast<ACharacterBase>(GetAvatarActorFromActorInfo());
+	UBattleModeComponent* BattleMode = Character ? Character->GetBattleModeComponent() : nullptr;
+
 	ApplyAbilityCompletionEffects();
-	
-	if (ACharacterBase* Character = Cast<ACharacterBase>(GetAvatarActorFromActorInfo()))
-	{
-		if (UBattleModeComponent* BattleMode = Character->GetBattleModeComponent())
-		{
-			BattleMode->HandleActionFinished();
-		}
-	}
 
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
+
+	if (BattleMode)
+	{
+		BattleMode->HandleActionFinished();
+	}
 }
 
 void UBattleGameplayAbility::ApplyAbilityCompletionEffects()

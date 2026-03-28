@@ -64,6 +64,12 @@ public:
 	// ===== Derived Setters =====
 	void SetAllyTeam(int32 Team);
 	void SetEnemyTeam(int32 Team);
+
+	/**
+	 * Raw HP write — clamps to [0, MaxHP] and fires OnUnitDeath if HP
+	 * reaches zero. Does NOT spawn floating text or notify BattleState.
+	 * All combat-facing HP changes must go through UCombatEventBus.
+	 */
 	void SetCurrentHP(float NewHP);
 	void SetCurrentActionPoints(int32 ActionPoints);
 

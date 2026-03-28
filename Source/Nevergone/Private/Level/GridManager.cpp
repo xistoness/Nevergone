@@ -2,7 +2,7 @@
 
 
 #include "Level/GridManager.h"
-#include "Level/BattleVolume.h"
+#include "Level/FloorEncounterVolume.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "DrawDebugHelpers.h"
@@ -25,9 +25,9 @@ struct FAStarNode
 	}
 };
 
-void UGridManager::GenerateGrid(const ABattleVolume* BattleVolume, const UWorld* World)
+void UGridManager::GenerateGrid(const AFloorEncounterVolume* EncounterVolume, const UWorld* World)
 {
-	if (!BattleVolume)
+	if (!EncounterVolume)
 	{
 		return;
 	}
@@ -35,11 +35,11 @@ void UGridManager::GenerateGrid(const ABattleVolume* BattleVolume, const UWorld*
 	
 	GridTiles.Empty();
 
-	Origin     = BattleVolume->GetOrigin();
-	TileSize   = BattleVolume->GetTileSize();
-	GridHeight = BattleVolume->GetGridHeight();
+	Origin     = EncounterVolume->GetBattleBoxOrigin();
+	TileSize   = EncounterVolume->GetTileSize();
+	GridHeight = EncounterVolume->GetGridHeight();
 
-	const FVector Extent = BattleVolume->GetExtent();
+	const FVector Extent = EncounterVolume->GetBattleBoxExtent();
 
 	GridWidth       = FMath::FloorToInt((Extent.X * 2) / TileSize);
 	GridHeightCount = FMath::FloorToInt((Extent.Y * 2) / TileSize);
@@ -57,8 +57,8 @@ void UGridManager::GenerateGrid(const ABattleVolume* BattleVolume, const UWorld*
 			FGridTile Tile;
 			Tile.GridCoord = FIntPoint(X, Y);
 
-			const float WorldX = Origin.X - Extent.X + (X + 0.5f) * TileSize;
-			const float WorldY = Origin.Y - Extent.Y + (Y + 0.5f) * TileSize;
+			const float WorldX = GetGridMinX() + (X + 0.5f) * TileSize;
+			const float WorldY = GetGridMinY() + (Y + 0.5f) * TileSize;
 
 			const FVector TraceStart(WorldX, WorldY, Origin.Z + GridHeight);
 			const FVector TraceEnd  (WorldX, WorldY, Origin.Z - GridHeight);
@@ -77,14 +77,15 @@ void UGridManager::GenerateGrid(const ABattleVolume* BattleVolume, const UWorld*
 
 			if (bHit)
 			{
-				Tile.WorldLocation = Hit.Location;
 				Tile.Height = Hit.Location.Z;
+				Tile.WorldLocation = FVector(WorldX, WorldY, Tile.Height);
 				Tile.bBlocked = false;
 				Tile.MoveCost = 1;
 			}
 			else
 			{
-				Tile.WorldLocation = FVector(WorldX, WorldY, Origin.Z);
+				Tile.Height = Origin.Z;
+				Tile.WorldLocation = FVector(WorldX, WorldY, Tile.Height);
 				Tile.bBlocked = true;
 			}
 
@@ -100,19 +101,23 @@ void UGridManager::GenerateGrid(const ABattleVolume* BattleVolume, const UWorld*
 		DrawDebugGrid(World, 10.f);
 	}
 	
-	InitializeOccupancy(BattleVolume);
+	InitializeOccupancy(EncounterVolume);
 }
 
-void UGridManager::InitializeOccupancy(const ABattleVolume* BattleVolume)
+void UGridManager::InitializeOccupancy(const AFloorEncounterVolume* EncounterVolume)
 {
-	if (!BattleVolume)
+	if (!EncounterVolume)
 		return;
 
 	UWorld* World = GetWorld();
 	if (!World)
 		return;
 
-	const FBox VolumeBounds = BattleVolume->GetComponentsBoundingBox();
+	// Use only the BattleBox bounds, not the full actor bounds (which would
+	// include TriggerBox and SkeletalMesh and produce a larger, incorrect area)
+	const FVector BoxOrigin = EncounterVolume->GetBattleBoxOrigin();
+	const FVector BoxExtent = EncounterVolume->GetBattleBoxExtent();
+	const FBox VolumeBounds(BoxOrigin - BoxExtent, BoxOrigin + BoxExtent);
 
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
@@ -157,6 +162,16 @@ void UGridManager::UpdateActorPosition(AActor* Actor, const FIntPoint& Coord)
 	}
 }
 
+float UGridManager::GetGridMinX() const
+{
+	return Origin.X - (GridWidth * TileSize * 0.5f);
+}
+
+float UGridManager::GetGridMinY() const
+{
+	return Origin.Y - (GridHeightCount * TileSize * 0.5f);
+}
+
 const FGridTile* UGridManager::GetTile(const FIntPoint& Coord) const
 {
 	if (!IsValidCoord(Coord))
@@ -169,12 +184,8 @@ const FGridTile* UGridManager::GetTile(const FIntPoint& Coord) const
 
 FIntPoint UGridManager::WorldToGrid(const FVector& WorldLocation) const
 {
-	// Convert world location into local space relative to grid origin
-	const float GridMinX = Origin.X - (GridWidth * TileSize * 0.5f);
-	const float GridMinY = Origin.Y - (GridHeightCount * TileSize * 0.5f);
-
-	const int32 X = FMath::FloorToInt((WorldLocation.X - GridMinX) / TileSize);
-	const int32 Y = FMath::FloorToInt((WorldLocation.Y - GridMinY) / TileSize);
+	const int32 X = FMath::FloorToInt((WorldLocation.X - GetGridMinX()) / TileSize);
+	const int32 Y = FMath::FloorToInt((WorldLocation.Y - GetGridMinY()) / TileSize);
 
 	return FIntPoint(X, Y);
 }
@@ -182,14 +193,15 @@ FIntPoint UGridManager::WorldToGrid(const FVector& WorldLocation) const
 FVector UGridManager::GridToWorld(const FIntPoint& Coord) const
 {
 	const FGridTile* Tile = GetTile(Coord);
-	if (!Tile)
+	if (Tile)
 	{
-		const float WorldX = Origin.X - (GridWidth * TileSize * 0.5f) + (Coord.X + 0.5f) * TileSize;
-		const float WorldY = Origin.Y - (GridHeightCount * TileSize * 0.5f) + (Coord.Y + 0.5f) * TileSize;
-		return FVector(WorldX, WorldY, Origin.Z);
+		return Tile->WorldLocation;
 	}
 
-	return Tile->WorldLocation;
+	const float WorldX = GetGridMinX() + (Coord.X + 0.5f) * TileSize;
+	const float WorldY = GetGridMinY() + (Coord.Y + 0.5f) * TileSize;
+
+	return FVector(WorldX, WorldY, Origin.Z);
 }
 
 bool UGridManager::IsValidCoord(const FIntPoint& Coord) const
@@ -435,6 +447,67 @@ void UGridManager::RemoveActorFromGrid(AActor* Actor)
 	}
 
 	OccupancyMap.Remove(Coord);
+}
+
+bool UGridManager::FindClosestValidTileToWorld(
+	const FVector& WorldLocation,
+	FIntPoint& OutCoord,
+	bool bRequireUnoccupied
+) const
+{
+	bool bFoundAny = false;
+	float BestDistSq = TNumericLimits<float>::Max();
+	FIntPoint BestCoord = FIntPoint::ZeroValue;
+
+	for (const TPair<FIntPoint, FGridTile>& Pair : GridTiles)
+	{
+		const FGridTile& Tile = Pair.Value;
+
+		if (Tile.bBlocked)
+		{
+			continue;
+		}
+
+		if (bRequireUnoccupied && GetActorAt(Tile.GridCoord))
+		{
+			continue;
+		}
+
+		const FVector TileCenter = GetTileCenterWorld(Tile.GridCoord);
+		const float DistSq = FVector::DistSquared2D(WorldLocation, TileCenter);
+
+		if (!bFoundAny || DistSq < BestDistSq)
+		{
+			bFoundAny = true;
+			BestDistSq = DistSq;
+			BestCoord = Tile.GridCoord;
+		}
+	}
+
+	if (!bFoundAny)
+	{
+		return false;
+	}
+
+	OutCoord = BestCoord;
+	return true;
+}
+
+FVector UGridManager::GetTileCenterWorld(const FIntPoint& Coord) const
+{
+	const FGridTile* Tile = GetTile(Coord);
+	if (!Tile)
+	{
+		return GridToWorld(Coord);
+	}
+
+	const float GridMinX = Origin.X - (GridWidth * TileSize * 0.5f);
+	const float GridMinY = Origin.Y - (GridHeightCount * TileSize * 0.5f);
+
+	const float WorldX = GridMinX + (Coord.X + 0.5f) * TileSize;
+	const float WorldY = GridMinY + (Coord.Y + 0.5f) * TileSize;
+
+	return FVector(WorldX, WorldY, Tile->WorldLocation.Z);
 }
 
 int32 UGridManager::Heuristic(const FIntPoint& A, const FIntPoint& B) const

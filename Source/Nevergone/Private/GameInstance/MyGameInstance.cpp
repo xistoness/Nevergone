@@ -3,15 +3,13 @@
 
 #include "GameInstance/MyGameInstance.h"
 #include "GameInstance/GameContextManager.h"
-
 #include "GameInstance/MySaveGame.h"
+#include "Data/SaveSlotInfo.h"
 #include "Level/LevelPortal.h"
 
 #include "Blueprint/UserWidget.h"
 #include "EngineUtils.h"
-#include "Camera/CameraComponent.h"
 #include "Engine/World.h"
-#include "GameFramework/SpringArmComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Widgets/LoadingScreenWidget.h"
 #include "World/WorldManagerSubsystem.h"
@@ -44,6 +42,100 @@ void UMyGameInstance::Shutdown()
 	CommitSave();
 	
 	Super::Shutdown();
+}
+
+bool UMyGameInstance::HasSaveGame() const
+{
+	for (int32 i = 0; i < MaxSaveSlots; ++i)
+	{
+		if (UGameplayStatics::DoesSaveGameExist(GetSlotNameForIndex(i), 0))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+ 
+void UMyGameInstance::RequestNewGame()
+{
+	int32 TargetSlot = FindNextAvailableSlot();
+
+	ActiveSlotName = GetSlotNameForIndex(TargetSlot);
+	CreateNewSave(ActiveSlotName);
+
+	UE_LOG(LogTemp, Log, TEXT("[MyGameInstance] RequestNewGame: new save in slot %d ('%s')"),
+		TargetSlot, *ActiveSlotName);
+}
+
+int32 UMyGameInstance::FindNextAvailableSlot() const
+{
+	// First pass: find an empty slot
+	for (int32 i = 0; i < MaxSaveSlots; ++i)
+	{
+		if (!UGameplayStatics::DoesSaveGameExist(GetSlotNameForIndex(i), 0))
+		{
+			return i;
+		}
+	}
+
+	// No empty slot — find the oldest save to overwrite
+	int32 OldestSlot = 0;
+	FDateTime OldestTime = FDateTime::MaxValue();
+
+	for (int32 i = 0; i < MaxSaveSlots; ++i)
+	{
+		UMySaveGame* SlotSave = Cast<UMySaveGame>(
+			UGameplayStatics::LoadGameFromSlot(GetSlotNameForIndex(i), 0)
+		);
+
+		if (SlotSave && SlotSave->LastSavedAt < OldestTime)
+		{
+			OldestTime = SlotSave->LastSavedAt;
+			OldestSlot = i;
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[MyGameInstance] FindNextAvailableSlot: no empty slot, overwriting oldest (slot %d)"),
+		OldestSlot);
+
+	return OldestSlot;
+}
+
+void UMyGameInstance::RequestContinue()
+{
+	// Find the most recently saved slot
+	int32 MostRecentSlot = -1;
+	FDateTime MostRecentTime = FDateTime::MinValue();
+
+	for (int32 i = 0; i < MaxSaveSlots; ++i)
+	{
+		const FString SlotName = GetSlotNameForIndex(i);
+		if (!UGameplayStatics::DoesSaveGameExist(SlotName, 0))
+		{
+			continue;
+		}
+
+		UMySaveGame* SlotSave = Cast<UMySaveGame>(
+			UGameplayStatics::LoadGameFromSlot(SlotName, 0)
+		);
+
+		if (SlotSave && SlotSave->LastSavedAt > MostRecentTime)
+		{
+			MostRecentTime = SlotSave->LastSavedAt;
+			MostRecentSlot = i;
+		}
+	}
+
+	if (MostRecentSlot == -1)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[MyGameInstance] RequestContinue: no valid save found"));
+		return;
+	}
+
+	LoadSlotByIndex(MostRecentSlot);
+
+	UE_LOG(LogTemp, Log, TEXT("[MyGameInstance] RequestContinue: loaded most recent save (slot %d)"),
+		MostRecentSlot);
 }
 
 void UMyGameInstance::RequestSaveGame()
@@ -84,6 +176,161 @@ void UMyGameInstance::RequestLoadGame()
 	OnSaveLoaded.Broadcast();
 }
 
+FSaveSlotInfo UMyGameInstance::GetMostRecentSaveInfo() const
+{
+	FSaveSlotInfo BestInfo;
+    FDateTime MostRecentTime = FDateTime::MinValue();
+
+    for (int32 i = 0; i < MaxSaveSlots; ++i)
+    {
+        const FString SlotName = GetSlotNameForIndex(i);
+        if (!UGameplayStatics::DoesSaveGameExist(SlotName, 0)) continue;
+
+        UMySaveGame* SlotSave = Cast<UMySaveGame>(
+            UGameplayStatics::LoadGameFromSlot(SlotName, 0)
+        );
+
+        if (SlotSave && SlotSave->LastSavedAt > MostRecentTime)
+        {
+            MostRecentTime          = SlotSave->LastSavedAt;
+            BestInfo.bIsOccupied    = true;
+            BestInfo.SlotIndex      = i;
+            BestInfo.SlotName       = SlotName;
+            BestInfo.DisplayName    = SlotSave->SaveDisplayName.IsEmpty()
+                ? FString::Printf(TEXT("Save %d"), i + 1)
+                : SlotSave->SaveDisplayName;
+
+            const int32 TotalMinutes = FMath::FloorToInt(SlotSave->PlaytimeSeconds / 60.f);
+            BestInfo.PlaytimeFormatted = FString::Printf(TEXT("%dh %dm"),
+                TotalMinutes / 60, TotalMinutes % 60);
+
+            const FTimespan Delta   = FDateTime::UtcNow() - SlotSave->LastSavedAt;
+            const int32 MinutesAgo  = FMath::FloorToInt(Delta.GetTotalMinutes());
+            const int32 HoursAgo    = FMath::FloorToInt(Delta.GetTotalHours());
+            const int32 DaysAgo     = FMath::FloorToInt(Delta.GetTotalDays());
+
+            if (MinutesAgo < 1)
+                BestInfo.LastSavedFormatted = TEXT("Just now");
+            else if (MinutesAgo < 60)
+                BestInfo.LastSavedFormatted = FString::Printf(TEXT("%d min ago"), MinutesAgo);
+            else if (HoursAgo < 24)
+                BestInfo.LastSavedFormatted = FString::Printf(TEXT("%dh ago"), HoursAgo);
+            else
+                BestInfo.LastSavedFormatted = FString::Printf(TEXT("%d day%s ago"),
+                    DaysAgo, DaysAgo == 1 ? TEXT("") : TEXT("s"));
+
+            BestInfo.SavedLevelName = SlotSave->SavedLevelName;
+        }
+    }
+
+    return BestInfo;
+}
+
+FString UMyGameInstance::GetSlotNameForIndex(int32 SlotIndex) const
+{
+    return FString::Printf(TEXT("Slot_%d"), SlotIndex);
+}
+ 
+TArray<FSaveSlotInfo> UMyGameInstance::GetAllSaveSlots() const
+{
+    TArray<FSaveSlotInfo> Result;
+ 
+    for (int32 i = 0; i < MaxSaveSlots; ++i)
+    {
+        FSaveSlotInfo Info;
+        Info.SlotIndex = i;
+        Info.SlotName  = GetSlotNameForIndex(i);
+ 
+        const bool bExists = UGameplayStatics::DoesSaveGameExist(Info.SlotName, 0);
+        Info.bIsOccupied   = bExists;
+ 
+        if (bExists)
+        {
+            // Load only to read metadata — do not apply to the world
+            UMySaveGame* SlotSave = Cast<UMySaveGame>(
+                UGameplayStatics::LoadGameFromSlot(Info.SlotName, 0)
+            );
+ 
+            if (SlotSave)
+            {
+                Info.DisplayName    = SlotSave->SaveDisplayName.IsEmpty()
+                    ? FString::Printf(TEXT("Save %d"), i + 1)
+                    : SlotSave->SaveDisplayName;
+ 
+                Info.SavedLevelName = SlotSave->SavedLevelName;
+ 
+                // Format playtime as "Xh Ym"
+                const int32 TotalMinutes = FMath::FloorToInt(SlotSave->PlaytimeSeconds / 60.f);
+                const int32 Hours        = TotalMinutes / 60;
+                const int32 Minutes      = TotalMinutes % 60;
+                Info.PlaytimeFormatted   = FString::Printf(TEXT("%dh %dm"), Hours, Minutes);
+ 
+                // Format last saved as relative time
+                const FTimespan Delta    = FDateTime::UtcNow() - SlotSave->LastSavedAt;
+                const int32 DaysAgo      = FMath::FloorToInt(Delta.GetTotalDays());
+                const int32 HoursAgo     = FMath::FloorToInt(Delta.GetTotalHours());
+                const int32 MinutesAgo   = FMath::FloorToInt(Delta.GetTotalMinutes());
+ 
+                if (MinutesAgo < 1)
+                    Info.LastSavedFormatted = TEXT("Just now");
+                else if (MinutesAgo < 60)
+                    Info.LastSavedFormatted = FString::Printf(TEXT("%d min ago"), MinutesAgo);
+                else if (HoursAgo < 24)
+                    Info.LastSavedFormatted = FString::Printf(TEXT("%d hour%s ago"), HoursAgo, HoursAgo == 1 ? TEXT("") : TEXT("s"));
+                else
+                    Info.LastSavedFormatted = FString::Printf(TEXT("%d day%s ago"), DaysAgo, DaysAgo == 1 ? TEXT("") : TEXT("s"));
+            }
+        }
+ 
+        Result.Add(Info);
+    }
+ 
+    return Result;
+}
+ 
+bool UMyGameInstance::LoadSlotByIndex(int32 SlotIndex)
+{
+    const FString SlotName = GetSlotNameForIndex(SlotIndex);
+ 
+    if (!UGameplayStatics::DoesSaveGameExist(SlotName, 0))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[MyGameInstance] LoadSlotByIndex: slot %d is empty"), SlotIndex);
+        return false;
+    }
+ 
+    if (!LoadSaveSlot(SlotName))
+    {
+        UE_LOG(LogTemp, Error, TEXT("[MyGameInstance] LoadSlotByIndex: failed to load slot %d"), SlotIndex);
+        return false;
+    }
+ 
+    UE_LOG(LogTemp, Log, TEXT("[MyGameInstance] LoadSlotByIndex: loaded slot %d ('%s')"), SlotIndex, *SlotName);
+    return true;
+}
+ 
+void UMyGameInstance::DeleteSlotByIndex(int32 SlotIndex)
+{
+    const FString SlotName = GetSlotNameForIndex(SlotIndex);
+    UGameplayStatics::DeleteGameInSlot(SlotName, 0);
+    UE_LOG(LogTemp, Log, TEXT("[MyGameInstance] DeleteSlotByIndex: deleted slot %d ('%s')"), SlotIndex, *SlotName);
+}
+ 
+void UMyGameInstance::UpdateSaveMetadata(const FString& DisplayName, FName CurrentLevelName)
+{
+    if (!ActiveSave) return;
+ 
+    ActiveSave->SaveDisplayName = DisplayName;
+    ActiveSave->SavedLevelName  = CurrentLevelName;
+    ActiveSave->LastSavedAt     = FDateTime::UtcNow();
+}
+
+FName UMyGameInstance::GetActiveSavedLevelName() const
+{
+	if (!ActiveSave) return NAME_None;
+	return ActiveSave->SavedLevelName;
+}
+
+
 void UMyGameInstance::ApplyActiveSaveToWorld()
 {
 	// No disk I/O. Just re-apply the already loaded save.
@@ -121,6 +368,10 @@ bool UMyGameInstance::CreateNewSave(const FString& SlotName)
 
 	// Initial state
 	ActiveSave->SaveSlotName = SlotName;
+	ActiveSave->LastSavedAt   = FDateTime::UtcNow();  // ← adicione esta linha
+	ActiveSave->PlaytimeSeconds = 0.f;
+	ActiveSave->SaveDisplayName = TEXT("New Game");
+	
 	PartyData = FPartyData();
 	ProgressionData = FProgressionData();
 	GlobalFlags.Empty();
@@ -188,26 +439,18 @@ void UMyGameInstance::BeginLevelTransition()
 
 void UMyGameInstance::HandlePostLoadMapWithWorld(UWorld* LoadedWorld)
 {
-	if (!LoadedWorld)
-	{
-		return;
-	}
+	if (!LoadedWorld) return;
 
-	// If we are transitioning, finish the transition pipeline.
 	if (TransitionState == ELevelTransitionState::Transitioning)
 	{
 		EndLevelTransition(LoadedWorld);
 		return;
 	}
 
-	// Otherwise, this is likely the initial map load. Restore once.
+	// Initial load: ApplyPersistentStateToWorld only.
+	// RestoreWorldState is handled by WorldManagerSubsystem::HandleWorldInitializedActors.
 	if (!bDidInitialWorldRestore)
 	{
-		if (UWorldManagerSubsystem* WorldMgr = LoadedWorld->GetSubsystem<UWorldManagerSubsystem>())
-		{
-			WorldMgr->RestoreWorldState();
-		}
-
 		ApplyPersistentStateToWorld(LoadedWorld);
 		bDidInitialWorldRestore = true;
 	}
@@ -233,20 +476,18 @@ void UMyGameInstance::EndLevelTransition(UWorld* LoadedWorld)
 		}
 	}
 
-	// 2) If this travel had an entry point tag, override the player position
-	// Defer entry placement to next tick to let pawn/camera initialize properly
+	// RestoreWorldState is now handled by WorldManagerSubsystem::HandleWorldInitializedActors,
+	// which is guaranteed to run after GameInstance is set on the subsystem.
+
 	FTimerHandle Tmp;
 	LoadedWorld->GetTimerManager().SetTimerForNextTick([this, LoadedWorld]()
 	{
 		ApplyPendingEntryPoint(LoadedWorld);
 	});
 
-	// 3) Apply global state (party UI, flags, etc.)
 	ApplyPersistentStateToWorld(LoadedWorld);
-
 	HideLoadingScreen();
 	SetInputLocked(false);
-
 	TransitionState = ELevelTransitionState::Idle;
 }
 
@@ -299,28 +540,51 @@ void UMyGameInstance::SetInputLocked(bool bLocked)
 	PC->SetIgnoreMoveInput(bLocked);
 	PC->SetIgnoreLookInput(bLocked);
 
-	// Optional: also hide mouse, depends on your UX
+	// Optional: also hide mouse, depends on UX
 	// PC->bShowMouseCursor = !bLocked;
 }
 
 void UMyGameInstance::AutoSaveBeforeTravel()
 {
-	// If your design says "always autosave before changing levels", do it here.
-	// Keep it minimal: broadcast + commit + SaveGameToSlot.
-	// Do not call OpenLevel until after you commit to ActiveSave.
-
-	OnSaveRequested.Broadcast();
-	CommitSave();
-
 	if (!ActiveSave)
 	{
+		UE_LOG(LogTemp, Error, TEXT("[MyGameInstance] AutoSaveBeforeTravel: no ActiveSave — skipping"));
 		return;
 	}
+	
+	// Update timestamp before every save
+	ActiveSave->LastSavedAt = FDateTime::UtcNow();
 
-	const bool bSuccess = UGameplayStatics::SaveGameToSlot(ActiveSave, ActiveSave->SaveSlotName, 0);
-	if (!bSuccess)
+	// Call the subsystem directly instead of broadcasting — the broadcast can
+	// hit stale subsystems from other worlds when multiple worlds are active
+	UWorld* World = GetWorld();
+	UE_LOG(LogTemp, Warning, TEXT("[AutoSave] World: %s"), *GetNameSafe(World));
+	if (UWorldManagerSubsystem* WorldMgr = World->GetSubsystem<UWorldManagerSubsystem>())
 	{
-		UE_LOG(LogTemp, Error, TEXT("AutoSaveBeforeTravel: SaveGameToSlot failed"));
+		UE_LOG(LogTemp, Warning, TEXT("[AutoSave] Got subsystem, calling CollectWorldSaveData"));
+		WorldMgr->CollectWorldSaveData();
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[AutoSave] No WorldManagerSubsystem found!"));
+	}
+
+	CommitSave();
+
+	const bool bSuccess = UGameplayStatics::SaveGameToSlot(
+		ActiveSave,
+		ActiveSave->SaveSlotName,
+		0
+	);
+
+	if (bSuccess)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[MyGameInstance] AutoSaveBeforeTravel: saved to slot '%s'"),
+			*ActiveSave->SaveSlotName);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("[MyGameInstance] AutoSaveBeforeTravel: SaveGameToSlot failed"));
 	}
 }
 
@@ -402,22 +666,6 @@ void UMyGameInstance::ApplyPersistentStateToWorld(UWorld* World) const
 	OnPartyChanged.Broadcast(PartyData);
 }
 
-void UMyGameInstance::AddOrUpdateSavedActor(const FActorSaveData& ActorData) const
-{
-	if (!ActiveSave || !ActorData.ActorGuid.IsValid())
-		return;
-
-	for (FActorSaveData& Existing : ActiveSave->SavedActors)
-	{
-		if (Existing.ActorGuid == ActorData.ActorGuid)
-		{
-			Existing = ActorData;
-			return;
-		}
-	}
-
-	ActiveSave->SavedActors.Add(ActorData);
-}
 
 // Setter Functions
 
@@ -442,12 +690,10 @@ void UMyGameInstance::SetGlobalFlag(FName Flag, bool bValue)
 	GlobalFlags.Add(Flag, bValue);
 }
 
-void UMyGameInstance::SetSavedActors(const TArray<FActorSaveData>& NewActors) const
+void UMyGameInstance::SetSavedActorsForLevel(FName LevelName, const TArray<FActorSaveData>& Actors) const
 {
-	if (!ActiveSave)
-		return;
-
-	ActiveSave->SavedActors = NewActors;
+	if (!ActiveSave) return;
+	ActiveSave->SavedActorsByLevel.FindOrAdd(LevelName).Actors = Actors;
 }
 
 // Getter Functions
@@ -477,11 +723,14 @@ bool UMyGameInstance::GetGlobalFlag(FName Flag) const
 	return false;
 }
 
-const TArray<FActorSaveData>& UMyGameInstance::GetSavedActors() const
+const TArray<FActorSaveData>& UMyGameInstance::GetSavedActorsForLevel(FName LevelName) const
 {
 	static TArray<FActorSaveData> Empty;
-	return ActiveSave ? ActiveSave->SavedActors : Empty;
+	if (!ActiveSave) return Empty;
+	const FLevelSaveData* Found = ActiveSave->SavedActorsByLevel.Find(LevelName);
+	return Found ? Found->Actors : Empty;
 }
+
 
 // Debug Helpers
 

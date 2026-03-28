@@ -29,7 +29,22 @@ public:
 	UPROPERTY(SaveGame)
 	TMap<FName, bool> GlobalFlags;
 	
-	UPROPERTY(SaveGame)
-	TArray<FActorSaveData> SavedActors;
+	UPROPERTY()
+	TMap<FName, FLevelSaveData> SavedActorsByLevel;
 	
+	// Display name shown in the Load Game list (e.g. "Floor 3 — Encounter 2")
+	UPROPERTY(SaveGame)
+	FString SaveDisplayName;
+ 
+	// Total playtime in seconds — increment this in your game loop
+	UPROPERTY(SaveGame)
+	float PlaytimeSeconds = 0.f;
+ 
+	// UTC timestamp of when this save was last written
+	UPROPERTY(SaveGame)
+	FDateTime LastSavedAt;
+ 
+	// Which level the player was on when this was saved
+	UPROPERTY(SaveGame)
+	FName SavedLevelName = NAME_None;	
 };

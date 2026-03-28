@@ -15,11 +15,12 @@ class UAbilityPreviewRenderer;
 class UActionResolver;
 class UBattleGameplayAbility;
 class UBattleMovementAbility;
+class UCombatEventBus;
 class UGameplayAbility;
 class ACharacterBase;
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnActionUseStarted);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnActionUseFinished);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnActionUseStarted, ACharacterBase*, ActingUnit);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnActionUseFinished, ACharacterBase*, ActingUnit);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnActionPointsDepleted, ACharacterBase*, Character);
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
@@ -53,7 +54,8 @@ public:
 	void RenderVisualPreview();
 	void PreviewCurrentAbility(FActionResult& PreviewResult);
 
-	void ExecuteCurrentAction(const FActionContext& Context, const FActionResult& Result);
+	bool ExecuteCurrentAction(const FActionContext& Context, const FActionResult& Result);
+	bool ExecuteActionFromAI(const FActionContext& InContext);
 
 	void HandleActionStarted();
 	void HandleActionFinished();
@@ -63,6 +65,14 @@ public:
 
 	const FActionContext& GetCurrentContext() const { return CurrentContext; }
 
+	/**
+	 * Injected by CombatManager at battle start.
+	 * Abilities retrieve the bus through this component so they stay
+	 * decoupled from both CombatManager and GameInstance.
+	 */
+	void SetCombatEventBus(UCombatEventBus* InBus);
+	UCombatEventBus* GetCombatEventBus() const { return CombatEventBus; }
+
 	TSubclassOf<UBattleMovementAbility> GetEquippedMovementAbilityClass() const;
 	const TArray<FUnitAbilityEntry>& GetGrantedBattleAbilities() const { return GrantedBattleAbilities; }
 
@@ -70,8 +80,12 @@ public:
 	bool SelectAbilityByActionId(FName ActionId);
 	bool SelectDefaultAbility();
 
+	UPROPERTY(BlueprintAssignable)
 	FOnActionUseStarted OnActionUseStarted;
+
+	UPROPERTY(BlueprintAssignable)
 	FOnActionUseFinished OnActionUseFinished;
+	
 	FOnActionPointsDepleted OnActionPointsDepleted;
 
 protected:
@@ -81,6 +95,11 @@ protected:
 	void EnsureAbilityGranted(TSubclassOf<UGameplayAbility> AbilityClass);
 
 	void SetSelectedAbilityFromEntry(const FUnitAbilityEntry& Entry);
+	EBattleAbilitySelectionMode GetCurrentAbilitySelectionMode() const;
+	
+	bool TryLockCurrentTarget();
+	void ClearLockedTarget();
+	bool IsCurrentAbilityInApproachSelection() const;
 
 protected:
 	UPROPERTY()
@@ -97,4 +116,11 @@ protected:
 
 	UPROPERTY()
 	int32 SelectedAbilityIndex = INDEX_NONE;
+	
+	UPROPERTY()
+	bool bActionInProgress = false;
+
+	// Injected by CombatManager; used by abilities to route damage/heal/status
+	UPROPERTY()
+	TObjectPtr<UCombatEventBus> CombatEventBus;
 };

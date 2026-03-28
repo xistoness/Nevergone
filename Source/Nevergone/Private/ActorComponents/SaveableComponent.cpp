@@ -14,6 +14,16 @@ USaveableComponent::USaveableComponent()
 void USaveableComponent::OnRegister()
 {
 	Super::OnRegister();
+
+	// Generates a GUID the first time this component is registered
+	// (i.e. when the actor is first placed in the level or spawned at runtime).
+	//
+	// For PLACED actors: the generated value is serialized into the level
+	// .uasset because SaveGuid is EditAnywhere. Every subsequent load finds
+	// a valid GUID here and GetOrCreateGuid() becomes a no-op.
+	//
+	// For SPAWNED actors: a new GUID is generated each session, which is
+	// correct — spawned actors are not persistent across level loads.
 	GetOrCreateGuid();
 }
 
@@ -126,4 +136,3 @@ void USaveableComponent::OnPostRestore()
 		}
 	}
 }
-

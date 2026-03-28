@@ -24,7 +24,7 @@ public class Nevergone : ModuleRules
 			"Slate"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { });
+		PrivateDependencyModuleNames.AddRange(new string[] { "AITestSuite" });
 
 		PublicIncludePaths.AddRange(new string[] {
 			"Nevergone",

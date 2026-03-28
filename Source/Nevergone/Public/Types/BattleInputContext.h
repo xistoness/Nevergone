@@ -104,6 +104,12 @@ struct FBattleInputContext
 			&& TurnPhase == EBattleTurnPhase::AwaitingOrders
 			&& bUnitInputEnabled;
 	}
+	
+	bool CanAcceptCameraInput() const
+	{
+		return IsPlayerTurn()
+			&& bCameraInputEnabled;
+	}
 
 	bool IsUIFocused() const
 	{

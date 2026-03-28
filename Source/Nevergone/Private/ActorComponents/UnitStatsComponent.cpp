@@ -1,9 +1,7 @@
 // Copyright Xyzto Works
 
-
 #include "ActorComponents/UnitStatsComponent.h"
 
-#include "Chaos/Deformable/Utilities.h"
 #include "Characters/CharacterBase.h"
 #include "Data/ActorSaveData.h"
 #include "Data/UnitDefinition.h"
@@ -35,14 +33,10 @@ void UUnitStatsComponent::TickComponent(
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	if (!IsAlive()) return;
-
-	// Example: passive regen
-	if (PersistentHP < GetMaxHP())
-	{
-		const float RegenRate = 1.f; // later from definition / buffs
-		SetCurrentHP(PersistentHP + RegenRate * DeltaTime);
-	}
+	// Passive regen and other time-based combat effects should be driven
+	// by the CombatManager or a dedicated StatusEffectComponent so that
+	// they can properly go through the CombatEventBus (floating text,
+	// BattleState sync, death checks). Do not add HP mutations here.
 }
 
 void UUnitStatsComponent::WriteSaveData_Implementation(FActorSaveData& OutData) const
@@ -152,8 +146,10 @@ void UUnitStatsComponent::SetCurrentHP(float NewHP)
 
 	PersistentHP = FMath::Clamp(NewHP, 0.f, GetMaxHP());
 
+	// Fire death delegate so CombatManager can react (grid removal,
+	// win/lose check). All other consumers (floating text, BattleState)
+	// are notified by UCombatEventBus before this setter is called.
 	const bool bIsAliveNow = IsAlive();
-
 	if (bWasAlive && !bIsAliveNow)
 	{
 		if (ACharacterBase* OwnerCharacter = Cast<ACharacterBase>(GetOwner()))
@@ -173,4 +169,3 @@ bool UUnitStatsComponent::IsAlive() const
 {
 	return PersistentHP > 0.f;
 }
-
