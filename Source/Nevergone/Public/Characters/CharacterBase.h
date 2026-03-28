@@ -17,6 +17,8 @@ class UExplorationModeComponent;
 class UBattleModeComponent;
 class UUnitStatsComponent;
 class UMyAbilitySystemComponent;
+class UFloatingCombatTextWidget;
+enum class EFloatingTextType : uint8;
 
 UCLASS()
 class NEVERGONE_API ACharacterBase : public ANevergoneCharacter, public ISaveParticipant
@@ -51,14 +53,31 @@ public:
 	
 	UMyAbilitySystemComponent* GetAbilitySystemComponent();
 	
+	bool IsInExplorationMode();
+	bool IsInBattleMode();
+	
 	// Setters
 	
-	void MoveToLocation(const FVector& InLocation, const TArray<FVector>& WorldPoints);	
+	void MoveToLocation(const FVector& InLocation, const TArray<FVector>& WorldPoints);
+
+	/**
+	 * Spawns a floating text in world space above this character.
+	 *
+	 * @param Text    Text to display (e.g., "42", "STUN", "MISS")
+	 * @param Type    Semantic type — controls color and icon in the Blueprint
+	 * @param Icon    Optional icon; nullptr = no icon
+	 */
+	void SpawnFloatingText(const FString& Text, EFloatingTextType Type, UTexture2D* Icon = nullptr);
 
 protected:
 
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
+	virtual void BeginDestroy() override;
+	virtual void Destroyed() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void UnPossessed() override;
+	
 	void SetMode(UCharacterModeComponent* NewMode);
 	
 	// Path movement
@@ -89,6 +108,9 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Selection")
 	UDecalComponent* SelectionIndicator;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Widgets")
+	TSubclassOf<UFloatingCombatTextWidget> FloatingTextClass;
 
 private:	
 	// --- Lerp movement state ---

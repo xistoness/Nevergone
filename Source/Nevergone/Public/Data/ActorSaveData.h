@@ -48,3 +48,12 @@ public:
 		return ActorGuid.IsValid();
 	}
 };
+
+USTRUCT()
+struct FLevelSaveData
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	TArray<FActorSaveData> Actors;
+};

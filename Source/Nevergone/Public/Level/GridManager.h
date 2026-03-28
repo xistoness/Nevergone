@@ -8,7 +8,7 @@
 #include "GridManager.generated.h"
 
 struct FGridTraversalParams;
-class ABattleVolume;
+class AFloorEncounterVolume;
 
 UCLASS()
 class NEVERGONE_API UGridManager : public UWorldSubsystem
@@ -16,13 +16,16 @@ class NEVERGONE_API UGridManager : public UWorldSubsystem
 	GENERATED_BODY()
 
 public:
-	void GenerateGrid(const ABattleVolume* BattleVolume, const UWorld* World);
+	/** Generates the tactical grid from the encounter volume's BattleBox. */
+	void GenerateGrid(const AFloorEncounterVolume* EncounterVolume, const UWorld* World);
 	
-	void InitializeOccupancy(const ABattleVolume* BattleVolume);
+	void InitializeOccupancy(const AFloorEncounterVolume* EncounterVolume);
 	
 	void RegisterActorToGrid(AActor* Actor);
 	
 	void UpdateActorPosition(AActor* Actor, const FIntPoint& Coord);
+	float GetGridMinX() const;
+	float GetGridMinY() const;
 
 	const FGridTile* GetTile(const FIntPoint& Coord) const;
 
@@ -47,6 +50,10 @@ public:
 	void DrawDebugGrid(const UWorld* World, float Duration = 0.f) const;
 	
 	void RemoveActorFromGrid(AActor* Actor);
+	
+	bool FindClosestValidTileToWorld(const FVector& WorldLocation, FIntPoint& OutCoord, bool bRequireUnoccupied = true) const;
+
+	FVector GetTileCenterWorld(const FIntPoint& Coord) const;
 
 private:
 	

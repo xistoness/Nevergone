@@ -6,9 +6,7 @@
 #include "ActorComponents/UnitStatsComponent.h"
 #include "Characters/CharacterBase.h"
 #include "GameMode/BattlePreparationContext.h"
-
-static const FGameplayTag Tag_Incapacitated =
-	FGameplayTag::RequestGameplayTag(TEXT("Status.Incapacitated"));
+#include "Nevergone.h"
 
 void UBattleState::Initialize(UBattlePreparationContext& BattlePrepContext)
 {
@@ -113,7 +111,7 @@ bool UBattleState::CanUnitAct(ACharacterBase* Unit) const
 
 	const bool bIsAlive = State->IsAlive();
 	const bool bHasActed = State->bHasActedThisTurn;
-	const bool bIsIncapacitated = State->StatusTags.HasTagExact(Tag_Incapacitated);
+	const bool bIsIncapacitated = State->StatusTags.HasTagExact(TAG_Status_Incapacitated);
 	const bool bHasActionPoints = 0 < Unit->GetUnitStats()->GetCurrentActionPoints();
 
 	const bool bCanAct = bIsAlive && !bHasActed && !bIsIncapacitated && bHasActionPoints;
@@ -178,7 +176,8 @@ void UBattleState::ResetTurnStateForTeam(EBattleUnitTeam Team)
 			continue;
 		}
 
-		State.ActionPoints = 2; // vindo de stats no futuro
+		// TODO: pull action point count from UnitStatsComponent at turn start
+		State.ActionPoints = 2;
 		State.bHasMovedThisTurn = false;
 	}
 }
@@ -198,6 +197,17 @@ void UBattleState::ApplyDamage(ACharacterBase* Unit, float Amount)
 		State->bIsDead = true;
 		State->StatusTags.Reset();
 	}
+}
+
+void UBattleState::ApplyHeal(ACharacterBase* Unit, float Amount)
+{
+	FBattleUnitState* State = FindUnitState(Unit);
+	if (!State || State->bIsDead)
+	{
+		return;
+	}
+
+	State->CurrentHP = FMath::Min(State->CurrentHP + Amount, State->MaxHP);
 }
 
 void UBattleState::ApplyStatusTag(ACharacterBase* Unit, const FGameplayTag& StatusTag)

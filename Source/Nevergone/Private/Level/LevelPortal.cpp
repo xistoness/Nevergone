@@ -2,6 +2,7 @@
 
 #include "Level/LevelPortal.h"
 
+#include "Characters/CharacterBase.h"
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/ArrowComponent.h"
@@ -51,8 +52,13 @@ void ALevelPortal::OnOverlapBegin(
 	const FHitResult& SweepResult
 )
 {
-	APawn* Pawn = Cast<APawn>(OtherActor);
-	if (!Pawn)
+	ACharacterBase* Character = Cast<ACharacterBase>(OtherActor);
+	if (!Character)
+	{
+		return;
+	}
+	
+	if (!Character->IsInExplorationMode())
 	{
 		return;
 	}

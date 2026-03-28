@@ -224,6 +224,11 @@ bool UBattleInputManager::CanAcceptInput() const
 	return InputContext.CanAcceptOrders();
 }
 
+bool UBattleInputManager::CanCameraAcceptInput() const
+{
+	return InputContext.CanAcceptCameraInput();
+}
+
 void UBattleInputManager::RouteCameraMove(const FVector2D& Input)
 {
 	if (BattleCameraPawn)

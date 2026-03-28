@@ -24,6 +24,8 @@ class ANevergoneCharacter : public ACharacter
 {
 	GENERATED_BODY()
 
+
+	
 	/** Camera boom positioning the camera behind the character */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	USpringArmComponent* CameraBoom;
@@ -74,6 +76,8 @@ protected:
 	UInputMappingContext* DefaultMappingContext;
 
 public:
+	
+	void ApplyCharacterInputMapping();
 
 	/** Handles move inputs from either controls or UI interfaces */
 	UFUNCTION(BlueprintCallable, Category="Input")

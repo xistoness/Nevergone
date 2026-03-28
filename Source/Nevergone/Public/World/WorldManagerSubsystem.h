@@ -22,6 +22,8 @@ public:
 	void HandleWorldInitializedActors(const FActorsInitializedParams& Params);
 	virtual void Deinitialize() override;
 	
+	void CollectWorldSaveData();
+	
 	// Single public entry point used after level load
 	UFUNCTION(BlueprintCallable, Category="Save")
 	void RestoreWorldState();
@@ -33,7 +35,6 @@ private:
 	void HandlePartyRestored(const struct FPartyData& PartyData);
 
 	// Core responsibilities
-	void CollectWorldSaveData();
 	void RestoreSaveableActors();
 	void SpawnMissingActors();
 	void ResolveActorConflicts();
