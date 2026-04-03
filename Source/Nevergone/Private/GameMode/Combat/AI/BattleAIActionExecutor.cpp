@@ -6,6 +6,7 @@
 #include "Level/GridManager.h"
 #include "ActorComponents/UnitStatsComponent.h"
 #include "Characters/CharacterBase.h"
+#include "GameMode/Combat/BattleState.h"
 
 void UBattleAIActionExecutor::Initialize()
 {
@@ -41,6 +42,7 @@ bool UBattleAIActionExecutor::ExecuteAction(const FTeamCandidateAction& Action)
 	FActionContext Context;
 	Context.SourceActor = ActiveUnit;
 	Context.AbilityClass = Action.AbilityClass;
+	Context.AbilityDefinition = Action.AbilityDefinition;
 	Context.SourceWorldPosition = ActiveUnit->GetActorLocation();
 	Context.SelectionPhase = EBattleActionSelectionPhase::SelectingTarget;
 
@@ -56,10 +58,20 @@ bool UBattleAIActionExecutor::ExecuteAction(const FTeamCandidateAction& Action)
 				Context.HoveredWorldPosition = Grid->GridToWorld(Action.Targeting.TargetTile);
 				Context.MovementTargetWorldPosition = Context.HoveredWorldPosition;
 				Context.TargetActor = Grid->GetActorAt(Action.Targeting.TargetTile);
-				if (const UUnitStatsComponent* Stats = ActiveUnit->GetUnitStats())
+
+				UBattleState* BattleStateLocal   = BattleMode ? BattleMode->GetBattleState() : nullptr;
+				const FBattleUnitState* UnitState = BattleStateLocal
+					? BattleStateLocal->FindUnitState(ActiveUnit)
+					: nullptr;
+
+				if (UnitState)
 				{
-					Context.TraversalParams = Stats->GetTraversalParams();
-					Context.CachedPathCost = Grid->CalculatePathCost(Context.SourceGridCoord, Context.HoveredGridCoord, Context.TraversalParams);
+					Context.TraversalParams  = UnitState->TraversalParams;
+					Context.CachedPathCost   = Grid->CalculatePathCost(
+						Context.SourceGridCoord,
+						Context.HoveredGridCoord,   // or SelectedApproachGridCoord where applicable
+						Context.TraversalParams
+					);
 				}
 			}
 		}
@@ -89,15 +101,21 @@ bool UBattleAIActionExecutor::ExecuteAction(const FTeamCandidateAction& Action)
 					Context.bHasSelectedApproachTile = true;
 					Context.HoveredGridCoord = Action.Targeting.TargetTile;
 					Context.HoveredWorldPosition = Grid->GridToWorld(Action.Targeting.TargetTile);
-					if (const UUnitStatsComponent* Stats = ActiveUnit->GetUnitStats())
+
+					UBattleState* BattleStateLocal   = BattleMode ? BattleMode->GetBattleState() : nullptr;
+					const FBattleUnitState* UnitState = BattleStateLocal
+						? BattleStateLocal->FindUnitState(ActiveUnit)
+						: nullptr;
+
+					if (UnitState)
 					{
-						Context.TraversalParams = Stats->GetTraversalParams();
-						Context.CachedPathCost = Grid->CalculatePathCost(Context.SourceGridCoord, Context.SelectedApproachGridCoord, Context.TraversalParams);
+						Context.TraversalParams  = UnitState->TraversalParams;
+						Context.CachedPathCost   = Grid->CalculatePathCost(
+							Context.SourceGridCoord,
+							Context.HoveredGridCoord,
+							Context.TraversalParams
+						);
 					}
-				}
-				else if (const UUnitStatsComponent* Stats = ActiveUnit->GetUnitStats())
-				{
-					Context.TraversalParams = Stats->GetTraversalParams();
 				}
 			}
 		}

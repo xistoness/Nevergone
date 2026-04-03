@@ -3,6 +3,7 @@
 
 #include "GameMode/TowerFloorGameMode.h"
 
+#include "Audio/AudioSubsystem.h"
 #include "Characters/CharacterBase.h"
 #include "GameInstance/GameContextManager.h"
 
@@ -18,34 +19,33 @@ void ATowerFloorGameMode::BeginPlay()
 {
 	Super::BeginPlay();
 	SetupFloor();
+ 
 	if (UGameInstance* GI = GetGameInstance())
 	{
-		if (UGameContextManager* ContextManager =
-			GI->GetSubsystem<UGameContextManager>())
+		if (UGameContextManager* ContextManager = GI->GetSubsystem<UGameContextManager>())
 		{
+			// Subscribe first, so the initial state transition fires into our handler
 			ContextManager->OnGameContextChanged.AddUObject(
 				this,
 				&ATowerFloorGameMode::HandleGameContextChanged
 			);
-
-			// Ensure correct controller on level start
-			HandleGameContextChanged(ContextManager->GetCurrentState());
+ 
+			// Tell the GameContextManager to enter the floor's initial state.
+			// This fires OnGameContextChanged, which HandleGameContextChanged picks up —
+			// music, controller swap, and any other context logic runs from there.
+			ContextManager->RequestInitialState(InitialContextState);
 		}
 	}
-		
+ 
 	// Debug Party feeding
-	UPartyManagerSubsystem* Party =
-	GetGameInstance()->GetSubsystem<UPartyManagerSubsystem>();
-
+	UPartyManagerSubsystem* Party = GetGameInstance()->GetSubsystem<UPartyManagerSubsystem>();
 	Party->ClearParty();
-
 	for (int i = 0; i < 4; ++i)
 	{
 		FPartyMemberData DebugMember;
-		DebugMember.CharacterClass = TestCharClass;
-		DebugMember.Level = 10 + i;
+		DebugMember.CharacterClass = TestCharClass[i];
+		DebugMember.Level = 1 + i;
 		DebugMember.bIsAlive = true;
-
 		Party->AddPartyMember(DebugMember);
 	}
 }
@@ -78,6 +78,13 @@ void ATowerFloorGameMode::TeardownFloor()
 
 void ATowerFloorGameMode::HandleGameContextChanged(EGameContextState NewState)
 {
+	UAudioSubsystem* Audio = nullptr;
+	UGameInstance* GI = GetGameInstance();
+	if (GI)
+	{
+		Audio = GI->GetSubsystem<UAudioSubsystem>();
+	}
+	
 	switch (NewState)
 	{
 	case EGameContextState::Exploration:
@@ -110,8 +117,13 @@ void ATowerFloorGameMode::HandleGameContextChanged(EGameContextState NewState)
 				SwapPlayerControllers(OldPC, NewPC);
 				ActivePlayerController = NewPC;
 			}
+			
+			if (Audio)
+			{
+				Audio->PlayMusic(ExplorationMusic, EMusicState::Exploration);
+			}
 
-			if (UGameInstance* GI = GetGameInstance())
+			if (GI)
 			{
 				if (UGameContextManager* ContextManager = GI->GetSubsystem<UGameContextManager>())
 				{
@@ -148,6 +160,10 @@ void ATowerFloorGameMode::HandleGameContextChanged(EGameContextState NewState)
 		break;
 
 	case EGameContextState::Battle:
+		if (Audio)
+		{
+			Audio->PlayMusic(BattleMusic, EMusicState::Battle);
+		}
 		SwitchPlayerController(BattleControllerClass);
 		break;
 

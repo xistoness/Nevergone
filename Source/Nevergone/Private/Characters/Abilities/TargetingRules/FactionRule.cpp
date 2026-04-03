@@ -1,7 +1,11 @@
-﻿#include "Characters/Abilities/TargetingRules/FactionRule.h"
+﻿// Copyright Xyzto Works
 
-#include "ActorComponents/UnitStatsComponent.h"
+#include "Characters/Abilities/TargetingRules/FactionRule.h"
+
+#include "ActorComponents/BattleModeComponent.h"
 #include "Characters/CharacterBase.h"
+#include "GameMode/Combat/BattleState.h"
+#include "GameMode/Combat/BattleUnitState.h"
 
 bool FactionRule::IsSatisfied(const FActionContext& Context) const
 {
@@ -10,31 +14,46 @@ bool FactionRule::IsSatisfied(const FActionContext& Context) const
 
 	if (!Caster || !TargetUnit)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[FactionRule]: Invalid Caster or TargetUnit"));
+		UE_LOG(LogTemp, Warning, TEXT("[FactionRule] Invalid Caster or TargetUnit"));
 		return false;
 	}
 
-	UUnitStatsComponent* CasterStats = Caster->GetUnitStats();
-	UUnitStatsComponent* TargetStats = TargetUnit->GetUnitStats();
-
-	if (!CasterStats || !TargetStats)
+	if (Type == EFactionType::Self)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[FactionRule]: No CasterStats or TargetStats found"));
+		return Caster == TargetUnit;
+	}
+
+	// Use BattleUnitState::Team as the authoritative source for faction during combat.
+	// UnitStatsComponent::AllyTeam/EnemyTeam is a static field not kept in sync at runtime.
+	const UBattleModeComponent* BattleMode = Caster->GetBattleModeComponent();
+	const UBattleState* BattleStateRef = BattleMode ? BattleMode->GetBattleState() : nullptr;
+
+	if (!BattleStateRef)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[FactionRule] BattleState not found on caster %s — faction check failed"),
+			*GetNameSafe(Caster));
+		return false;
+	}
+
+	const FBattleUnitState* CasterState = BattleStateRef->FindUnitState(Caster);
+	const FBattleUnitState* TargetState = BattleStateRef->FindUnitState(TargetUnit);
+
+	if (!CasterState || !TargetState)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[FactionRule] BattleUnitState not found for caster or target"));
 		return false;
 	}
 
 	switch (Type)
 	{
-	case EFactionType::Self:
-		return Caster == TargetUnit;
-
 	case EFactionType::Ally:
-		return CasterStats->GetAllyTeam() == TargetStats->GetAllyTeam();
+		return CasterState->Team == TargetState->Team;
 
 	case EFactionType::Enemy:
-		return TargetStats->GetEnemyTeam() == CasterStats->GetAllyTeam();
+		return CasterState->Team != TargetState->Team;
+
+	default:
+		UE_LOG(LogTemp, Warning, TEXT("[FactionRule] Unhandled EFactionType"));
+		return false;
 	}
-	
-	UE_LOG(LogTemp, Warning, TEXT("[FactionRule]: No valid EFactionType found"));
-	return false;
 }

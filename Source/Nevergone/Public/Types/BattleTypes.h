@@ -8,51 +8,51 @@
 #include "LevelTypes.h"
 #include "BattleTypes.generated.h"
 
-class UAbilityData;
+class UAbilityDefinition;
 class UBattleGameplayAbility;
 
 USTRUCT(BlueprintType)
 struct NEVERGONE_API FGeneratedPlayerData
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
-	TSubclassOf<class ACharacterBase> PlayerClass;
-	FGameplayTagContainer Tags;
-	int32 Level = 1;
+    TSubclassOf<class ACharacterBase> PlayerClass;
+    FGameplayTagContainer Tags;
+    int32 Level = 1;
 };
 
 UENUM()
 enum class EBattleAbilitySelectionMode : uint8
 {
-	SingleConfirm,
-	TargetThenConfirmApproach
+    SingleConfirm,
+    TargetThenConfirmApproach
 };
 
 UENUM()
 enum class EBattleActionSelectionPhase : uint8
 {
-	None,
-	SelectingTarget,
-	SelectingApproachTile
+    None,
+    SelectingTarget,
+    SelectingApproachTile
 };
 
 USTRUCT(BlueprintType)
 struct NEVERGONE_API FGeneratedEnemyData
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
-	TSubclassOf<class ACharacterBase> EnemyClass;
-	FGameplayTagContainer Tags;
-	int32 Level = 1;
+    TSubclassOf<class ACharacterBase> EnemyClass;
+    FGameplayTagContainer Tags;
+    int32 Level = 1;
 };
 
 USTRUCT(BlueprintType)
 struct NEVERGONE_API FPlannedSpawn
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
-	TSubclassOf<AActor> ActorClass;
-	FTransform PlannedTransform;
+    TSubclassOf<AActor> ActorClass;
+    FTransform PlannedTransform;
 };
 
 class NEVERGONE_API BattleTypes
@@ -62,267 +62,260 @@ class NEVERGONE_API BattleTypes
 USTRUCT(BlueprintType)
 struct FGridTraversalParams
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float MaxStepUpHeight = 60.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float MaxStepUpHeight = 60.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float MaxStepDownHeight = 80.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float MaxStepDownHeight = 80.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	bool bCanMoveDiagonally = true;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    bool bCanMoveDiagonally = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	bool bIgnoreOccupiedTiles = false;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    bool bIgnoreOccupiedTiles = false;
 };
 
 UENUM()
 enum class EBattleUnitTeam : uint8
 {
-	Ally,
-	Enemy,
-	None
+    Ally,
+    Enemy,
+    None
 };
 
 USTRUCT()
 struct FSpawnedBattleUnit
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
-	UPROPERTY()
-	TWeakObjectPtr<class ACharacterBase> UnitActor;
-	
-	UPROPERTY()
-	int32 SourceIndex = INDEX_NONE;
+    UPROPERTY()
+    TWeakObjectPtr<class ACharacterBase> UnitActor;
 
-	UPROPERTY()
-	EBattleUnitTeam Team = EBattleUnitTeam::Ally;
+    UPROPERTY()
+    int32 SourceIndex = INDEX_NONE;
+
+    UPROPERTY()
+    EBattleUnitTeam Team = EBattleUnitTeam::Ally;
 };
 
 USTRUCT(BlueprintType)
 struct FEnemyEntry
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere)
-	TSubclassOf<class ACharacterBase> EnemyClass;
+    UPROPERTY(EditAnywhere)
+    TSubclassOf<class ACharacterBase> EnemyClass;
 
-	UPROPERTY(EditAnywhere)
-	float Weight = 1.0f;
-	
-	UPROPERTY(EditAnywhere)
-	int32 Level = 1;
-	
-	UPROPERTY(EditAnywhere)
-	FGameplayTagContainer Tags;
+    UPROPERTY(EditAnywhere)
+    float Weight = 1.0f;
+
+    UPROPERTY(EditAnywhere)
+    int32 Level = 1;
+
+    UPROPERTY(EditAnywhere)
+    FGameplayTagContainer Tags;
 };
 
 USTRUCT(BlueprintType)
 struct FAllyEntry
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere)
-	TSubclassOf<class ACharacterBase> PlayerClass;
+    UPROPERTY(EditAnywhere)
+    TSubclassOf<class ACharacterBase> PlayerClass;
 
-	UPROPERTY(EditAnywhere)
-	float Weight = 1.0f;
-	
-	UPROPERTY(EditAnywhere)
-	int32 Level = 1;
-	
-	UPROPERTY(EditAnywhere)
-	FGameplayTagContainer Tags;
+    UPROPERTY(EditAnywhere)
+    float Weight = 1.0f;
+
+    UPROPERTY(EditAnywhere)
+    int32 Level = 1;
+
+    UPROPERTY(EditAnywhere)
+    FGameplayTagContainer Tags;
 };
 
 USTRUCT()
 struct FActionContext
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
-	UPROPERTY()
-	AActor* SourceActor = nullptr;
+    UPROPERTY()
+    AActor* SourceActor = nullptr;
 
-	UPROPERTY()
-	AActor* TargetActor = nullptr; // attack target
-	
-	UPROPERTY()
-	bool bIsActionValid = false;
-	
-	UPROPERTY()
-	bool bIsTileBlocked = false;
+    UPROPERTY()
+    AActor* TargetActor = nullptr;
 
-	UPROPERTY()
-	FIntPoint SourceGridCoord;
+    UPROPERTY()
+    bool bIsActionValid = false;
 
-	UPROPERTY()
-	FIntPoint HoveredGridCoord; // tile under cursor
+    UPROPERTY()
+    bool bIsTileBlocked = false;
 
-	UPROPERTY()
-	FIntPoint MovementTargetGridCoord; // resolved adjacent tile for approach
+    UPROPERTY()
+    FIntPoint SourceGridCoord;
 
-	UPROPERTY()
-	FVector SourceWorldPosition;
+    UPROPERTY()
+    FIntPoint HoveredGridCoord;
 
-	UPROPERTY()
-	FVector HoveredWorldPosition;
+    UPROPERTY()
+    FIntPoint MovementTargetGridCoord;
 
-	UPROPERTY()
-	FVector MovementTargetWorldPosition;
+    UPROPERTY()
+    FVector SourceWorldPosition;
 
-	UPROPERTY()
-	FGridTraversalParams TraversalParams;
-	
-	UPROPERTY()
-	AActor* LockedTargetActor = nullptr;
+    UPROPERTY()
+    FVector HoveredWorldPosition;
 
-	UPROPERTY()
-	FIntPoint LockedTargetGridCoord;
+    UPROPERTY()
+    FVector MovementTargetWorldPosition;
 
-	UPROPERTY()
-	FIntPoint SelectedApproachGridCoord;
+    UPROPERTY()
+    FGridTraversalParams TraversalParams;
 
-	UPROPERTY()
-	bool bHasLockedTarget = false;
+    UPROPERTY()
+    AActor* LockedTargetActor = nullptr;
 
-	UPROPERTY()
-	bool bHasSelectedApproachTile = false;
+    UPROPERTY()
+    FIntPoint LockedTargetGridCoord;
 
-	UPROPERTY()
-	EBattleActionSelectionPhase SelectionPhase = EBattleActionSelectionPhase::None;
+    UPROPERTY()
+    FIntPoint SelectedApproachGridCoord;
 
-	UPROPERTY()
-	int32 CachedPathCost = INDEX_NONE;
+    UPROPERTY()
+    bool bHasLockedTarget = false;
 
-	UPROPERTY()
-	TSubclassOf<UBattleGameplayAbility> AbilityClass;
-	
-	UPROPERTY()
-	UAbilityData* Ability;
-	
-	UPROPERTY()
-	int32 ActionPointsCost = 0;
-	
-	UPROPERTY()
-	bool bHasLineOfSight = false;
+    UPROPERTY()
+    bool bHasSelectedApproachTile = false;
+
+    UPROPERTY()
+    EBattleActionSelectionPhase SelectionPhase = EBattleActionSelectionPhase::None;
+
+    UPROPERTY()
+    int32 CachedPathCost = INDEX_NONE;
+
+    // The ability class being executed. Resolved from AbilityDefinition->AbilityClass
+    // by BattleModeComponent when an ability is selected.
+    UPROPERTY()
+    TSubclassOf<UBattleGameplayAbility> AbilityClass;
+
+    // The definition that drives this ability's stats, range, cost, and effects.
+    // Set alongside AbilityClass so the executor can inject it into the live instance
+    // before activation — required because the C++ class is a template shared across many definitions.
+    UPROPERTY()
+    TObjectPtr<UAbilityDefinition> AbilityDefinition = nullptr;
+
+    UPROPERTY()
+    int32 ActionPointsCost = 0;
+
+    UPROPERTY()
+    bool bHasLineOfSight = false;
 };
 
 USTRUCT()
 struct FActionResult
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
-	UPROPERTY()
-	bool bIsValid = false;
+    UPROPERTY()
+    bool bIsValid = false;
 
-	UPROPERTY()
-	bool bRequiresMovement = false;
+    UPROPERTY()
+    bool bRequiresMovement = false;
 
-	UPROPERTY()
-	FIntPoint MovementTargetGridCoord;
+    UPROPERTY()
+    FIntPoint MovementTargetGridCoord;
 
-	UPROPERTY()
-	FVector MovementTargetWorldPosition;
+    UPROPERTY()
+    FVector MovementTargetWorldPosition;
 
-	UPROPERTY()
-	TArray<FVector> PathPoints;
+    UPROPERTY()
+    TArray<FVector> PathPoints;
 
-	UPROPERTY()
-	AActor* ResolvedAttackTarget = nullptr;
+    UPROPERTY()
+    AActor* ResolvedAttackTarget = nullptr;
 
-	UPROPERTY()
-	int32 ActionPointsCost = 0;
+    UPROPERTY()
+    int32 ActionPointsCost = 0;
 
-	UPROPERTY()
-	float ExpectedDamage = 0.f;
-	
-	UPROPERTY()
-	float HitChance = 0.f;
-	
-	UPROPERTY()
-	TArray<AActor*> AffectedActors;
+    UPROPERTY()
+    float ExpectedDamage = 0.f;
+
+    UPROPERTY()
+    float HitChance = 0.f;
+
+    UPROPERTY()
+    TArray<AActor*> AffectedActors;
 };
 
-// Target data representing a single grid tile
 USTRUCT()
 struct FGameplayAbilityTargetData_Tile : public FGameplayAbilityTargetData
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
-	// Tile coordinates in grid space
-	UPROPERTY()
-	FIntPoint TileCoord;
+    UPROPERTY()
+    FIntPoint TileCoord;
 
-	// Optional actor on that tile
-	UPROPERTY()
-	TWeakObjectPtr<AActor> TargetActor;
+    UPROPERTY()
+    TWeakObjectPtr<AActor> TargetActor;
 
-	virtual UScriptStruct* GetScriptStruct() const override
-	{
-		return StaticStruct();
-	}
+    virtual UScriptStruct* GetScriptStruct() const override
+    {
+        return StaticStruct();
+    }
 };
 
 USTRUCT(BlueprintType)
 struct NEVERGONE_API FBattleSessionData
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
 public:
+    UPROPERTY()
+    bool bSessionActive = false;
 
-	// Whether this session is currently valid
-	UPROPERTY()
-	bool bSessionActive = false;
+    UPROPERTY()
+    TWeakObjectPtr<class AFloorEncounterVolume> EncounterSource;
 
-	// The encounter volume that triggered the combat
-	UPROPERTY()
-	TWeakObjectPtr<class AFloorEncounterVolume> EncounterSource;
+    UPROPERTY()
+    TSubclassOf<ACharacterBase> ExplorationCharacterClass;
 
-	// Exploration character class
-	UPROPERTY()
-	TSubclassOf<ACharacterBase> ExplorationCharacterClass;
-	
-	UPROPERTY()
-	ACharacterBase* ExplorationCharacter;
+    UPROPERTY()
+    ACharacterBase* ExplorationCharacter;
 
-	// Transform of the exploration character before combat
-	UPROPERTY()
-	FTransform ExplorationCharacterTransform;
+    UPROPERTY()
+    FTransform ExplorationCharacterTransform;
 
-	// Final winner team
-	UPROPERTY()
-	EBattleUnitTeam WinningTeam = EBattleUnitTeam::None;
+    UPROPERTY()
+    EBattleUnitTeam WinningTeam = EBattleUnitTeam::None;
 
-	// Number of surviving allies
-	UPROPERTY()
-	int32 SurvivingAllies = 0;
+    UPROPERTY()
+    int32 SurvivingAllies = 0;
 
-	// Number of surviving enemies
-	UPROPERTY()
-	int32 SurvivingEnemies = 0;
+    UPROPERTY()
+    int32 SurvivingEnemies = 0;
 
-	// Whether combat has finished
-	UPROPERTY()
-	bool bCombatFinished = false;
-	
-	UPROPERTY()
-	FRotator ExplorationControlRotation = FRotator::ZeroRotator;
+    UPROPERTY()
+    bool bCombatFinished = false;
 
-	UPROPERTY()
-	float ExplorationArmLength = 400.f;
+    UPROPERTY()
+    FRotator ExplorationControlRotation = FRotator::ZeroRotator;
 
-	void Reset()
-	{
-		bSessionActive = false;
-		EncounterSource = nullptr;
-		ExplorationCharacterClass = nullptr;
-		ExplorationCharacterTransform = FTransform::Identity;
-		WinningTeam = EBattleUnitTeam::None;
-		SurvivingAllies = 0;
-		SurvivingEnemies = 0;
-		bCombatFinished = false;
-		ExplorationControlRotation = FRotator::ZeroRotator;
-		ExplorationArmLength = 400.f;
-	}
+    UPROPERTY()
+    float ExplorationArmLength = 400.f;
+
+    void Reset()
+    {
+        bSessionActive = false;
+        EncounterSource = nullptr;
+        ExplorationCharacterClass = nullptr;
+        ExplorationCharacterTransform = FTransform::Identity;
+        WinningTeam = EBattleUnitTeam::None;
+        SurvivingAllies = 0;
+        SurvivingEnemies = 0;
+        bCombatFinished = false;
+        ExplorationControlRotation = FRotator::ZeroRotator;
+        ExplorationArmLength = 400.f;
+    }
 };

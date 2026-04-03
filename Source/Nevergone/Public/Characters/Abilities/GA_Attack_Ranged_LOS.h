@@ -43,16 +43,6 @@ protected:
 	void ApplyResolvedAttack();
 	void FinalizeAttackAction();
 
-protected:
-	UPROPERTY(EditDefaultsOnly, Category = "Battle")
-	int32 MaxRange = 10;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Battle")
-	float BaseDamageMultiplier = 1.0f;
-	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack")
-	int32 BaseActionPointsCost = 1;
-
 private:
 	UPROPERTY()
 	TObjectPtr<ACharacterBase> CachedCharacter = nullptr;
@@ -61,6 +51,4 @@ private:
 	TObjectPtr<ACharacterBase> CachedTargetCharacter = nullptr;
 
 	int32 CachedActionPointsCost = 0;
-	
-	CompositeTargetingPolicy TargetPolicy;
 };

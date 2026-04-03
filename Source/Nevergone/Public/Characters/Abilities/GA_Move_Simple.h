@@ -49,8 +49,6 @@ protected:
 	void HandleExternalMovementFinished();
 
 protected:
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Move")
-	int32 MaxMoveRange = 5;
 
 	UPROPERTY()
 	ACharacterBase* CachedCharacter = nullptr;

@@ -29,7 +29,7 @@ public:
 	UPROPERTY(SaveGame)
 	TMap<FName, bool> GlobalFlags;
 	
-	UPROPERTY()
+	UPROPERTY(SaveGame)
 	TMap<FName, FLevelSaveData> SavedActorsByLevel;
 	
 	// Display name shown in the Load Game list (e.g. "Floor 3 — Encounter 2")

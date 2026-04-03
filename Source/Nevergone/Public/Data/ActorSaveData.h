@@ -54,6 +54,6 @@ struct FLevelSaveData
 {
 	GENERATED_BODY()
 
-	UPROPERTY()
+	UPROPERTY(SaveGame)
 	TArray<FActorSaveData> Actors;
 };

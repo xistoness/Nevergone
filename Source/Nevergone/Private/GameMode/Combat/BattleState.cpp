@@ -1,6 +1,5 @@
 // Copyright Xyzto Works
 
-
 #include "GameMode/Combat/BattleState.h"
 
 #include "ActorComponents/UnitStatsComponent.h"
@@ -10,233 +9,231 @@
 
 void UBattleState::Initialize(UBattlePreparationContext& BattlePrepContext)
 {
-	UnitStates.Empty();
+    UnitStates.Empty();
 
-	for (const FSpawnedBattleUnit& Spawned : BattlePrepContext.SpawnedUnits)
-	{
-		if (!Spawned.UnitActor.IsValid())
-		{
-			continue;
-		}
+    for (const FSpawnedBattleUnit& Spawned : BattlePrepContext.SpawnedUnits)
+    {
+        if (!Spawned.UnitActor.IsValid())
+        {
+            continue;
+        }
 
-		ACharacterBase* Unit = Spawned.UnitActor.Get();
-		UUnitStatsComponent* Stats = Unit->GetUnitStats();
-		
-		if (Stats)
-		{
-			Stats->InitializeForBattle();
-		}
+        ACharacterBase* Unit = Spawned.UnitActor.Get();
+        UUnitStatsComponent* Stats = Unit->GetUnitStats();
 
-		FBattleUnitState NewState;
-		NewState.UnitActor = Unit;
-		NewState.Team = Spawned.Team;
+        if (Stats)
+        {
+            Stats->InitializeForBattle();
+        }
 
-		// Pull initial stats from character
+        FBattleUnitState NewState;
+        NewState.UnitActor = Unit;
+        NewState.Team      = Spawned.Team;
 
-		NewState.MaxHP     = Stats->GetMaxHP();
-		NewState.CurrentHP = Stats->GetCurrentHP();
-		NewState.MaxSpeed  = Stats->GetSpeed();
-		NewState.MaxMeleeAttack  = Stats->GetMeleeAttack();
-		NewState.MaxRangedAttack  = Stats->GetRangedAttack();
-		NewState.ActionPoints = Stats->GetActionPoints();
+        if (Stats)
+        {
+            NewState.MaxHP               = Stats->GetMaxHP();
+            NewState.CurrentHP           = Stats->GetCurrentHP();
+            NewState.PhysicalAttack      = Stats->GetPhysicalAttack();
+            NewState.RangedAttack        = Stats->GetRangedAttack();
+            NewState.MagicalPower        = Stats->GetMagicalPower();
+            NewState.PhysicalDefense     = Stats->GetPhysicalDefense();
+            NewState.MagicalDefense      = Stats->GetMagicalDefense();
+            NewState.MaxActionPoints     = Stats->GetActionPoints();
+            NewState.CurrentActionPoints = Stats->GetActionPoints();
+            NewState.MovementRange       = Stats->GetMovementRange();
+            NewState.HitChanceModifier   = Stats->GetHitChanceModifier();
+            NewState.EvasionModifier     = Stats->GetEvasionModifier();
+            NewState.CritChance          = Stats->GetCritChance();
+            NewState.TraversalParams     = Stats->GetTraversalParams();
+        }
 
-		// Optional: tags from generated data
-		if (Spawned.Team == EBattleUnitTeam::Ally &&
-			BattlePrepContext.PlayerParty.IsValidIndex(Spawned.SourceIndex))
-		{
-			NewState.StatusTags.AppendTags(
-				BattlePrepContext.PlayerParty[Spawned.SourceIndex].Tags);
-		}
-		else if (Spawned.Team == EBattleUnitTeam::Enemy &&
-			BattlePrepContext.EnemyParty.IsValidIndex(Spawned.SourceIndex))
-		{
-			NewState.StatusTags.AppendTags(
-				BattlePrepContext.EnemyParty[Spawned.SourceIndex].Tags);
-		}
-		
-		Unit->EnableBattleMode();
+        if (Spawned.Team == EBattleUnitTeam::Ally &&
+            BattlePrepContext.PlayerParty.IsValidIndex(Spawned.SourceIndex))
+        {
+            NewState.StatusTags.AppendTags(
+                BattlePrepContext.PlayerParty[Spawned.SourceIndex].Tags);
+        }
+        else if (Spawned.Team == EBattleUnitTeam::Enemy &&
+            BattlePrepContext.EnemyParty.IsValidIndex(Spawned.SourceIndex))
+        {
+            NewState.StatusTags.AppendTags(
+                BattlePrepContext.EnemyParty[Spawned.SourceIndex].Tags);
+        }
 
-		UnitStates.Add(MoveTemp(NewState));
-	}
-	UE_LOG(LogTemp, Warning,
-	TEXT("[BattleState] Initialized with %d units"),
-	UnitStates.Num()
-);
+        Unit->EnableBattleMode();
+        UnitStates.Add(MoveTemp(NewState));
 
-	for (const FBattleUnitState& State : UnitStates)
-	{
-		if (State.UnitActor.IsValid())
-		{
-			UE_LOG(LogTemp, Warning,
-				TEXT(" - UnitState: %s | HP=%.1f"),
-				*State.UnitActor->GetName(),
-				State.CurrentHP
-			);
-		}
-	}
+        UE_LOG(LogNevergone, Log,
+            TEXT("[BattleState] Initialized unit %s | HP=%.0f | PhysAtk=%.0f | AP=%d | Move=%d"),
+            *Unit->GetName(),
+            NewState.MaxHP,
+            NewState.PhysicalAttack,
+            NewState.MaxActionPoints,
+            NewState.MovementRange);
+    }
+
+    UE_LOG(LogNevergone, Log, TEXT("[BattleState] Initialized with %d units"), UnitStates.Num());
 }
 
 FBattleUnitState* UBattleState::FindUnitState(ACharacterBase* Unit)
 {
-	return UnitStates.FindByPredicate(
-		[Unit](const FBattleUnitState& State)
-		{
-			return State.UnitActor.Get() == Unit;
-		});
+    return UnitStates.FindByPredicate(
+        [Unit](const FBattleUnitState& State)
+        {
+            return State.UnitActor.Get() == Unit;
+        });
 }
 
 const FBattleUnitState* UBattleState::FindUnitState(ACharacterBase* Unit) const
 {
-	return UnitStates.FindByPredicate(
-		[Unit](const FBattleUnitState& State)
-		{
-			return State.UnitActor.Get() == Unit;
-		});
+    return UnitStates.FindByPredicate(
+        [Unit](const FBattleUnitState& State)
+        {
+            return State.UnitActor.Get() == Unit;
+        });
 }
 
-bool UBattleState::CanUnitAct(ACharacterBase* Unit) const
+bool UBattleState::CanUnitAct(ACharacterBase* Unit)
 {
+    if (!Unit) { return false; }
 
-	if (!Unit)
-	{
+    const FBattleUnitState* State = FindUnitState(Unit);
+    if (!State) { return false; }
 
-		return false;
-	}
+    const bool bCanAct = State->CanAct();
 
-	const FBattleUnitState* State = FindUnitState(Unit);
-	if (!State)
-	{
-		return false;
-	}
+    UE_LOG(LogNevergone, Log,
+        TEXT("[BattleState] CanUnitAct(%s): Alive=%s | AP=%d | Acted=%s => %s"),
+        *Unit->GetName(),
+        State->IsAlive() ? TEXT("YES") : TEXT("NO"),
+        State->CurrentActionPoints,
+        State->bHasActedThisTurn ? TEXT("YES") : TEXT("NO"),
+        bCanAct ? TEXT("CAN ACT") : TEXT("BLOCKED"));
 
-	const bool bIsAlive = State->IsAlive();
-	const bool bHasActed = State->bHasActedThisTurn;
-	const bool bIsIncapacitated = State->StatusTags.HasTagExact(TAG_Status_Incapacitated);
-	const bool bHasActionPoints = 0 < Unit->GetUnitStats()->GetCurrentActionPoints();
-
-	const bool bCanAct = bIsAlive && !bHasActed && !bIsIncapacitated && bHasActionPoints;
-
-	UE_LOG(LogTemp, Warning,
-		TEXT("[BattleState] CanUnitAct(%s): Alive=%s | HasActed=%s | Incapacitated=%s => %s"),
-		*Unit->GetName(),
-		bIsAlive ? TEXT("YES") : TEXT("NO"),
-		bHasActed ? TEXT("YES") : TEXT("NO"),
-		bIsIncapacitated ? TEXT("YES") : TEXT("NO"),
-		bCanAct ? TEXT("CAN ACT") : TEXT("BLOCKED")
-	);
-
-	return bCanAct;
+    return bCanAct;
 }
 
-bool UBattleState::IsUnitExhausted(ACharacterBase* Unit) const
+bool UBattleState::IsUnitExhausted(ACharacterBase* Unit)
 {
-	const FBattleUnitState* State = FindUnitState(Unit);
-	return !State || !State->CanAct();
+    const FBattleUnitState* State = FindUnitState(Unit);
+    return !State || !State->CanAct();
 }
 
 void UBattleState::MarkUnitAsActed(ACharacterBase* Unit)
 {
-	FBattleUnitState* State = FindUnitState(Unit);
-	if (!State)
-	{
-		return;
-	}
-
-	State->bHasActedThisTurn = true;
+    FBattleUnitState* State = FindUnitState(Unit);
+    if (!State) { return; }
+    State->bHasActedThisTurn = true;
 }
 
 void UBattleState::MarkUnitMoved(ACharacterBase* Unit)
 {
-	FBattleUnitState* State = FindUnitState(Unit);
-	if (!State)
-	{
-		return;
-	}
-
-	State->bHasMovedThisTurn = true;
+    FBattleUnitState* State = FindUnitState(Unit);
+    if (!State) { return; }
+    State->bHasMovedThisTurn = true;
 }
 
 void UBattleState::ConsumeActionPoints(ACharacterBase* Unit, int32 Amount)
 {
-	FBattleUnitState* State = FindUnitState(Unit);
-	if (!State || State->bIsDead)
-	{
-		return;
-	}
+    FBattleUnitState* State = FindUnitState(Unit);
+    if (!State || State->bIsDead) { return; }
 
-	State->ActionPoints = FMath::Max(0, State->ActionPoints - Amount);
+    State->CurrentActionPoints = FMath::Max(0, State->CurrentActionPoints - Amount);
+
+    UE_LOG(LogNevergone, Log,
+        TEXT("[BattleState] ConsumeActionPoints: %s spent %d AP — %d remaining"),
+        *GetNameSafe(Unit), Amount, State->CurrentActionPoints);
 }
 
 void UBattleState::ResetTurnStateForTeam(EBattleUnitTeam Team)
 {
-	for (FBattleUnitState& State : UnitStates)
-	{
-		if (State.Team != Team || State.bIsDead)
-		{
-			continue;
-		}
+    for (FBattleUnitState& State : UnitStates)
+    {
+        if (State.Team != Team || State.bIsDead) { continue; }
 
-		// TODO: pull action point count from UnitStatsComponent at turn start
-		State.ActionPoints = 2;
-		State.bHasMovedThisTurn = false;
-	}
+        State.CurrentActionPoints = State.MaxActionPoints;
+        State.bHasMovedThisTurn   = false;
+        State.bHasActedThisTurn   = false;
+
+        UE_LOG(LogNevergone, Log,
+            TEXT("[BattleState] Turn reset for %s — AP restored to %d"),
+            *GetNameSafe(State.UnitActor.Get()), State.CurrentActionPoints);
+    }
 }
 
 void UBattleState::ApplyDamage(ACharacterBase* Unit, float Amount)
 {
-	FBattleUnitState* State = FindUnitState(Unit);
-	if (!State || State->bIsDead)
-	{
-		return;
-	}
+    FBattleUnitState* State = FindUnitState(Unit);
+    if (!State || State->bIsDead) { return; }
 
-	State->CurrentHP = FMath::Max(0.0f, State->CurrentHP - Amount);
+    State->CurrentHP = FMath::Max(0.0f, State->CurrentHP - Amount);
 
-	if (State->CurrentHP <= 0.0f)
-	{
-		State->bIsDead = true;
-		State->StatusTags.Reset();
-	}
+    if (State->CurrentHP <= 0.0f)
+    {
+        State->bIsDead = true;
+        State->StatusTags.Reset();
+    }
 }
 
 void UBattleState::ApplyHeal(ACharacterBase* Unit, float Amount)
 {
-	FBattleUnitState* State = FindUnitState(Unit);
-	if (!State || State->bIsDead)
-	{
-		return;
-	}
+    FBattleUnitState* State = FindUnitState(Unit);
+    if (!State || State->bIsDead) { return; }
 
-	State->CurrentHP = FMath::Min(State->CurrentHP + Amount, State->MaxHP);
+    State->CurrentHP = FMath::Min(State->CurrentHP + Amount, State->MaxHP);
 }
 
 void UBattleState::ApplyStatusTag(ACharacterBase* Unit, const FGameplayTag& StatusTag)
 {
-	FBattleUnitState* State = FindUnitState(Unit);
-	if (!State || State->bIsDead)
-	{
-		return;
-	}
-
-	State->StatusTags.AddTag(StatusTag);
+    FBattleUnitState* State = FindUnitState(Unit);
+    if (!State || State->bIsDead) { return; }
+    State->StatusTags.AddTag(StatusTag);
 }
 
 void UBattleState::ClearStatusTag(ACharacterBase* Unit, const FGameplayTag& StatusTag)
 {
-	FBattleUnitState* State = FindUnitState(Unit);
-	if (!State)
-	{
-		return;
-	}
+    FBattleUnitState* State = FindUnitState(Unit);
+    if (!State) { return; }
+    State->StatusTags.RemoveTag(StatusTag);
+}
 
-	State->StatusTags.RemoveTag(StatusTag);
+void UBattleState::PersistToCombatants()
+{
+    UE_LOG(LogNevergone, Log, TEXT("[BattleState] Persisting battle results to %d units"), UnitStates.Num());
+
+    for (const FBattleUnitState& State : UnitStates)
+    {
+        ACharacterBase* Unit = State.UnitActor.Get();
+        if (!Unit)
+        {
+            continue;
+        }
+
+        UUnitStatsComponent* Stats = Unit->GetUnitStats();
+        if (!Stats)
+        {
+            continue;
+        }
+
+        // Write HP back — dead units persist as 0, survivors keep their remaining HP.
+        // SetCurrentHP clamps to [0, MaxHP] and fires the death delegate if needed,
+        // but at this point combat is over so the delegate firing is harmless.
+        Stats->SetCurrentHP(State.CurrentHP);
+
+        UE_LOG(LogNevergone, Log,
+            TEXT("[BattleState] Persisted %s — HP: %.1f / %.1f | Dead: %s"),
+            *GetNameSafe(Unit),
+            State.CurrentHP,
+            State.MaxHP,
+            State.bIsDead ? TEXT("YES") : TEXT("NO"));
+    }
 }
 
 void UBattleState::GenerateResult()
 {
-	// Convert UnitStates into a battle result:
-	// - Dead units
-	// - Remaining HP
-	// - Persistent relationship changes
-	// - Flags for PartyManagerSubsystem
+    // GenerateResult is the legacy entry point — delegates to PersistToCombatants.
+    // Future work: build a formal FBattleResult struct here for XP, relationship
+    // changes, and PartyManagerSubsystem flags before calling PersistToCombatants.
+    PersistToCombatants();
 }

@@ -3,12 +3,14 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Math/Color.h"
 #include "UObject/Object.h"
 #include "GameplayTagContainer.h"
 #include "CombatEventBus.generated.h"
 
 class ACharacterBase;
 class UBattleState;
+class USkeletalMeshComponent;
 
 // ---------------------------------------------------------------------------
 // Delegates — subscribe to these from anywhere inside the combat session
@@ -123,6 +125,29 @@ public:
 	FOnUnitDied       OnUnitDied;
 
 private:
+
+	// -----------------------------------------------------------------------
+	// Hit flash helpers
+	// -----------------------------------------------------------------------
+
+	/**
+	 * Briefly applies a red emissive tint to the target mesh to signal a hit.
+	 * Resets automatically after HitFlashDurationSeconds.
+	 *
+	 * Requires the character materials to expose a vector parameter named
+	 * HitFlashParamName (default: "EmissiveColor"). If yours uses a different
+	 * name, update HitFlashParamName below.
+	 */
+	void FlashHitEffect(ACharacterBase* Target);
+
+	/** Material vector parameter name used for the emissive hit tint. */
+	FName HitFlashParamName = TEXT("EmissiveColor");
+
+	/** Color of the flash (linear RGB). Default: bright red. */
+	FLinearColor HitFlashColor = FLinearColor(5.f, 0.f, 0.f, 1.f); // HDR red
+
+	/** How long the flash stays on before fading back to normal. */
+	float HitFlashDurationSeconds = 0.12f;
 
 	UPROPERTY()
 	TObjectPtr<UBattleState> BattleState;

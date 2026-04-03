@@ -18,8 +18,22 @@ class ACharacterBase;
 class UBattleState;
 class UGridManager;
 class UBattleTeamAIPlanner;
+class UActionHotbar;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCombatFinished, EBattleUnitTeam, WinningTeam);
+
+/**
+ * Fired when the player-controlled active unit changes.
+ * Passes the newly selected unit, or nullptr when no unit is active
+ * (e.g. between turns or after combat ends).
+ */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnActiveUnitChanged, ACharacterBase*, NewActiveUnit);
+
+/**
+ * Fired when the enemy turn begins.
+ * The hotbar (and any other player-facing UI) should hide at this point.
+ */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnEnemyTurnBegan);
 
 UCLASS()
 class NEVERGONE_API UCombatManager : public UObject
@@ -49,6 +63,18 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="Combat")
 	int32 GetAliveEnemies() const;
+
+	/** Returns total number of ally units spawned at battle start (alive + dead). */
+	UFUNCTION(BlueprintCallable, Category="Combat")
+	int32 GetTotalAllies() const { return SpawnedAllies.Num(); }
+
+	// -----------------------------------------------------------------------
+	// Session object accessors — used by BattleHUDWidget and other observers
+	// -----------------------------------------------------------------------
+
+	UBattleState*    GetBattleState()      const { return BattleState; }
+	UTurnManager*    GetTurnManager()      const { return TurnManager; }
+	UCombatEventBus* GetCombatEventBus()   const { return EventBus; }
 	
 	/** Input / camera integration */
 	void RegisterBattleCamera(ABattleCameraPawn* InCameraPawn);
@@ -62,7 +88,25 @@ public:
 	void UnbindFromCombatUnitActionEvents(ACharacterBase* Unit);
 	void RequestEndEnemyTurn();
 
+	// -----------------------------------------------------------------------
+	// Public delegates
+	// -----------------------------------------------------------------------
+
+	/** Broadcast when combat ends (ally or enemy victory). */
 	FOnCombatFinished OnCombatFinished;
+
+	/**
+	 * Broadcast whenever the active player unit changes.
+	 * Passes nullptr when no unit is selected (e.g. during enemy turn).
+	 */
+	UPROPERTY(BlueprintAssignable, Category = "Combat|Events")
+	FOnActiveUnitChanged OnActiveUnitChanged;
+
+	/**
+	 * Broadcast at the start of every enemy turn, before any AI actions run.
+	 */
+	UPROPERTY(BlueprintAssignable, Category = "Combat|Events")
+	FOnEnemyTurnBegan OnEnemyTurnBegan;
 
 protected:
 	
@@ -87,15 +131,14 @@ private:
 	UFUNCTION()
 	void HandleUnitOutOfAP(ACharacterBase* Unit);
 
-
 	void FocusCameraOnActingEnemy(ACharacterBase* ActingUnit);
-	// Debug
 	static void LogActivePlayerController(UWorld* World, const FString& Context);
 	
 	UFUNCTION()
 	void HandleUnitActionStarted(ACharacterBase* ActingUnit);
 	UFUNCTION()
 	void HandleUnitActionFinished(ACharacterBase* ActingUnit);
+	void RestoreInputAfterAction(ACharacterBase* ActingUnit);
 
 private:	
 	
@@ -123,11 +166,18 @@ private:
 	UPROPERTY()
 	UBattleState* BattleState = nullptr;
 
-	// Central event bus for damage, heal, status and death notifications.
-	// Created at StartCombat and injected into every unit's BattleModeComponent.
 	UPROPERTY()
 	UCombatEventBus* EventBus = nullptr;
 
 	UPROPERTY()
 	bool bCombatEnding = false;
+	
+	FTimerHandle PostActionDelayHandle;
+	FTimerHandle AICameraWaitHandle;
+
+	bool bWaitingForPathFinish = false;
+
+	void HandleAIActionFinished();
+	void PollCameraReachedActor();
+
 };

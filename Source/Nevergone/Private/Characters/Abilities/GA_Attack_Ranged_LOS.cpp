@@ -12,21 +12,15 @@
 #include "GameMode/Combat/CombatEventBus.h"
 #include "Level/GridManager.h"
 #include "Nevergone.h"
+#include "GameMode/Combat/BattleState.h"
+#include "GameMode/Combat/CombatFormulas.h"
 #include "Types/BattleTypes.h"
 
 UGA_Attack_Ranged_LOS::UGA_Attack_Ranged_LOS()
 {
-	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
-
 	FGameplayTagContainer AssetTags;
 	AssetTags.AddTag(TAG_Ability_Attack_Ranged);
 	SetAssetTags(AssetTags);
-
-	ActivationBlockedTags.AddTag(TAG_State_Stunned);
-
-	TargetPolicy.AddRule(MakeUnique<FactionRule>(EFactionType::Enemy));
-	TargetPolicy.AddRule(MakeUnique<RangeRule>(MaxRange));
-	TargetPolicy.AddRule(MakeUnique<LineOfSightRule>());
 
 	PreviewRendererClass = UPreview_Attack_Ranged::StaticClass();
 }
@@ -48,44 +42,69 @@ FActionResult UGA_Attack_Ranged_LOS::BuildExecution(const FActionContext& Contex
 bool UGA_Attack_Ranged_LOS::BuildAttackResult(const FActionContext& Context, FActionResult& OutResult) const
 {
 	OutResult = FActionResult();
-
-	ACharacterBase* SourceCharacter = Cast<ACharacterBase>(Context.SourceActor);
-	ACharacterBase* TargetCharacter = Cast<ACharacterBase>(Context.TargetActor);
-
-	UE_LOG(LogTemp, Warning, TEXT("[Ranged] SourceActor: %s"), *GetNameSafe(SourceCharacter));
-	UE_LOG(LogTemp, Warning, TEXT("[Ranged] TargetActor: %s"), *GetNameSafe(TargetCharacter));
-	UE_LOG(LogTemp, Warning, TEXT("[Ranged] SourceCoord: %s"), *Context.SourceGridCoord.ToString());
-	UE_LOG(LogTemp, Warning, TEXT("[Ranged] HoveredCoord: %s"), *Context.HoveredGridCoord.ToString());
-
-	if (!SourceCharacter || !TargetCharacter)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[Ranged] Failed: no source or target"));
-		return false;
-	}
-
-	if (!TargetPolicy.IsValid(Context))
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[Ranged] Failed: policy invalid"));
-		return false;
-	}
-
-	UUnitStatsComponent* SourceStats = SourceCharacter->GetUnitStats();
-	UUnitStatsComponent* TargetStats = TargetCharacter->GetUnitStats();
-
-	if (!SourceStats || !TargetStats || !TargetStats->IsAlive())
+	
+	if (!HasSufficientAP(Context))
 	{
 		return false;
 	}
 
-	OutResult.bIsValid = true;
-	OutResult.bRequiresMovement = false;
-	OutResult.ActionPointsCost = BaseActionPointsCost;
-	OutResult.ResolvedAttackTarget = TargetCharacter;
-	OutResult.ExpectedDamage = SourceStats->GetRangedAttack() * BaseDamageMultiplier;
-	OutResult.HitChance = 1.0f;
-	OutResult.AffectedActors.Add(TargetCharacter);
+    ACharacterBase* SourceCharacter = Cast<ACharacterBase>(Context.SourceActor);
+    ACharacterBase* TargetCharacter = Cast<ACharacterBase>(Context.TargetActor);
 
-	return true;
+    if (!SourceCharacter || !TargetCharacter)
+    {
+        UE_LOG(LogNevergone, Log, TEXT("[GA_Attack_Ranged_LOS] BuildAttackResult: no source or target"));
+        return false;
+    }
+
+    // Build targeting policy here, not in the constructor, so AbilityDefinition
+    // values are live. GetMaxRange() and GetTargetFaction() read from AbilityDefinition.
+    CompositeTargetingPolicy LivePolicy;
+    LivePolicy.AddRule(MakeUnique<FactionRule>(
+        GetTargetFaction() == EAbilityTargetFaction::Ally ? EFactionType::Ally : EFactionType::Enemy
+    ));
+    LivePolicy.AddRule(MakeUnique<RangeRule>(GetMaxRange()));
+    LivePolicy.AddRule(MakeUnique<LineOfSightRule>());
+
+    if (!LivePolicy.IsValid(Context))
+    {
+        UE_LOG(LogNevergone, Log, TEXT("[GA_Attack_Ranged_LOS] BuildAttackResult: policy invalid"));
+        return false;
+    }
+
+    UBattleModeComponent* BattleMode     = SourceCharacter->GetBattleModeComponent();
+    UBattleState*         BattleStateRef = BattleMode ? BattleMode->GetBattleState() : nullptr;
+    const FBattleUnitState* SourceState  = BattleStateRef ? BattleStateRef->FindUnitState(SourceCharacter) : nullptr;
+    const FBattleUnitState* TargetState  = BattleStateRef ? BattleStateRef->FindUnitState(TargetCharacter)  : nullptr;
+
+    if (!SourceState || !TargetState || !TargetState->IsAlive())
+    {
+        return false;
+    }
+
+    OutResult.bIsValid             = true;
+    OutResult.bRequiresMovement    = false;
+    OutResult.ActionPointsCost     = GetActionPointsCost();
+    OutResult.ResolvedAttackTarget = TargetCharacter;
+    OutResult.AffectedActors.Add(TargetCharacter);
+
+    if (AbilityDefinition)
+    {
+        OutResult.ExpectedDamage = FCombatFormulas::EstimateDamage(
+            *SourceState, *TargetState,
+            AbilityDefinition->DamageSource,
+            AbilityDefinition->DamageMultiplier,
+            AbilityDefinition->BaseHitChance,
+            AbilityDefinition->bCanMiss
+        );
+        OutResult.HitChance = FCombatFormulas::ComputeHitChance(
+            *SourceState, *TargetState,
+            AbilityDefinition->BaseHitChance,
+            AbilityDefinition->bCanMiss
+        );
+    }
+
+    return true;
 }
 
 void UGA_Attack_Ranged_LOS::ActivateAbility(
@@ -140,36 +159,32 @@ void UGA_Attack_Ranged_LOS::ActivateAbility(
 
 void UGA_Attack_Ranged_LOS::ApplyResolvedAttack()
 {
-	if (!CachedCharacter || !CachedTargetCharacter)
+	if (!CachedCharacter || !CachedTargetCharacter) { return; }
+
+	UBattleModeComponent* BattleMode     = CachedCharacter->GetBattleModeComponent();
+	UBattleState*         BattleStateRef = BattleMode ? BattleMode->GetBattleState() : nullptr;
+	const FBattleUnitState* SourceState  = BattleStateRef ? BattleStateRef->FindUnitState(CachedCharacter)       : nullptr;
+	const FBattleUnitState* TargetState  = BattleStateRef ? BattleStateRef->FindUnitState(CachedTargetCharacter) : nullptr;
+
+	if (!SourceState || !TargetState)
 	{
+		UE_LOG(LogNevergone, Error, TEXT("[GA_Attack_Ranged_LOS] BattleUnitState not found — damage not applied"));
 		return;
 	}
 
-	UUnitStatsComponent* SourceStats = CachedCharacter->GetUnitStats();
-	UUnitStatsComponent* TargetStats = CachedTargetCharacter->GetUnitStats();
+	const float FinalDamage = ResolveAttackDamage(*SourceState, *TargetState);
+	
+	PlayCastSFX(CachedCharacter);
+	PlayImpactSFX(CachedTargetCharacter);
 
-	if (!SourceStats || !TargetStats || !TargetStats->IsAlive())
+	UCombatEventBus* Bus = BattleMode ? BattleMode->GetCombatEventBus() : nullptr;
+	if (!Bus)
 	{
+		UE_LOG(LogNevergone, Error, TEXT("[GA_Attack_Ranged_LOS] CombatEventBus not found"));
 		return;
 	}
 
-	// Route through the event bus so BattleState, floating text,
-	// and all other listeners are notified in one place
-	UBattleModeComponent* BattleMode = CachedCharacter->GetBattleModeComponent();
-	if (UCombatEventBus* Bus = BattleMode ? BattleMode->GetCombatEventBus() : nullptr)
-	{
-		Bus->NotifyDamageApplied(
-			CachedCharacter,
-			CachedTargetCharacter,
-			SourceStats->GetRangedAttack() * BaseDamageMultiplier
-		);
-		return;
-	}
-
-	UE_LOG(LogTemp, Error,
-		TEXT("[GA_Attack_Ranged_LOS] CombatEventBus not found — damage not applied for %s"),
-		*CachedCharacter->GetName()
-	);
+	Bus->NotifyDamageApplied(CachedCharacter, CachedTargetCharacter, FinalDamage);
 }
 
 void UGA_Attack_Ranged_LOS::FinalizeAttackAction()
@@ -188,7 +203,10 @@ void UGA_Attack_Ranged_LOS::ApplyAbilityCompletionEffects()
 
 	if (UBattleModeComponent* BattleMode = CachedCharacter->GetBattleModeComponent())
 	{
-		BattleMode->ConsumeActionPoints(CachedActionPointsCost);
+		if (UBattleState* BattleStateRef = BattleMode->GetBattleState())
+		{
+			BattleStateRef->ConsumeActionPoints(CachedCharacter, CachedActionPointsCost);
+		}
 	}
 }
 

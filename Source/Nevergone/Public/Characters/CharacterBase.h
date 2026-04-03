@@ -127,6 +127,12 @@ private:
 
 	UPROPERTY(EditAnywhere, Category="Movement|Lerp")
 	float AcceptRadius = 5.0f;
+	
+	/**
+	 * Tracks how many floating text widgets are currently alive above this character.
+	 * Used to stagger each new widget upward so they do not overlap.
+	 */
+	int32 ActiveFloatingTextCount = 0;
 
 	// Advances movement toward current point
 	void TickPathMove(float DeltaSeconds);
