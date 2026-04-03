@@ -7,9 +7,14 @@
 #include "Types/AIBattleTypes.h"
 #include "BattleTeamAIPlanner.generated.h"
 
+// Fired when an AI action finishes and the planner is ready for the next step.
+// CombatManager listens to this to insert camera-wait logic before calling EvaluateNextAction.
+DECLARE_MULTICAST_DELEGATE(FOnAIActionFinished);
+
 class ACharacterBase;
 class UBattleAIActionExecutor;
 class UBattleAIQueryService;
+class UBattleState;
 
 UCLASS()
 class NEVERGONE_API UBattleTeamAIPlanner : public UObject
@@ -19,6 +24,12 @@ class NEVERGONE_API UBattleTeamAIPlanner : public UObject
 public:
 	void Initialize(TArray<AActor*>& AllCombatants);
 	void StartTeamTurn();
+	void SetBattleState(UBattleState* InBattleState);
+
+	// Called by CombatManager after it finishes its post-action work (camera wait, delay).
+	void ContinueAfterActionDelay();
+
+	FOnAIActionFinished OnAIActionFinished;
 	
 protected:
 	void EvaluateNextAction();

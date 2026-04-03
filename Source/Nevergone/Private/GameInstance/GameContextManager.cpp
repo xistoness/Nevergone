@@ -13,12 +13,23 @@
 #include "Level/FloorEncounterVolume.h"
 #include "Level/GridManager.h"
 #include "Party/PartyManagerSubsystem.h"
+#include "Types/LevelTypes.h"
 
 #include "Engine/World.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameMode/BattleResultsContext.h"
 #include "Kismet/GameplayStatics.h"
 
+
+void UGameContextManager::RequestInitialState(EGameContextState InitialState)
+{
+	UE_LOG(LogTemp, Log, TEXT("[GameContextManager] Entering initial state: %d"), (int32)InitialState);
+ 
+	// Bypass CanEnterState — at BeginPlay the world is not fully set up yet,
+	// and this is an explicit instruction from the floor's GameMode, not a
+	// runtime request that needs validation.
+	EnterState(InitialState);
+}
 
 void UGameContextManager::RequestExploration()
 {

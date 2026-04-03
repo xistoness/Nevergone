@@ -19,7 +19,7 @@
 #include "Debug/DebugDrawHelper.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
-#include "Widgets/FloatingCombatTextWidget.h"
+#include "Widgets/Combat/FloatingCombatTextWidget.h"
 
 
 ACharacterBase::ACharacterBase()
@@ -202,23 +202,49 @@ void ACharacterBase::MoveToLocation(const FVector& InLocation, const TArray<FVec
 
 void ACharacterBase::SpawnFloatingText(const FString& Text, EFloatingTextType Type, UTexture2D* Icon)
 {
-	APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
-	if (!PC || !FloatingTextClass)
-	{
-		return;
-	}
+    APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
+    if (!PC || !FloatingTextClass)
+    {
+        return;
+    }
 
-	UFloatingCombatTextWidget* Widget = CreateWidget<UFloatingCombatTextWidget>(PC, FloatingTextClass);
-	if (!Widget)
-	{
-		return;
-	}
+    UFloatingCombatTextWidget* Widget = CreateWidget<UFloatingCombatTextWidget>(PC, FloatingTextClass);
+    if (!Widget)
+    {
+        return;
+    }
 
-	// Add to the viewport before Init so Tick is already active
-	// when OnFloatingTextReady() triggers the animation in the Blueprint
-	Widget->AddToViewport();
-	Widget->SetAlignmentInViewport(FVector2D(0.5f, 1.f)); // anchor at the bottom-center of the text
-	Widget->InitFloatingText(GetActorLocation(), Text, Type, Icon);
+    // Use the top of the capsule as the world anchor so the widget projects
+    // near the character's head regardless of camera angle.
+    const UCapsuleComponent* Capsule = GetCapsuleComponent();
+    const float CapsuleHalfHeight    = Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 0.f;
+    const FVector HeadAnchor         = GetActorLocation() + FVector(0.f, 0.f, CapsuleHalfHeight);
+
+    // Each simultaneous widget is pushed upward by a fixed pixel step so they
+    // do not overlap. The counter is decremented when the widget destroys itself.
+    const float ScreenStaggerPx = 40.f;
+    const float ScreenYOffset   = ActiveFloatingTextCount * ScreenStaggerPx;
+    ActiveFloatingTextCount++;
+
+    UE_LOG(LogTemp, Verbose,
+        TEXT("[CharacterBase] SpawnFloatingText: actor=%s text='%s' slot=%d offset=%.1f"),
+        *GetName(), *Text, ActiveFloatingTextCount - 1, ScreenYOffset);
+
+    // Decrement the counter when this widget finishes its animation and destroys itself
+    Widget->OnDestroyed.BindLambda([this]()
+    {
+        ActiveFloatingTextCount = FMath::Max(0, ActiveFloatingTextCount - 1);
+
+        UE_LOG(LogTemp, Verbose,
+            TEXT("[CharacterBase] FloatingText destroyed on %s — active count: %d"),
+            *GetName(), ActiveFloatingTextCount);
+    });
+
+    // Add to the viewport before Init so Tick is already active
+    // when OnFloatingTextReady() triggers the animation in the Blueprint
+    Widget->AddToViewport();
+    Widget->SetAlignmentInViewport(FVector2D(0.5f, 1.f)); // anchor at the bottom-center of the text
+    Widget->InitFloatingText(HeadAnchor, Text, Type, ScreenYOffset, Icon);
 }
 
 void ACharacterBase::MoveAlongPath_Lerped(const TArray<FVector>& WorldPoints)

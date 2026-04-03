@@ -18,13 +18,12 @@ class NEVERGONE_API UBattleState : public UObject
 public:
 	/* ----- Lifecycle ----- */
 	void Initialize(UBattlePreparationContext& BattlePrepContext);
-	bool CanUnitAct(ACharacterBase* Unit) const;
-	bool IsUnitExhausted(ACharacterBase* Unit) const;
-	
-	
+	bool CanUnitAct(ACharacterBase* Unit);
+	bool IsUnitExhausted(ACharacterBase* Unit);
+
 	FBattleUnitState* FindUnitState(ACharacterBase* Unit);
 	const FBattleUnitState* FindUnitState(ACharacterBase* Unit) const;
-	
+
 	/* ----- Mutations ----- */
 	void ResetTurnStateForTeam(EBattleUnitTeam Team);
 
@@ -32,34 +31,37 @@ public:
 	void MarkUnitMoved(ACharacterBase* Unit);
 	void ConsumeActionPoints(ACharacterBase* Unit, int32 Amount);
 
-	/**
-	 * Syncs the combat-session HP mirror in FBattleUnitState.
-	 * Must only be called from UCombatEventBus::NotifyDamageApplied —
-	 * never directly from abilities. The authoritative HP value lives
-	 * in UUnitStatsComponent; this copy is used by AI queries and
-	 * BattleState::IsUnitExhausted without touching the actor.
-	 */
 	void ApplyDamage(ACharacterBase* Unit, float Amount);
-
-	/**
-	 * Syncs the combat-session HP mirror after a heal.
-	 * Same contract as ApplyDamage — route through UCombatEventBus.
-	 */
 	void ApplyHeal(ACharacterBase* Unit, float Amount);
-
 	void ApplyStatusTag(ACharacterBase* Unit, const FGameplayTag& StatusTag);
 	void ClearStatusTag(ACharacterBase* Unit, const FGameplayTag& StatusTag);
 
-	/* ----- Result ----- */
-	
-	void GenerateResult();
-	
-private:
-	/* ----- Internal storage ----- */
+	/**
+	 * Read-only access to all unit states.
+	 * Used by BattleHUDWidget to iterate combatants when spawning HP bars.
+	 */
+	const TArray<FBattleUnitState>& GetAllUnitStates() const { return UnitStates; }
 
+	/* ----- Result ----- */
+
+	/**
+	 * Writes battle outcome back to each unit's persistent state.
+	 * Must be called before actors are destroyed (i.e. before Cleanup).
+	 *
+	 * Currently persists:
+	 *   - HP: written to UnitStatsComponent::PersistentHP so it carries
+	 *     into the next exploration session. Dead units are written as 0.
+	 *
+	 * Future additions (XP, persistent debuffs) should be added here.
+	 */
+	void PersistToCombatants();
+
+	// Kept for compatibility — calls PersistToCombatants internally.
+	void GenerateResult();
+
+private:
 	UPROPERTY()
 	TArray<FBattleUnitState> UnitStates;
 
 	FBattleUnitState* ActiveTurnUnit = nullptr;
-	
 };

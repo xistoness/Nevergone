@@ -161,7 +161,7 @@ protected:
 	void SetInputLocked(bool bLocked);
 
 	// Save helpers
-	void AutoSaveBeforeTravel();
+	void AutoSaveBeforeTravel(UWorld* WorldToSave);
 	
 private:
 	UPROPERTY()

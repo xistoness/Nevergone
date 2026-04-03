@@ -11,20 +11,16 @@
 #include "GameMode/Combat/CombatEventBus.h"
 #include "Level/GridManager.h"
 #include "Nevergone.h"
+#include "GameMode/Combat/BattleState.h"
+#include "GameMode/Combat/CombatFormulas.h"
 #include "Types/BattleTypes.h"
 
 UGA_Attack_Melee::UGA_Attack_Melee()
 {
-	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
-
 	FGameplayTagContainer AssetTags;
 	AssetTags.AddTag(TAG_Ability_Attack_Melee);
 	SetAssetTags(AssetTags);
 
-	ActivationBlockedTags.AddTag(TAG_State_Stunned);
-
-	TargetPolicy.AddRule(MakeUnique<FactionRule>(EFactionType::Enemy));
-	
 	PreviewRendererClass = UPreview_Attack_Melee::StaticClass();
 }
 
@@ -50,6 +46,11 @@ FActionResult UGA_Attack_Melee::BuildExecution(const FActionContext& Context) co
 bool UGA_Attack_Melee::BuildAttackResult(const FActionContext& Context, FActionResult& OutResult) const
 {
 	OutResult = FActionResult();
+	
+	if (!HasSufficientAP(Context))
+	{
+		return false;
+	}
 
 	ACharacterBase* SourceCharacter = Cast<ACharacterBase>(Context.SourceActor);
 
@@ -83,22 +84,39 @@ bool UGA_Attack_Melee::BuildAttackResult(const FActionContext& Context, FActionR
 		return false;
 	}
 
-	UUnitStatsComponent* SourceStats = SourceCharacter->GetUnitStats();
-	UUnitStatsComponent* TargetStats = TargetCharacter->GetUnitStats();
+	UBattleModeComponent* BattleMode    = SourceCharacter->GetBattleModeComponent();
+	UBattleState*         BattleStateRef = BattleMode ? BattleMode->GetBattleState() : nullptr;
+	const FBattleUnitState* SourceState = BattleStateRef ? BattleStateRef->FindUnitState(SourceCharacter) : nullptr;
+	const FBattleUnitState* TargetState = BattleStateRef ? BattleStateRef->FindUnitState(TargetCharacter)  : nullptr;
 
-	if (!SourceStats || !TargetStats || !TargetStats->IsAlive())
+	// BattleUnitState is the authority — UnitStatsComponent is not consulted for alive check
+	if (!SourceState || !TargetState || !TargetState->IsAlive())
 	{
 		return false;
 	}
 
-	// Phase 1: only validate and lock the target
+	// Phase 1: validate target and compute preview stats
 	if (Context.SelectionPhase == EBattleActionSelectionPhase::SelectingTarget)
 	{
 		OutResult.bIsValid = true;
 		OutResult.ResolvedAttackTarget = TargetCharacter;
-		OutResult.ExpectedDamage = SourceStats->GetMeleeAttack();
-		OutResult.HitChance = 1.0f;
 		OutResult.AffectedActors.Add(TargetCharacter);
+
+		if (SourceState && TargetState && AbilityDefinition)
+		{
+			OutResult.ExpectedDamage = FCombatFormulas::EstimateDamage(
+				*SourceState, *TargetState,
+				AbilityDefinition->DamageSource,
+				AbilityDefinition->DamageMultiplier,
+				AbilityDefinition->BaseHitChance,
+				AbilityDefinition->bCanMiss
+			);
+			OutResult.HitChance = FCombatFormulas::ComputeHitChance(
+				*SourceState, *TargetState,
+				AbilityDefinition->BaseHitChance,
+				AbilityDefinition->bCanMiss
+			);
+		}
 		return true;
 	}
 
@@ -108,10 +126,11 @@ bool UGA_Attack_Melee::BuildAttackResult(const FActionContext& Context, FActionR
 		return false;
 	}
 
-	OutResult.ExpectedDamage = SourceStats->GetMeleeAttack();
-	OutResult.HitChance = 1.0f;
-	OutResult.ResolvedAttackTarget = TargetCharacter;
-	OutResult.AffectedActors.Add(TargetCharacter);
+	OutResult.ExpectedDamage = (SourceState && TargetState && AbilityDefinition)
+			? FCombatFormulas::EstimateDamage(*SourceState, *TargetState,
+				AbilityDefinition->DamageSource, AbilityDefinition->DamageMultiplier,
+				AbilityDefinition->BaseHitChance, AbilityDefinition->bCanMiss)
+			: 0.f;
 
 	return OutResult.bIsValid;
 }
@@ -155,7 +174,7 @@ bool UGA_Attack_Melee::TryBuildManualApproachResult(
 		OutResult.bRequiresMovement = false;
 		OutResult.MovementTargetGridCoord = Context.SourceGridCoord;
 		OutResult.MovementTargetWorldPosition = SourceCharacter->GetActorLocation();
-		OutResult.ActionPointsCost = BaseActionPointsCost;
+		OutResult.ActionPointsCost = GetActionPointsCost();
 		OutResult.ResolvedAttackTarget = TargetCharacter;
 		return true;
 	}
@@ -215,7 +234,7 @@ bool UGA_Attack_Melee::TryBuildManualApproachResult(
 	OutResult = MovementResult;
 	OutResult.bIsValid = true;
 	OutResult.bRequiresMovement = true;
-	OutResult.ActionPointsCost = FMath::Max(BaseActionPointsCost, MovementResult.ActionPointsCost);
+	OutResult.ActionPointsCost = FMath::Max(GetActionPointsCost(), MovementResult.ActionPointsCost);
 	OutResult.ResolvedAttackTarget = TargetCharacter;
 
 	return true;
@@ -301,8 +320,7 @@ bool UGA_Attack_Melee::TryBuildApproachResult(
 		{
 			continue;
 		}
-
-		const int32 TotalAPCost = FMath::Max(BaseActionPointsCost, MovementResult.ActionPointsCost);
+		const int32 TotalAPCost = FMath::Max(GetActionPointsCost(), MovementResult.ActionPointsCost);
 		const int32 PathLength = MovementResult.PathPoints.Num();
 
 		if (!bFoundAny
@@ -328,11 +346,7 @@ bool UGA_Attack_Melee::IsTargetValidForMelee(
 	ACharacterBase* TargetCharacter
 ) const
 {
-	if (!SourceCharacter || !TargetCharacter)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[Attack_Melee]: Invalid SourceCharacter or TargetCharacter"));
-		return false;
-	}
+	if (!SourceCharacter || !TargetCharacter) { return false; }
 
 	FActionContext ValidationContext{};
 	ValidationContext.SourceActor = SourceCharacter;
@@ -344,11 +358,17 @@ bool UGA_Attack_Melee::IsTargetValidForMelee(
 
 	if (Grid)
 	{
-		ValidationContext.SourceGridCoord = Grid->WorldToGrid(SourceCharacter->GetActorLocation());
+		ValidationContext.SourceGridCoord  = Grid->WorldToGrid(SourceCharacter->GetActorLocation());
 		ValidationContext.HoveredGridCoord = Grid->WorldToGrid(TargetCharacter->GetActorLocation());
 	}
 
-	return TargetPolicy.IsValid(ValidationContext);
+	// Build faction rule from AbilityDefinition — not hardcoded
+	CompositeTargetingPolicy LivePolicy;
+	LivePolicy.AddRule(MakeUnique<FactionRule>(
+		GetTargetFaction() == EAbilityTargetFaction::Ally ? EFactionType::Ally : EFactionType::Enemy
+	));
+
+	return LivePolicy.IsValid(ValidationContext);
 }
 
 bool UGA_Attack_Melee::IsAdjacent(const FIntPoint& Source, const FIntPoint& Target) const
@@ -358,7 +378,7 @@ bool UGA_Attack_Melee::IsAdjacent(const FIntPoint& Source, const FIntPoint& Targ
 		FMath::Abs(Source.Y - Target.Y)
 	);
 
-	return Distance <= MaxRange;
+	return Distance <= GetMaxRange();
 }
 
 TArray<FIntPoint> UGA_Attack_Melee::GetAdjacentCoords(const FIntPoint& Center) const
@@ -475,32 +495,35 @@ void UGA_Attack_Melee::HandleApproachMovementFinished()
 
 void UGA_Attack_Melee::ApplyResolvedAttack()
 {
-	if (!CachedCharacter || !CachedTargetCharacter)
+	if (!CachedCharacter || !CachedTargetCharacter) { return; }
+ 
+	UBattleModeComponent* BattleMode     = CachedCharacter->GetBattleModeComponent();
+	UBattleState*         BattleStateRef = BattleMode ? BattleMode->GetBattleState() : nullptr;
+	const FBattleUnitState* SourceState  = BattleStateRef ? BattleStateRef->FindUnitState(CachedCharacter)       : nullptr;
+	const FBattleUnitState* TargetState  = BattleStateRef ? BattleStateRef->FindUnitState(CachedTargetCharacter) : nullptr;
+ 
+	if (!SourceState || !TargetState)
 	{
+		UE_LOG(LogNevergone, Error,
+			TEXT("[GA_Attack_Melee] ApplyResolvedAttack: BattleUnitState not found — damage not applied"));
 		return;
 	}
-
-	UUnitStatsComponent* SourceStats = CachedCharacter->GetUnitStats();
-	UUnitStatsComponent* TargetStats = CachedTargetCharacter->GetUnitStats();
-
-	if (!SourceStats || !TargetStats || !TargetStats->IsAlive())
+ 
+	const float FinalDamage = ResolveAttackDamage(*SourceState, *TargetState);
+	
+	PlayCastSFX(CachedCharacter);
+	PlayImpactSFX(CachedTargetCharacter);
+ 
+	UCombatEventBus* Bus = BattleMode ? BattleMode->GetCombatEventBus() : nullptr;
+	if (!Bus)
 	{
+		UE_LOG(LogNevergone, Error, TEXT("[GA_Attack_Melee] CombatEventBus not found"));
 		return;
 	}
-
-	// Route through the event bus so BattleState, floating text,
-	// and all other listeners are notified in one place
-	UBattleModeComponent* BattleMode = CachedCharacter->GetBattleModeComponent();
-	if (UCombatEventBus* Bus = BattleMode ? BattleMode->GetCombatEventBus() : nullptr)
-	{
-		Bus->NotifyDamageApplied(CachedCharacter, CachedTargetCharacter, SourceStats->GetMeleeAttack());
-		return;
-	}
-
-	UE_LOG(LogTemp, Error,
-		TEXT("[GA_Attack_Melee] CombatEventBus not found — damage not applied for %s"),
-		*CachedCharacter->GetName()
-	);
+ 
+	// EventBus notifies consequences (HP mutation, death check, floating text)
+	// The SFX above play the *action* — EventBus DefaultHitSFX plays the *reaction*
+	Bus->NotifyDamageApplied(CachedCharacter, CachedTargetCharacter, FinalDamage);
 }
 
 void UGA_Attack_Melee::FinalizeAttackAction()
@@ -512,24 +535,29 @@ void UGA_Attack_Melee::ApplyAbilityCompletionEffects()
 {
 	Super::ApplyAbilityCompletionEffects();
 
-	if (!CachedCharacter)
-	{
-		return;
-	}
+	if (!CachedCharacter) { return; }
 
 	UBattleModeComponent* BattleMode = CachedCharacter->GetBattleModeComponent();
-	if (!BattleMode)
-	{
-		return;
-	}
+	if (!BattleMode) { return; }
 
 	if (bCachedRequiredMovement)
 	{
 		BattleMode->UpdateOccupancy(CachedFinalGridCoord);
 	}
 
-	BattleMode->ConsumeActionPoints(CachedActionPointsCost);
-	
+	if (UBattleState* BattleStateRef = BattleMode->GetBattleState())
+	{
+		BattleStateRef->ConsumeActionPoints(CachedCharacter, CachedActionPointsCost);
+	}
+
+	// Apply on-hit effects to the target (e.g. stun configured in AbilityDefinition)
+	if (CachedTargetCharacter)
+	{
+		ApplyOnHitStatusEffects(CachedCharacter, { CachedTargetCharacter });
+	}
+	ApplySelfStatusEffects(CachedCharacter);
+
+	TryStartCooldown(CachedCharacter);
 }
 
 void UGA_Attack_Melee::EndAbility(
