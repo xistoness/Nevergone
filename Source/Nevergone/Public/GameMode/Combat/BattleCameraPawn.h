@@ -80,6 +80,10 @@ public:
 	void ClearLockOnActor();
 	bool HasLockedActor() const;
 
+	// Returns true when the camera is close enough to its locked actor to be
+	// considered "arrived" — used by CombatManager to gate AI action sequencing.
+	bool IsNearLockedActor(float ToleranceSquared = 2500.f) const;
+
 	virtual void Input_CameraMove(const FVector2D& Input) override;
 	virtual void Input_CameraZoom(float Value) override;
 	virtual void Input_CameraRotate(float Value) override;

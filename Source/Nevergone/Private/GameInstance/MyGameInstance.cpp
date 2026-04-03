@@ -18,18 +18,42 @@
 void UMyGameInstance::Init()
 {
 	Super::Init();
-	
-	// Bind after-map-load callback for OpenLevel transitions
-	FCoreUObjectDelegates::PostLoadMapWithWorld.AddUObject(this, &UMyGameInstance::HandlePostLoadMapWithWorld);
-	
-	const FString SlotName = TEXT("MainSlot");
 
-	if (!LoadSaveSlot(SlotName))
+	FCoreUObjectDelegates::PostLoadMapWithWorld.AddUObject(this, &UMyGameInstance::HandlePostLoadMapWithWorld);
+
+	// On first boot, find the most recent slot and load it.
+	// If no slot exists yet, create a fresh one in slot 0.
+	bool bLoaded = false;
+	FDateTime MostRecentTime = FDateTime::MinValue();
+	FString MostRecentSlotName;
+
+	for (int32 i = 0; i < MaxSaveSlots; ++i)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("No save found, creating new one"));
-		CreateNewSave(SlotName);
+		const FString SlotName = GetSlotNameForIndex(i);
+		if (!UGameplayStatics::DoesSaveGameExist(SlotName, 0))
+			continue;
+
+		UMySaveGame* SlotSave = Cast<UMySaveGame>(UGameplayStatics::LoadGameFromSlot(SlotName, 0));
+		if (SlotSave && SlotSave->LastSavedAt > MostRecentTime)
+		{
+			MostRecentTime     = SlotSave->LastSavedAt;
+			MostRecentSlotName = SlotName;
+			bLoaded            = true;
+		}
 	}
-	
+
+	if (bLoaded)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[MyGameInstance] Init: loading most recent slot '%s'"), *MostRecentSlotName);
+		LoadSaveSlot(MostRecentSlotName);
+	}
+	else
+	{
+		const FString DefaultSlot = GetSlotNameForIndex(0);
+		UE_LOG(LogTemp, Warning, TEXT("[MyGameInstance] Init: no save found, creating new one in '%s'"), *DefaultSlot);
+		CreateNewSave(DefaultSlot);
+	}
+
 	GameContextManager = NewObject<UGameContextManager>(this);
 }
 
@@ -359,20 +383,20 @@ void UMyGameInstance::ClearActiveSave()
 bool UMyGameInstance::CreateNewSave(const FString& SlotName)
 {
 	UMySaveGame* NewSave =
-		Cast<UMySaveGame>(UGameplayStatics::CreateSaveGameObject(UMySaveGame::StaticClass()));
+	   Cast<UMySaveGame>(UGameplayStatics::CreateSaveGameObject(UMySaveGame::StaticClass()));
 
 	if (!NewSave)
 		return false;
 
 	ActiveSave = NewSave;
+	ActiveSlotName = SlotName; // Keep in sync
 
-	// Initial state
-	ActiveSave->SaveSlotName = SlotName;
-	ActiveSave->LastSavedAt   = FDateTime::UtcNow();  // ← adicione esta linha
+	ActiveSave->SaveSlotName    = SlotName;
+	ActiveSave->LastSavedAt     = FDateTime::UtcNow();
 	ActiveSave->PlaytimeSeconds = 0.f;
 	ActiveSave->SaveDisplayName = TEXT("New Game");
-	
-	PartyData = FPartyData();
+
+	PartyData       = FPartyData();
 	ProgressionData = FProgressionData();
 	GlobalFlags.Empty();
 
@@ -400,9 +424,12 @@ bool UMyGameInstance::LoadSaveSlot(const FString& SlotName)
 	if (!ActiveSave)
 		return false;
 
-	PartyData = ActiveSave->PartyData;
+	// Keep ActiveSlotName in sync so AutoSave always writes to the right slot
+	ActiveSlotName = SlotName;
+
+	PartyData       = ActiveSave->PartyData;
 	ProgressionData = ActiveSave->ProgressionData;
-	GlobalFlags = ActiveSave->GlobalFlags;
+	GlobalFlags     = ActiveSave->GlobalFlags;
 
 	OnSaveLoaded.Broadcast();
 	return true;
@@ -434,7 +461,10 @@ void UMyGameInstance::BeginLevelTransition()
 	ShowLoadingScreen();
 	SetInputLocked(true);
 
-	AutoSaveBeforeTravel();
+	// GetWorld() here is called from BeginLevelTransition, which is triggered
+	// by RequestLevelChange -> called from a portal actor, so the world is still
+	// valid and correct at this point. We capture it before OpenLevel tears it down.
+	AutoSaveBeforeTravel(GetWorld());
 }
 
 void UMyGameInstance::HandlePostLoadMapWithWorld(UWorld* LoadedWorld)
@@ -544,29 +574,32 @@ void UMyGameInstance::SetInputLocked(bool bLocked)
 	// PC->bShowMouseCursor = !bLocked;
 }
 
-void UMyGameInstance::AutoSaveBeforeTravel()
+void UMyGameInstance::AutoSaveBeforeTravel(UWorld* WorldToSave)
 {
 	if (!ActiveSave)
 	{
 		UE_LOG(LogTemp, Error, TEXT("[MyGameInstance] AutoSaveBeforeTravel: no ActiveSave — skipping"));
 		return;
 	}
-	
-	// Update timestamp before every save
+
+	if (!WorldToSave)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[MyGameInstance] AutoSaveBeforeTravel: WorldToSave is null — skipping"));
+		return;
+	}
+
 	ActiveSave->LastSavedAt = FDateTime::UtcNow();
 
-	// Call the subsystem directly instead of broadcasting — the broadcast can
-	// hit stale subsystems from other worlds when multiple worlds are active
-	UWorld* World = GetWorld();
-	UE_LOG(LogTemp, Warning, TEXT("[AutoSave] World: %s"), *GetNameSafe(World));
-	if (UWorldManagerSubsystem* WorldMgr = World->GetSubsystem<UWorldManagerSubsystem>())
+	UE_LOG(LogTemp, Warning, TEXT("[AutoSave] Collecting from world: %s"), *WorldToSave->GetName());
+
+	if (UWorldManagerSubsystem* WorldMgr = WorldToSave->GetSubsystem<UWorldManagerSubsystem>())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[AutoSave] Got subsystem, calling CollectWorldSaveData"));
 		WorldMgr->CollectWorldSaveData();
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[AutoSave] No WorldManagerSubsystem found!"));
+		UE_LOG(LogTemp, Warning, TEXT("[AutoSave] No WorldManagerSubsystem found in world '%s'!"), *WorldToSave->GetName());
 	}
 
 	CommitSave();
@@ -579,8 +612,8 @@ void UMyGameInstance::AutoSaveBeforeTravel()
 
 	if (bSuccess)
 	{
-		UE_LOG(LogTemp, Log, TEXT("[MyGameInstance] AutoSaveBeforeTravel: saved to slot '%s'"),
-			*ActiveSave->SaveSlotName);
+		UE_LOG(LogTemp, Log, TEXT("[MyGameInstance] AutoSaveBeforeTravel: saved to slot '%s' from world '%s'"),
+			*ActiveSave->SaveSlotName, *WorldToSave->GetName());
 	}
 	else
 	{

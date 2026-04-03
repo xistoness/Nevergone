@@ -14,16 +14,7 @@ class UGridManager;
 class AFloorEncounterVolume;
 class UBattleResultsContext;
 
-UENUM(BlueprintType)
-enum class EGameContextState : uint8
-{
-	None,
-	Exploration,
-	BattlePreparation,
-	Battle,
-	BattleResults,
-	Transition
-};
+enum class EGameContextState : uint8;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnGameContextChanged, EGameContextState);
 
@@ -34,6 +25,8 @@ class NEVERGONE_API UGameContextManager : public UGameInstanceSubsystem
 
 public:
 	/** State control */
+	
+	void RequestInitialState(EGameContextState InitialState);
 	void RequestExploration();
 	void RequestBattlePreparation(class AFloorEncounterVolume* EncounterSource);
 	void RequestBattleStart();

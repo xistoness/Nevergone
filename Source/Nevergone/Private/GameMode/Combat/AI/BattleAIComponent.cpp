@@ -7,6 +7,8 @@
 #include "Characters/CharacterBase.h"
 #include "Characters/Abilities/BattleGameplayAbility.h"
 #include "Characters/Abilities/BattleMovementAbility.h"
+#include "GameMode/Combat/BattleState.h"
+#include "GameMode/Combat/BattleUnitState.h"
 #include "GameMode/Combat/AI/BattleAICandidateScorer.h"
 #include "GameMode/Combat/AI/BattleAIBehaviorProfile.h"
 #include "GameMode/Combat/AI/BattleAIQueryService.h"
@@ -107,18 +109,17 @@ void UBattleAIComponent::GatherAbilityCandidates(const FTeamTurnContext& TurnCon
 
 	for (const FUnitAbilityEntry& Entry : BattleMode->GetGrantedBattleAbilities())
 	{
-		if (!Entry.AbilityClass || Entry.bIsMovementAbility)
-		{
+		if (!Entry.Definition || !Entry.Definition->AbilityClass || Entry.bIsMovementAbility)
 			continue;
-		}
 
-		const UBattleGameplayAbility* AbilityCDO = Entry.AbilityClass->GetDefaultObject<UBattleGameplayAbility>();
+		const UBattleGameplayAbility* AbilityCDO =
+			Entry.Definition->AbilityClass->GetDefaultObject<UBattleGameplayAbility>();
 		if (!AbilityCDO)
 		{
 			continue;
 		}
 
-		const TArray<ACharacterBase*> ValidTargets = QueryService->GetValidTargetsForAbility(OwnerCharacter, Entry.AbilityClass);
+		const TArray<ACharacterBase*> ValidTargets = QueryService->GetValidTargetsForAbility(OwnerCharacter, Entry.Definition->AbilityClass, Entry.Definition);
 		for (ACharacterBase* Target : ValidTargets)
 		{
 			if (!Target)
@@ -132,7 +133,8 @@ void UBattleAIComponent::GatherAbilityCandidates(const FTeamTurnContext& TurnCon
 				continue;
 			}
 
-			BaseContext.AbilityClass = Entry.AbilityClass;
+			BaseContext.AbilityClass = Entry.Definition->AbilityClass;
+			BaseContext.AbilityDefinition = Entry.Definition;
 			BaseContext.TargetActor = Target;
 			BaseContext.HoveredGridCoord = Grid->WorldToGrid(Target->GetActorLocation());
 			BaseContext.HoveredWorldPosition = Grid->GridToWorld(BaseContext.HoveredGridCoord);
@@ -276,25 +278,38 @@ void UBattleAIComponent::GatherEndTurnCandidate(const FTeamTurnContext& TurnCont
 
 bool UBattleAIComponent::BuildBaseContext(FActionContext& OutContext) const
 {
-	const ACharacterBase* OwnerCharacter = Cast<ACharacterBase>(GetOwner());
+	ACharacterBase* OwnerCharacter = Cast<ACharacterBase>(GetOwner());
 	if (!OwnerCharacter || !OwnerCharacter->GetWorld())
 	{
 		return false;
 	}
 
 	UGridManager* Grid = OwnerCharacter->GetWorld()->GetSubsystem<UGridManager>();
-	const UUnitStatsComponent* Stats = OwnerCharacter->GetUnitStats();
-	if (!Grid || !Stats)
+	if (!Grid)
 	{
 		return false;
 	}
 
+	UBattleModeComponent* BattleMode     = OwnerCharacter->GetBattleModeComponent();
+	UBattleState*         BattleStateLocal = BattleMode ? BattleMode->GetBattleState() : nullptr;
+	const FBattleUnitState* UnitState     = BattleStateLocal
+		? BattleStateLocal->FindUnitState(OwnerCharacter)
+		: nullptr;
+
+	if (!UnitState)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[BattleAIComponent] BuildBaseContext: BattleUnitState not found for %s"),
+			*GetNameSafe(OwnerCharacter));
+		return false;
+	}
+
 	OutContext = FActionContext();
-	OutContext.SourceActor = const_cast<ACharacterBase*>(OwnerCharacter);
+	OutContext.SourceActor         = OwnerCharacter;
 	OutContext.SourceWorldPosition = OwnerCharacter->GetActorLocation();
-	OutContext.SourceGridCoord = Grid->WorldToGrid(OwnerCharacter->GetActorLocation());
-	OutContext.TraversalParams = Stats->GetTraversalParams();
-	OutContext.SelectionPhase = EBattleActionSelectionPhase::SelectingTarget;
+	OutContext.SourceGridCoord     = Grid->WorldToGrid(OwnerCharacter->GetActorLocation());
+	OutContext.TraversalParams     = UnitState->TraversalParams;
+	OutContext.SelectionPhase      = EBattleActionSelectionPhase::SelectingTarget;
 
 	return true;
 }
@@ -308,18 +323,16 @@ bool UBattleAIComponent::BuildEvalContext(const FTeamTurnContext& TurnContext, F
 	}
 
 	UGridManager* Grid = OwnerCharacter->GetWorld()->GetSubsystem<UGridManager>();
-	UUnitStatsComponent* Stats = OwnerCharacter->GetUnitStats();
-	if (!Grid || !Stats)
+	if (!Grid)
 	{
 		return false;
 	}
 
 	OutContext = FAICandidateEvalContext();
-	OutContext.ActingUnit = OwnerCharacter;
-	OutContext.TurnContext = &TurnContext;
+	OutContext.ActingUnit   = OwnerCharacter;
+	OutContext.TurnContext  = &TurnContext;
 	OutContext.QueryService = QueryService;
-	OutContext.Grid = Grid;
-	OutContext.ActingStats = Stats;
+	OutContext.Grid         = Grid;
 
 	for (AActor* Combatant : TurnContext.AllCombatants)
 	{
@@ -356,8 +369,19 @@ void UBattleAIComponent::AddCandidateIfValid(const FActionContext& Context, cons
 	}
 
 	const ACharacterBase* OwnerCharacter = Cast<ACharacterBase>(GetOwner());
-	const UUnitStatsComponent* Stats = OwnerCharacter ? OwnerCharacter->GetUnitStats() : nullptr;
-	if (!Stats || ExecutionResult.ActionPointsCost > Stats->GetCurrentActionPoints())
+	if (!OwnerCharacter)
+	{
+		return;
+	}
+
+	// AP check reads from BattleUnitState — the authority during combat
+	UBattleModeComponent* BattleMode      = OwnerCharacter->GetBattleModeComponent();
+	UBattleState*         BattleStateLocal = BattleMode ? BattleMode->GetBattleState() : nullptr;
+	const FBattleUnitState* UnitState     = BattleStateLocal
+		? BattleStateLocal->FindUnitState(const_cast<ACharacterBase*>(OwnerCharacter))
+		: nullptr;
+
+	if (!UnitState || ExecutionResult.ActionPointsCost > UnitState->CurrentActionPoints)
 	{
 		return;
 	}
@@ -365,15 +389,19 @@ void UBattleAIComponent::AddCandidateIfValid(const FActionContext& Context, cons
 	FTeamCandidateAction Candidate;
 	Candidate.ActingUnit = const_cast<ACharacterBase*>(OwnerCharacter);
 	Candidate.AbilityClass = Context.AbilityClass;
+	Candidate.AbilityDefinition = Context.AbilityDefinition;
 	Candidate.ExpectedAPCost = ExecutionResult.ActionPointsCost;
 	Candidate.ExpectedDamage = ExecutionResult.ExpectedDamage;
 	Candidate.Targeting.TargetActor = Cast<ACharacterBase>(
 		ExecutionResult.ResolvedAttackTarget ? ExecutionResult.ResolvedAttackTarget : Context.TargetActor);
 	Candidate.Targeting.bHasActorTarget = Candidate.Targeting.TargetActor != nullptr;
-	Candidate.Targeting.TargetTile = ExecutionResult.MovementTargetGridCoord;
-	Candidate.Targeting.bHasTileTarget =
-		ExecutionResult.MovementTargetGridCoord != FIntPoint::ZeroValue ||
-		Context.HoveredGridCoord != FIntPoint::ZeroValue;
+
+	// TargetTile and bHasTileTarget are only meaningful for movement or approach-tile phases.
+	// Direct-target abilities (ranged, AoE, single-confirm) resolve via TargetActor only —
+	// setting bHasTileTarget=true here would cause the executor to enter the approach-tile branch
+	// and overwrite HoveredGridCoord with (0,0), breaking RangeRule validation on execution.
+	Candidate.Targeting.TargetTile = FIntPoint::ZeroValue;
+	Candidate.Targeting.bHasTileTarget = false;
 
 	if (Context.AbilityClass->IsChildOf(UBattleMovementAbility::StaticClass()))
 	{
@@ -386,6 +414,8 @@ void UBattleAIComponent::AddCandidateIfValid(const FActionContext& Context, cons
 	{
 		Candidate.ActionType = ETeamAIActionType::UseAbility;
 
+		// Only set a TargetTile when we have an explicit approach tile chosen by the AI.
+		// For SelectingTarget phase (ranged, AoE, single-confirm), TargetActor is sufficient.
 		if (Context.SelectionPhase == EBattleActionSelectionPhase::SelectingApproachTile)
 		{
 			Candidate.Targeting.TargetTile = Context.SelectedApproachGridCoord;

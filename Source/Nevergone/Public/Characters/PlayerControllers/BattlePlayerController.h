@@ -13,6 +13,8 @@ class UBattleInputManager;
 class UGridManager;
 class UInputMappingContext;
 class UInputAction;
+class UActionHotbar;
+class UBattleHUDWidget;
 
 UCLASS()
 class NEVERGONE_API ABattlePlayerController : public ANevergonePlayerController
@@ -121,4 +123,39 @@ private:
 	TSubclassOf<ABattleCameraPawn> BattleCameraPawnClass;
 
 	void SpawnAndPossessBattleCamera();
+
+
+	// -----------------------------------------------------------------------
+	// Battle HUD
+	// -----------------------------------------------------------------------
+
+	/**
+	 * Class to instantiate for the action hotbar.
+	 * Set this to WBP_ActionHotbar in the Blueprint subclass of CombatManager's
+	 * owning GameMode or in a data asset — whichever pattern you use to configure
+	 * the manager. If you keep CombatManager as a plain UObject (no Blueprint
+	 * subclass), expose this via the GameMode or GameInstance instead and pass
+	 * it in before calling StartCombat.
+	 */
+	
+	void CreateAndInitializeHotbar();
+	void DestroyHotbar();
+
+	void CreateAndInitializeHUD();
+	void DestroyHUD();
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Battle|HUD")
+	TSubclassOf<UActionHotbar> ActionHotbarClass;
+
+	/** Widget class for the master battle HUD (HP bars, turn indicator, results). */
+	UPROPERTY(EditDefaultsOnly, Category = "Battle|HUD")
+	TSubclassOf<UBattleHUDWidget> BattleHUDClass;
+
+	/** Live hotbar widget instance. Owned by the viewport for its lifetime. */
+	UPROPERTY()
+	TObjectPtr<UActionHotbar> ActionHotbar;
+
+	/** Live battle HUD instance. */
+	UPROPERTY()
+	TObjectPtr<UBattleHUDWidget> BattleHUD;
 };

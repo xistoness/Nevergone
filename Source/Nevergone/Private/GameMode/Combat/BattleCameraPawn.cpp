@@ -139,6 +139,13 @@ bool ABattleCameraPawn::HasLockedActor() const
 	return LockedActor != nullptr;
 }
 
+bool ABattleCameraPawn::IsNearLockedActor(float ToleranceSquared) const
+{
+	if (!LockedActor) { return true; }
+	const FVector Desired = LockedActor->GetActorLocation() + LockOffset;
+	return FVector::DistSquared(GetActorLocation(), Desired) <= ToleranceSquared;
+}
+
 void ABattleCameraPawn::EnableCameraInput()
 {
 	bCameraInputEnabled = true;

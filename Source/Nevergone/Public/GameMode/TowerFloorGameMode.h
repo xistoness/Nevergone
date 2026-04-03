@@ -4,9 +4,11 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
+#include "Types/LevelTypes.h"
 #include "TowerFloorGameMode.generated.h"
 
 class ACharacterBase;
+class USoundBase;
 
 UENUM(BlueprintType)
 enum class EFloorCombatPolicy : uint8
@@ -39,6 +41,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Floor Rules")
 	EFloorCombatPolicy CombatPolicy = EFloorCombatPolicy::MultipleCombats;
 	
+	/** The game context state this floor starts in when loaded. */
+	UPROPERTY(EditDefaultsOnly, Category = "Floor Rules")
+	EGameContextState InitialContextState = EGameContextState::Exploration;
+	
 	UPROPERTY(EditDefaultsOnly, Category = "Controllers")
 	TSubclassOf<APlayerController> ExplorationControllerClass;
 
@@ -53,7 +59,27 @@ protected:
 	
 	//Debug
 	UPROPERTY(EditDefaultsOnly, Category="Debug|Party")
-	TSubclassOf<ACharacterBase> TestCharClass;
+	TArray<TSubclassOf<ACharacterBase>> TestCharClass;
+	
+	// -----------------------------------------------------------------------
+	// Audio — music assets for this specific floor.
+	// Each floor Blueprint sets its own tracks here.
+	// -----------------------------------------------------------------------
+ 
+	/** Music that plays during exploration on this floor. Null = silence. */
+	UPROPERTY(EditDefaultsOnly, Category = "Audio")
+	TObjectPtr<USoundBase> ExplorationMusic;
+ 
+	/** Music that plays during battle on this floor. Null = silence. */
+	UPROPERTY(EditDefaultsOnly, Category = "Audio")
+	TObjectPtr<USoundBase> BattleMusic;
+ 
+	/**
+	 * Music that plays when the player is in danger (low HP, boss phase).
+	 * Optional — leave null to stay on BattleMusic throughout.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Audio")
+	TObjectPtr<USoundBase> BattleIntenseMusic;
 
 protected:
 	virtual void BeginPlay() override;

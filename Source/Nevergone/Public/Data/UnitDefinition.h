@@ -5,47 +5,64 @@
 #include "CoreMinimal.h"
 #include "Types/BattleTypes.h"
 #include "Types/CharacterTypes.h"
-
 #include "Engine/DataAsset.h"
 #include "UnitDefinition.generated.h"
-
 
 UCLASS()
 class NEVERGONE_API UUnitDefinition : public UPrimaryDataAsset
 {
-	GENERATED_BODY()
-	
+    GENERATED_BODY()
+
 public:
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-	FText DisplayName;
+    // --- Identity ---
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+    FText DisplayName;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-	int32 MaxLevel;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+    int32 MaxLevel = 30;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-	float BaseHP;
+    // --- HP growth ---
+    // Flat HP gained per level regardless of attributes.
+    // MaxHP = (HPPerLevel * Level) + (Constitution * 5)
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Growth", meta = (ClampMin = "0"))
+    float HPPerLevel = 10.f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-	float HPPerLevel;
+    // --- Concrete stat growth per level ---
+    // These represent the unit's class identity (a warrior grows PhysAtk faster than MagPwr).
+    // Player attribute investment is added on top via the attribute formulas.
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-	float BaseSpeed;
-	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-	float BaseMeleeAttack;
-	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-	float BaseRangedAttack;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Growth", meta = (ClampMin = "0"))
+    float PhysAttkPerLevel = 0.f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-	float BaseActionPoints;
-	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-	TSubclassOf<AActor> UnitClass;
-	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-	FGridTraversalParams TraversalParams;
-	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Battle")
-	TArray<FUnitAbilityEntry> BattleAbilities;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Growth", meta = (ClampMin = "0"))
+    float RangedAttkPerLevel = 0.f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Growth", meta = (ClampMin = "0"))
+    float MagPwrPerLevel = 0.f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Growth", meta = (ClampMin = "0"))
+    float PhysDefPerLevel = 0.f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Growth", meta = (ClampMin = "0"))
+    float MagDefPerLevel = 0.f;
+
+    // --- Flat base values (not level-scaled) ---
+
+    // Base action points before Technique contribution.
+    // ActionPoints = BaseActionPoints + (Technique / 5)
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Base", meta = (ClampMin = "1"))
+    int32 BaseActionPoints = 2;
+
+    // Base movement range before Speed contribution.
+    // MovementRange = BaseMoveRange + Speed
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Base", meta = (ClampMin = "1"))
+    int32 BaseMoveRange = 3;
+
+    // --- Grid traversal ---
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+    FGridTraversalParams TraversalParams;
+
+    // --- Abilities ---
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Battle")
+    TArray<FUnitAbilityEntry> BattleAbilities;
 };

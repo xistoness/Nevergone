@@ -5,6 +5,17 @@
 #include "CoreMinimal.h"
 #include "LevelTypes.generated.h"
 
+UENUM(BlueprintType)
+enum class EGameContextState : uint8
+{
+	None,
+	Exploration,
+	BattlePreparation,
+	Battle,
+	BattleResults,
+	Transition
+};
+
 struct FGridTile
 {
 	FIntPoint GridCoord;      // (X, Y)
