@@ -2,10 +2,14 @@
 
 #include "GameMode/Combat/CombatEventBus.h"
 
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/World.h"
+#include "TimerManager.h"
+
 #include "ActorComponents/UnitStatsComponent.h"
 #include "Characters/CharacterBase.h"
 #include "GameMode/Combat/BattleState.h"
-#include "Widgets/FloatingCombatTextWidget.h"
+#include "Widgets/Combat/FloatingCombatTextWidget.h"
 
 void UCombatEventBus::Initialize(UBattleState* InBattleState)
 {
@@ -37,6 +41,10 @@ void UCombatEventBus::NotifyDamageApplied(
 	{
 		BattleState->ApplyDamage(Target, ClampedAmount);
 	}
+
+	// Trigger a brief red flash on the target mesh to give visual feedback for the hit.
+	// This works without animations by temporarily overriding the emissive parameter.
+	FlashHitEffect(Target);
 
 	// Trigger floating combat text on the target character
 	Target->SpawnFloatingText(
@@ -122,4 +130,54 @@ void UCombatEventBus::NotifyStatusCleared(
 	}
 
 	OnStatusCleared.Broadcast(Target, StatusTag);
+}
+// ---------------------------------------------------------------------------
+// Hit flash — brief red emissive pulse on the target mesh
+// ---------------------------------------------------------------------------
+
+void UCombatEventBus::FlashHitEffect(ACharacterBase* Target)
+{
+	if (!IsValid(Target))
+	{
+		return;
+	}
+
+	USkeletalMeshComponent* Mesh = Target->GetMesh();
+	if (!Mesh)
+	{
+		return;
+	}
+
+	// Apply red emissive tint — the parameter name must match the material.
+	// "EmissiveColor" is the convention used in the project's character materials.
+	// If your materials use a different name, update HitFlashParamName in the header.
+	Mesh->SetVectorParameterValueOnMaterials(HitFlashParamName, FVector(HitFlashColor));
+
+	UWorld* World = Target->GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	// Schedule reset after flash duration — captured by value so the lambda is safe
+	// even if Target is destroyed before the timer fires (IsValid guard inside)
+	TWeakObjectPtr<ACharacterBase> WeakTarget(Target);
+	const FName ParamName  = HitFlashParamName;
+	const float Duration   = HitFlashDurationSeconds;
+
+	FTimerHandle Handle;
+	World->GetTimerManager().SetTimer(Handle, [WeakTarget, ParamName]()
+	{
+		if (!WeakTarget.IsValid())
+		{
+			return;
+		}
+
+		USkeletalMeshComponent* TargetMesh = WeakTarget->GetMesh();
+		if (TargetMesh)
+		{
+			// Reset to black (no emissive) — restores the material to its base state
+			TargetMesh->SetVectorParameterValueOnMaterials(ParamName, FVector::ZeroVector);
+		}
+	}, Duration, false);
 }

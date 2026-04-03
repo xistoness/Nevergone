@@ -45,13 +45,6 @@ protected:
 	void HandleApproachMovementFinished();
 
 protected:
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack")
-	int32 MaxRange = 1;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack")
-	int32 BaseActionPointsCost = 1;
-
-protected:
 	UPROPERTY()
 	ACharacterBase* CachedCharacter = nullptr;
 
@@ -98,7 +91,5 @@ private:
 
 	void ApplyResolvedAttack();
 	void FinalizeAttackAction();
-
-private:
-	CompositeTargetingPolicy TargetPolicy;
+	
 };

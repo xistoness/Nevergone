@@ -9,6 +9,8 @@
 #include "GameMode/Combat/BattleInputManager.h"
 #include "GameMode/Combat/BattleCameraPawn.h"
 #include "Level/GridManager.h"
+#include "Widgets/Combat/ActionHotbar.h"
+#include "Widgets/Combat/BattleHUDWidget.h"
 
 void ABattlePlayerController::BeginPlay()
 {
@@ -84,6 +86,8 @@ void ABattlePlayerController::EnterBattleMode(UCombatManager* InCombatManager)
 	}
 	
 	SpawnPreviewActors();
+	CreateAndInitializeHotbar();
+	CreateAndInitializeHUD();
 }
 
 void ABattlePlayerController::SetupInputComponent()
@@ -137,6 +141,8 @@ void ABattlePlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		PreviewBlockedActor->Destroy();
 		PreviewBlockedActor = nullptr;
 	}
+	DestroyHotbar();
+	DestroyHUD();
 }
 
 /* ---------- Input forwarding ---------- */
@@ -327,4 +333,91 @@ void ABattlePlayerController::SpawnAndPossessBattleCamera()
 		Possess(BattleCameraPawn);
 		UE_LOG(LogTemp, Log, TEXT("[BattlePlayerController] Possessed Battle Camera Pawn!"));
 	}
+}
+
+void ABattlePlayerController::CreateAndInitializeHotbar()
+{
+	if (!ActionHotbarClass)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[BattlePlayerController] CreateAndInitializeHotbar: ActionHotbarClass is not set — "
+				 "assign WBP_ActionHotbar to the CombatManager Blueprint subclass."));
+		return;
+	}
+ 
+	// CreateWidget requires a valid PlayerController as owner so UMG can
+	// attach the widget to the correct local player and manage its lifetime.
+	ActionHotbar = CreateWidget<UActionHotbar>(this, ActionHotbarClass);
+	if (!ActionHotbar)
+	{
+		UE_LOG(LogTemp, Error,
+			TEXT("[BattlePlayerController] CreateAndInitializeHotbar: CreateWidget failed."));
+		return;
+	}
+	
+	if (!CombatManager) {return; }
+ 
+	ActionHotbar->AddToViewport();
+	ActionHotbar->InitializeWithCombatManager(CombatManager);
+ 
+	UE_LOG(LogTemp, Log,
+		TEXT("[BattlePlayerController] CreateAndInitializeHotbar: ActionHotbar created and bound."));
+}
+ 
+void ABattlePlayerController::DestroyHotbar()
+{
+	if (!ActionHotbar)
+	{
+		return;
+	}
+ 
+	// ClearHotbar unbinds all delegates before the widget is removed,
+	// preventing callbacks from firing on a partially torn-down object.
+	ActionHotbar->ClearHotbar();
+	ActionHotbar->RemoveFromParent();
+	ActionHotbar = nullptr;
+ 
+	UE_LOG(LogTemp, Log, TEXT("[CombatManager] DestroyHotbar: ActionHotbar removed."));
+}
+void ABattlePlayerController::CreateAndInitializeHUD()
+{
+	if (!BattleHUDClass)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[BattlePlayerController] CreateAndInitializeHUD: BattleHUDClass not set — assign WBP_BattleHUD in the Blueprint subclass."));
+		return;
+	}
+
+	if (!CombatManager)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[BattlePlayerController] CreateAndInitializeHUD: CombatManager is null"));
+		return;
+	}
+
+	BattleHUD = CreateWidget<UBattleHUDWidget>(this, BattleHUDClass);
+	if (!BattleHUD)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[BattlePlayerController] CreateAndInitializeHUD: CreateWidget failed"));
+		return;
+	}
+
+	// Add to viewport before initializing so NativeTick is active when HP bars are placed
+	BattleHUD->AddToViewport(5);
+	BattleHUD->InitializeWithCombatManager(CombatManager);
+
+	UE_LOG(LogTemp, Log, TEXT("[BattlePlayerController] BattleHUD created and initialized."));
+}
+
+void ABattlePlayerController::DestroyHUD()
+{
+	if (!BattleHUD)
+	{
+		return;
+	}
+
+	BattleHUD->Deinitialize();
+	BattleHUD->RemoveFromParent();
+	BattleHUD = nullptr;
+
+	UE_LOG(LogTemp, Log, TEXT("[BattlePlayerController] BattleHUD destroyed."));
 }

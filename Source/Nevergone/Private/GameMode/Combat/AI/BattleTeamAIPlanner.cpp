@@ -9,6 +9,7 @@
 #include "Level/GridManager.h"
 #include "ActorComponents/UnitStatsComponent.h"
 #include "Characters/CharacterBase.h"
+#include "GameMode/Combat/BattleState.h"
 
 void UBattleTeamAIPlanner::Initialize(TArray<AActor*>& AllCombatants)
 {
@@ -61,6 +62,14 @@ void UBattleTeamAIPlanner::StartTeamTurn()
 
 	TurnContext = FTeamTurnContext();
 	EvaluateNextAction();
+}
+
+void UBattleTeamAIPlanner::SetBattleState(UBattleState* InBattleState)
+{
+	if (QueryService)
+	{
+		QueryService->SetBattleState(InBattleState);
+	}
 }
 
 void UBattleTeamAIPlanner::Debug_LogCandidates(TArray<FTeamCandidateAction> Candidates)
@@ -146,6 +155,14 @@ void UBattleTeamAIPlanner::OnActionExecutionFinished(bool bSuccess)
 		return;
 	}
 
+	// Notify CombatManager so it can wait for camera and apply any post-action delay
+	// before we evaluate the next action. CombatManager calls ContinueAfterActionDelay()
+	// when it's ready.
+	OnAIActionFinished.Broadcast();
+}
+
+void UBattleTeamAIPlanner::ContinueAfterActionDelay()
+{
 	EvaluateNextAction();
 }
 
@@ -195,26 +212,28 @@ void UBattleTeamAIPlanner::UpdateFocusTarget()
 	TurnContext.FocusTarget = nullptr;
 	float LowestHP = TNumericLimits<float>::Max();
 
+	UBattleState* BattleStateRef = QueryService ? QueryService->GetBattleState() : nullptr;
+
 	for (ACharacterBase* EnemyUnit : TurnContext.EnemyUnits)
 	{
-		if (!EnemyUnit)
-		{
-			continue;
-		}
+		if (!EnemyUnit) { continue; }
 
-		const UUnitStatsComponent* Stats = EnemyUnit->GetUnitStats();
-		if (!Stats || !Stats->IsAlive())
+		// Read HP from BattleUnitState — it is the authority during combat
+		if (BattleStateRef)
 		{
-			continue;
-		}
+			const FBattleUnitState* State = BattleStateRef->FindUnitState(EnemyUnit);
+			if (!State || !State->IsAlive()) { continue; }
 
-		if (Stats->GetCurrentHP() < LowestHP)
-		{
-			LowestHP = Stats->GetCurrentHP();
-			TurnContext.FocusTarget = EnemyUnit;
+			if (State->CurrentHP < LowestHP)
+			{
+				LowestHP = State->CurrentHP;
+				TurnContext.FocusTarget = EnemyUnit;
+			}
 		}
 	}
 }
+
+
 
 void UBattleTeamAIPlanner::GatherCandidateActions(TArray<FTeamCandidateAction>& OutCandidates)
 {
@@ -291,13 +310,20 @@ void UBattleTeamAIPlanner::ClearInvalidReservations()
 		}
 	}
 
+	UBattleState* BattleStateRef = QueryService ? QueryService->GetBattleState() : nullptr;
+
 	for (auto It = TurnContext.ReservedDamageByTarget.CreateIterator(); It; ++It)
 	{
 		ACharacterBase* Target = It.Key();
-		if (!Target || !Target->GetUnitStats() || !Target->GetUnitStats()->IsAlive())
-		{
-			It.RemoveCurrent();
-		}
+
+		const bool bDead = !Target
+			|| !BattleStateRef
+			|| [&]() {
+				const FBattleUnitState* S = BattleStateRef->FindUnitState(Target);
+				return !S || !S->IsAlive();
+		}();
+
+		if (bDead) { It.RemoveCurrent(); }
 	}
 
 }

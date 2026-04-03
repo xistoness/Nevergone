@@ -9,163 +9,193 @@
 
 UUnitStatsComponent::UUnitStatsComponent()
 {
-	PrimaryComponentTick.bCanEverTick = true;
+    PrimaryComponentTick.bCanEverTick = true;
 }
 
 void UUnitStatsComponent::InitializeForBattle()
 {
-	// Safety: initialize HP on first spawn
-	if (PersistentHP <= 0.f && Definition)
-	{
-		PersistentHP = GetMaxHP();
-	}
+    // Ensure HP is initialized on first spawn
+    if (PersistentHP <= 0.f && Definition)
+    {
+        PersistentHP = GetMaxHP();
+    }
 }
 
 void UUnitStatsComponent::BeginPlay()
 {
-	Super::BeginPlay();
+    Super::BeginPlay();
 }
 
 void UUnitStatsComponent::TickComponent(
-	float DeltaTime,
-	ELevelTick TickType,
-	FActorComponentTickFunction* ThisTickFunction)
+    float DeltaTime,
+    ELevelTick TickType,
+    FActorComponentTickFunction* ThisTickFunction)
 {
-	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+    Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	// Passive regen and other time-based combat effects should be driven
-	// by the CombatManager or a dedicated StatusEffectComponent so that
-	// they can properly go through the CombatEventBus (floating text,
-	// BattleState sync, death checks). Do not add HP mutations here.
+    // Passive regen and time-based effects must go through CombatEventBus.
+    // Do not mutate HP here.
 }
+
+// ---------------------------------------------------------------------------
+// Save / Load
+// ---------------------------------------------------------------------------
 
 void UUnitStatsComponent::WriteSaveData_Implementation(FActorSaveData& OutData) const
 {
-	FSavePayload Payload;
+    FSavePayload Payload;
+    FMemoryWriter Writer(Payload.Data, true);
+    FArchive& Ar = Writer;
 
-	FMemoryWriter Writer(Payload.Data, true);
-	FArchive& Ar = Writer;
+    // Persist level, HP, and all 8 base attributes
+    int32 TempLevel = Level;
+    float TempHP = PersistentHP;
+    FUnitAttributes TempAttrs = Attributes;
 
-	int32 TempLevel = Level;
-	float TempPersistentHP = PersistentHP;
+    Ar << TempLevel;
+    Ar << TempHP;
+    Ar << TempAttrs.Constitution;
+    Ar << TempAttrs.Strength;
+    Ar << TempAttrs.Dexterity;
+    Ar << TempAttrs.Knowledge;
+    Ar << TempAttrs.Focus;
+    Ar << TempAttrs.Technique;
+    Ar << TempAttrs.Evasiveness;
+    Ar << TempAttrs.Speed;
 
-	Ar << TempLevel;
-	Ar << TempPersistentHP;
-
-	OutData.CustomDataMap.Add(SaveKeys::UnitStats, MoveTemp(Payload));
+    OutData.CustomDataMap.Add(SaveKeys::UnitStats, MoveTemp(Payload));
 }
 
 void UUnitStatsComponent::ReadSaveData_Implementation(const FActorSaveData& InData)
 {
-	const FSavePayload* Payload = InData.CustomDataMap.Find(SaveKeys::UnitStats);
-	if (!Payload)
-	{
-		return;
-	}
+    const FSavePayload* Payload = InData.CustomDataMap.Find(SaveKeys::UnitStats);
+    if (!Payload)
+    {
+        return;
+    }
 
-	FMemoryReader Reader(Payload->Data, true);
-	FArchive& Ar = Reader;
+    FMemoryReader Reader(Payload->Data, true);
+    FArchive& Ar = Reader;
 
-	Ar << Level;
-	Ar << PersistentHP;
+    Ar << Level;
+    Ar << PersistentHP;
+    Ar << Attributes.Constitution;
+    Ar << Attributes.Strength;
+    Ar << Attributes.Dexterity;
+    Ar << Attributes.Knowledge;
+    Ar << Attributes.Focus;
+    Ar << Attributes.Technique;
+    Ar << Attributes.Evasiveness;
+    Ar << Attributes.Speed;
 }
+
+// ---------------------------------------------------------------------------
+// Concrete stat getters — use these to populate BattleUnitState at battle start.
+// During combat, always read from BattleUnitState instead.
+// ---------------------------------------------------------------------------
 
 float UUnitStatsComponent::GetMaxHP() const
 {
-	if (!Definition) return 0.f;
-
-	return Definition->BaseHP + (Level - 1) * Definition->HPPerLevel;
+    if (!Definition) return 0.f;
+    return (Definition->HPPerLevel * Level) + (Attributes.Constitution * 5.f);
 }
 
-float UUnitStatsComponent::GetSpeed() const
+float UUnitStatsComponent::GetPhysicalAttack() const
 {
-	if (!Definition) return 0.f;
-
-	return Definition->BaseSpeed;
-}
-
-float UUnitStatsComponent::GetMeleeAttack() const
-{
-	if (!Definition) return 0.f;
-
-	return Definition->BaseMeleeAttack;
+    if (!Definition) return 0.f;
+    return (Definition->PhysAttkPerLevel * Level) + (Attributes.Strength * 1.5f);
 }
 
 float UUnitStatsComponent::GetRangedAttack() const
 {
-	if (!Definition) return 0.f;
-
-	return Definition->BaseRangedAttack;
+    if (!Definition) return 0.f;
+    return (Definition->RangedAttkPerLevel * Level) + (Attributes.Dexterity * 1.5f);
 }
 
-float UUnitStatsComponent::GetActionPoints() const
+float UUnitStatsComponent::GetMagicalPower() const
 {
-	if (!Definition) return 0.f;
-
-	return Definition->BaseActionPoints;
+    if (!Definition) return 0.f;
+    return (Definition->MagPwrPerLevel * Level) + (Attributes.Knowledge * 1.5f);
 }
 
-float UUnitStatsComponent::GetCurrentActionPoints() const
+float UUnitStatsComponent::GetPhysicalDefense() const
 {
-	return CurrentActionPoints;
+    if (!Definition) return 0.f;
+    return (Definition->PhysDefPerLevel * Level) + (Attributes.Constitution * 1.5f);
 }
 
-int32 UUnitStatsComponent::GetAllyTeam() const
+float UUnitStatsComponent::GetMagicalDefense() const
 {
-	return AllyTeam;
+    if (!Definition) return 0.f;
+    return (Definition->MagDefPerLevel * Level) + (Attributes.Focus / 5.f);
 }
 
-int32 UUnitStatsComponent::GetEnemyTeam() const
+int32 UUnitStatsComponent::GetActionPoints() const
 {
-	return EnemyTeam;
+    if (!Definition) return 1;
+    return Definition->BaseActionPoints + (Attributes.Technique / 5);
 }
 
-void UUnitStatsComponent::SetEnemyTeam(int32 Team)
+int32 UUnitStatsComponent::GetMovementRange() const
 {
-	EnemyTeam = Team;
+    if (!Definition) return 1;
+    return Definition->BaseMoveRange + Attributes.Speed;
 }
 
-void UUnitStatsComponent::SetAllyTeam(int32 Team)
+int32 UUnitStatsComponent::GetHitChanceModifier() const
 {
-	AllyTeam = Team;
+    return Attributes.Focus + Attributes.Technique;
 }
 
-float UUnitStatsComponent::GetCurrentHP() const
+int32 UUnitStatsComponent::GetEvasionModifier() const
 {
-	return PersistentHP;
+    return Attributes.Focus + Attributes.Evasiveness;
 }
+
+int32 UUnitStatsComponent::GetCritChance() const
+{
+    return Attributes.Technique * 2;
+}
+
+// ---------------------------------------------------------------------------
+// Persistent getters
+// ---------------------------------------------------------------------------
+
+int32 UUnitStatsComponent::GetAllyTeam() const { return AllyTeam; }
+int32 UUnitStatsComponent::GetEnemyTeam() const { return EnemyTeam; }
+void UUnitStatsComponent::SetAllyTeam(int32 Team) { AllyTeam = Team; }
+void UUnitStatsComponent::SetEnemyTeam(int32 Team) { EnemyTeam = Team; }
+
+float UUnitStatsComponent::GetCurrentHP() const { return PersistentHP; }
 
 FGridTraversalParams UUnitStatsComponent::GetTraversalParams() const
 {
-	return Definition->TraversalParams;
+    if (!Definition) return FGridTraversalParams{};
+    return Definition->TraversalParams;
 }
 
 void UUnitStatsComponent::SetCurrentHP(float NewHP)
 {
-	const bool bWasAlive = IsAlive();
+    const bool bWasAlive = IsAlive();
+    PersistentHP = FMath::Clamp(NewHP, 0.f, GetMaxHP());
 
-	PersistentHP = FMath::Clamp(NewHP, 0.f, GetMaxHP());
-
-	// Fire death delegate so CombatManager can react (grid removal,
-	// win/lose check). All other consumers (floating text, BattleState)
-	// are notified by UCombatEventBus before this setter is called.
-	const bool bIsAliveNow = IsAlive();
-	if (bWasAlive && !bIsAliveNow)
-	{
-		if (ACharacterBase* OwnerCharacter = Cast<ACharacterBase>(GetOwner()))
-		{
-			OnUnitDeath.Broadcast(OwnerCharacter);
-		}
-	}
+    if (bWasAlive && !IsAlive())
+    {
+        if (ACharacterBase* Owner = Cast<ACharacterBase>(GetOwner()))
+        {
+            OnUnitDeath.Broadcast(Owner);
+        }
+    }
 }
 
 void UUnitStatsComponent::SetCurrentActionPoints(int32 ActionPoints)
 {
-	CurrentActionPoints = ActionPoints;
-	UE_LOG(LogTemp, Warning, TEXT("[%s]: Current AP: %d"), *GetOwner()->GetName(), CurrentActionPoints);
+    CurrentActionPoints = ActionPoints;
+    UE_LOG(LogTemp, Log, TEXT("[UnitStatsComponent] %s AP set to %d"),
+        *GetNameSafe(GetOwner()), CurrentActionPoints);
 }
 
 bool UUnitStatsComponent::IsAlive() const
 {
-	return PersistentHP > 0.f;
+    return PersistentHP > 0.f;
 }

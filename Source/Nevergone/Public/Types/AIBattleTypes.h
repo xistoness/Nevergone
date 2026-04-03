@@ -6,6 +6,7 @@
 #include "AIBattleTypes.generated.h"
 
 class ACharacterBase;
+class UAbilityDefinition;
 class UBattleGameplayAbility;
 class UBattleAIQueryService;
 class UGridManager;
@@ -115,6 +116,12 @@ struct FTeamCandidateAction
 	UPROPERTY()
 	TSubclassOf<UBattleGameplayAbility> AbilityClass = nullptr;
 
+	// The definition that drives this ability's stats and effects.
+	// Stored here because the C++ ability class is a template shared across many definitions —
+	// the executor needs it to inject into the live instance before activation.
+	UPROPERTY()
+	TObjectPtr<UAbilityDefinition> AbilityDefinition = nullptr;
+
 	UPROPERTY()
 	FAITargetingData Targeting;
 
@@ -150,6 +157,3 @@ struct FAICandidateEvalContext
 	TArray<ACharacterBase*> Allies;
 	TArray<ACharacterBase*> Enemies;
 };
-
-
-

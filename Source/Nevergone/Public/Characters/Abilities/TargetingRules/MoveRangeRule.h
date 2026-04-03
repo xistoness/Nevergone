@@ -1,4 +1,6 @@
-﻿#pragma once
+﻿// Copyright Xyzto Works
+
+#pragma once
 
 #include "Interfaces/TargetRule.h"
 

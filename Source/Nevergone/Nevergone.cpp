@@ -16,13 +16,18 @@ DEFINE_LOG_CATEGORY(LogNevergone);
 // calls throughout the project.
 // ---------------------------------------------------------------------------
 
-UE_DEFINE_GAMEPLAY_TAG(TAG_Ability_Attack_Melee,  "Ability.Attack.Melee")
-UE_DEFINE_GAMEPLAY_TAG(TAG_Ability_Attack_Ranged, "Ability.Attack.Ranged")
-UE_DEFINE_GAMEPLAY_TAG(TAG_Ability_Heal_AoE,      "Ability.Heal.AoE")
-UE_DEFINE_GAMEPLAY_TAG(TAG_Ability_Move,          "Ability.Move")
+UE_DEFINE_GAMEPLAY_TAG(TAG_Ability_Attack_Melee,	"Ability.Attack.Melee")
+UE_DEFINE_GAMEPLAY_TAG(TAG_Ability_Attack_Ranged,	"Ability.Attack.Ranged")
+UE_DEFINE_GAMEPLAY_TAG(TAG_Ability_Attack_Magical,	"Ability.Attack.Magical")
+UE_DEFINE_GAMEPLAY_TAG(TAG_Ability_Heal_Melee,      "Ability.Heal.Melee")
+UE_DEFINE_GAMEPLAY_TAG(TAG_Ability_Heal_Ranged,     "Ability.Heal.Ranged")
+UE_DEFINE_GAMEPLAY_TAG(TAG_Ability_Heal_AoE,		"Ability.Heal.AoE")
+UE_DEFINE_GAMEPLAY_TAG(TAG_Ability_Move,			"Ability.Move")
 
-UE_DEFINE_GAMEPLAY_TAG(TAG_Mode_Combat,           "Mode.Combat")
-UE_DEFINE_GAMEPLAY_TAG(TAG_Turn_CanAct,           "Turn.CanAct")
+UE_DEFINE_GAMEPLAY_TAG(TAG_Mode_Combat,				"Mode.Combat")
+UE_DEFINE_GAMEPLAY_TAG(TAG_Turn_CanAct,				"Turn.CanAct")
 
-UE_DEFINE_GAMEPLAY_TAG(TAG_State_Stunned,         "State.Stunned")
-UE_DEFINE_GAMEPLAY_TAG(TAG_Status_Incapacitated,  "Status.Incapacitated")
+UE_DEFINE_GAMEPLAY_TAG(TAG_State_Stunned,			"State.Stunned")
+UE_DEFINE_GAMEPLAY_TAG(TAG_Status_Incapacitated,	"Status.Incapacitated")
+
+UE_DEFINE_GAMEPLAY_TAG(TAG_State_AbilityOnCooldown, "State.AbilityOnCooldown")
