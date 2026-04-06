@@ -3,6 +3,7 @@
 #include "Widgets/Combat/ActionSlot.h"
 
 #include "Components/Border.h"
+#include "Components/Overlay.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "Data/AbilityDefinition.h"
@@ -115,5 +116,47 @@ void UActionSlot::RefreshSelectionVisuals()
     {
         UE_LOG(LogNevergone, Warning,
             TEXT("[ActionSlot] RefreshSelectionVisuals: AbilityNameText binding is missing — check the widget Blueprint."));
+    }
+}
+void UActionSlot::SetCooldown(bool bOnCooldown, int32 TurnsRemaining)
+{
+    if (bIsCooldown == bOnCooldown && CooldownTurnsRemaining == TurnsRemaining)
+    {
+        return;
+    }
+
+    bIsCooldown           = bOnCooldown;
+    CooldownTurnsRemaining = TurnsRemaining;
+
+    RefreshCooldownVisuals();
+}
+
+void UActionSlot::RefreshCooldownVisuals()
+{
+    // Overlay visibility
+    if (CooldownOverlay)
+    {
+        CooldownOverlay->SetVisibility(
+            bIsCooldown ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+    }
+
+    // Remaining turns count
+    if (CooldownText)
+    {
+        if (bIsCooldown && CooldownTurnsRemaining > 0)
+        {
+            CooldownText->SetText(FText::AsNumber(CooldownTurnsRemaining));
+            CooldownText->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+        }
+        else
+        {
+            CooldownText->SetVisibility(ESlateVisibility::Collapsed);
+        }
+    }
+
+    // Dim the icon when on cooldown so the slot reads as unavailable
+    if (SlotImage)
+    {
+        SlotImage->SetColorAndOpacity(bIsCooldown ? CooldownImageTint : FLinearColor::White);
     }
 }

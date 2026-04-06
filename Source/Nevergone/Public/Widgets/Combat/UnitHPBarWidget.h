@@ -4,128 +4,118 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "GameplayTagContainer.h"
+#include "Components/HorizontalBox.h"
 #include "UnitHPBarWidget.generated.h"
 
+class UImage;
 class ACharacterBase;
 class UCombatEventBus;
 class UProgressBar;
 class UTextBlock;
 
 /**
- * Persistent HP bar widget anchored above a single combat unit.
+ * HP bar widget for a single combat unit.
  *
- * Lifecycle:
- *   1. Created by UBattleHUDWidget::SpawnHPBars once per unit.
- *   2. InitializeForUnit sets the tracked unit and subscribes to the event bus.
- *   3. Tick updates the widget's screen position to follow the unit.
- *   4. Deinitialize unsubscribes before RemoveFromParent.
+ * This widget is NOT responsible for its own screen-space positioning.
+ * The BattleHUDWidget owns a CanvasPanel and updates each bar's slot
+ * position every tick via UpdateScreenPosition().
  *
- * Visual flash on damage/heal:
- *   The Blueprint subclass implements OnDamageReceived / OnHealReceived
- *   to play a short animation (e.g. red flash, green pulse) without any
- *   C++ animation code here.
+ * This widget is responsible for:
+ *   - Displaying the HP bar and text
+ *   - Subscribing to CombatEventBus and updating on damage/heal/death
+ *   - Notifying Blueprint when status effects are applied or cleared
+ *     so the BP can stack/remove icon widgets dynamically
+ *   - Exposing BlueprintImplementableEvents for visual feedback
  */
 UCLASS(Abstract)
 class NEVERGONE_API UUnitHPBarWidget : public UUserWidget
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
 public:
 
-	/**
-	 * Binds this bar to a specific unit and the combat event bus.
-	 *
-	 * @param InUnit      The character this bar tracks
-	 * @param InEventBus  The bus that fires damage/heal events
-	 * @param MaxHP       Starting max HP — used to compute fill ratio
-	 * @param CurrentHP   Starting current HP
-	 */
-	UFUNCTION(BlueprintCallable, Category = "HP Bar")
-	void InitializeForUnit(ACharacterBase* InUnit, UCombatEventBus* InEventBus,
-	                        float MaxHP, float CurrentHP);
+    UFUNCTION(BlueprintCallable, Category = "HP Bar")
+    void InitializeForUnit(ACharacterBase* InUnit, UCombatEventBus* InEventBus,
+                            int32 MaxHP, int32 CurrentHP);
 
-	/** Removes event bus subscriptions. Call before RemoveFromParent. */
-	UFUNCTION(BlueprintCallable, Category = "HP Bar")
-	void Deinitialize();
+    UFUNCTION(BlueprintCallable, Category = "HP Bar")
+    void Deinitialize();
 
-	/** Returns the character this bar is tracking. */
-	UFUNCTION(BlueprintPure, Category = "HP Bar")
-	ACharacterBase* GetTrackedUnit() const { return TrackedUnit; }
+    UFUNCTION(BlueprintPure, Category = "HP Bar")
+    ACharacterBase* GetTrackedUnit() const { return TrackedUnit; }
 
 protected:
 
-	// -----------------------------------------------------------------------
-	// Named UMG widgets — bind in the Blueprint designer
-	// -----------------------------------------------------------------------
+    UPROPERTY(meta = (BindWidget))
+    TObjectPtr<UProgressBar> HPBar;
 
-	/** Progress bar showing HP ratio (0..1). */
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UProgressBar> HPBar;
+    UPROPERTY(meta = (BindWidget))
+    TObjectPtr<UTextBlock> HPText;
+    
+    UPROPERTY(BlueprintReadWrite, EditAnywhere)
+    TMap<FGameplayTag, UHorizontalBox*> IconSlotMap;
 
-	/** Optional text showing "CurrentHP / MaxHP". */
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> HPText;
+    // -----------------------------------------------------------------------
+    // HP visual events (implement animations in Blueprint)
+    // -----------------------------------------------------------------------
 
-	// -----------------------------------------------------------------------
-	// Blueprint events — implement animations in the Blueprint subclass
-	// -----------------------------------------------------------------------
+    UFUNCTION(BlueprintImplementableEvent, Category = "HP Bar")
+    void OnDamageReceived(int32 NewHP, int32 OldHP);
 
-	/** Called after HP is updated following a damage event. */
-	UFUNCTION(BlueprintImplementableEvent, Category = "HP Bar")
-	void OnDamageReceived(float NewHP, float OldHP);
+    UFUNCTION(BlueprintImplementableEvent, Category = "HP Bar")
+    void OnHealReceived(int32 NewHP, int32 OldHP);
 
-	/** Called after HP is updated following a heal event. */
-	UFUNCTION(BlueprintImplementableEvent, Category = "HP Bar")
-	void OnHealReceived(float NewHP, float OldHP);
+    UFUNCTION(BlueprintImplementableEvent, Category = "HP Bar")
+    void OnUnitDied();
 
-	/** Called when the unit's HP reaches zero. */
-	UFUNCTION(BlueprintImplementableEvent, Category = "HP Bar")
-	void OnUnitDied();
+    // -----------------------------------------------------------------------
+    // Status effect icon events (implement stacking icon display in Blueprint)
+    //
+    // The Blueprint should maintain a horizontal/wrap box of icon images.
+    // On OnStatusIconAdded: spawn/show an icon widget using the provided Icon texture.
+    // On OnStatusIconRemoved: find and remove the icon widget for that StatusTag.
+    // Multiple statuses can be active simultaneously — each StatusTag is unique per unit.
+    // -----------------------------------------------------------------------
 
-	// -----------------------------------------------------------------------
-	// Tick — keeps widget anchored above the unit's head
-	// -----------------------------------------------------------------------
+    /**
+     * Called when a new status is applied to this unit.
+     * @param StatusTag   Gameplay tag of the applied status (use as key to find/remove later).
+     * @param Icon        Texture for the icon. May be null — hide or use a placeholder.
+     */
+    UFUNCTION(BlueprintImplementableEvent, Category = "Status Icons")
+    void OnStatusIconAdded(FGameplayTag StatusTag, UTexture2D* Icon);
 
-	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
-
-	// -----------------------------------------------------------------------
-	// Configurable offset
-	// -----------------------------------------------------------------------
-
-	/**
-	 * World-space Z offset above the actor origin where the bar appears.
-	 * Increase this if your character capsules are tall.
-	 */
-	UPROPERTY(EditDefaultsOnly, Category = "HP Bar|Layout")
-	float WorldZOffset = 200.f;
+    /**
+     * Called when a status is fully removed from this unit (all stacks gone).
+     * @param StatusTag   Gameplay tag of the removed status.
+     */
+    UFUNCTION(BlueprintImplementableEvent, Category = "Status Icons")
+    void OnStatusIconRemoved(FGameplayTag StatusTag);
 
 private:
 
-	// -----------------------------------------------------------------------
-	// Event bus handlers
-	// -----------------------------------------------------------------------
+    void HandleDamageApplied(ACharacterBase* Source, ACharacterBase* Target, int32 Amount);
+    void HandleHealApplied(ACharacterBase* Source, ACharacterBase* Target, int32 Amount);
+    void HandleUnitDied(ACharacterBase* Unit);
+    void HandleStatusApplied(ACharacterBase* Target, const FGameplayTag& StatusTag, UTexture2D* Icon);
+    void HandleStatusCleared(ACharacterBase* Target, const FGameplayTag& StatusTag);
 
-	void HandleDamageApplied(ACharacterBase* Source, ACharacterBase* Target, float Amount);
-	void HandleHealApplied(ACharacterBase* Source, ACharacterBase* Target, float Amount);
-	void HandleUnitDied(ACharacterBase* Unit);
+    // All HP values are int32 — no fractional HP exists in this system
+    void RefreshDisplay(int32 NewHP);
 
-	/** Updates HPBar percent and HPText label. */
-	void RefreshDisplay(float NewHP);
+    UPROPERTY()
+    TObjectPtr<ACharacterBase> TrackedUnit;
 
-	// -----------------------------------------------------------------------
-	// Private state
-	// -----------------------------------------------------------------------
+    UPROPERTY()
+    TObjectPtr<UCombatEventBus> EventBus;
 
-	UPROPERTY()
-	TObjectPtr<ACharacterBase> TrackedUnit;
+    int32 CachedMaxHP     = 1;
+    int32 CachedCurrentHP = 1;
 
-	UPROPERTY()
-	TObjectPtr<UCombatEventBus> EventBus;
-
-	float CachedMaxHP   = 1.f;
-	float CachedCurrentHP = 1.f;
-
-	FDelegateHandle DamageHandle;
-	FDelegateHandle HealHandle;
-	FDelegateHandle DiedHandle;
+    FDelegateHandle DamageHandle;
+    FDelegateHandle HealHandle;
+    FDelegateHandle DiedHandle;
+    FDelegateHandle StatusAppliedHandle;
+    FDelegateHandle StatusClearedHandle;
 };

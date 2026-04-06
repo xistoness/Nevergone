@@ -4,38 +4,40 @@
 
 #include "GameMode/Combat/BattleUnitState.h"
 
-float FCombatFormulas::ComputeDamage(
+int32 FCombatFormulas::ComputeDamage(
     const FBattleUnitState& Source,
     const FBattleUnitState& Target,
     EAbilityDamageSource    DamageSource,
     float                   Multiplier
 )
 {
+    // Multiplier stays float to support values like 1.5x crit.
+    // Final result is rounded to int32 so damage is always a whole number.
     switch (DamageSource)
     {
     case EAbilityDamageSource::Physical:
-        return FMath::Max(0.f, (Source.PhysicalAttack * Multiplier) - Target.PhysicalDefense);
+        return FMath::Max(0, FMath::RoundToInt((Source.PhysicalAttack * Multiplier) - Target.PhysicalDefense));
 
     case EAbilityDamageSource::Ranged:
-        return FMath::Max(0.f, (Source.RangedAttack * Multiplier) - Target.PhysicalDefense);
+        return FMath::Max(0, FMath::RoundToInt((Source.RangedAttack * Multiplier) - Target.PhysicalDefense));
 
     case EAbilityDamageSource::Magical:
-        return FMath::Max(0.f, (Source.MagicalPower * Multiplier) - Target.MagicalDefense);
+        return FMath::Max(0, FMath::RoundToInt((Source.MagicalPower * Multiplier) - Target.MagicalDefense));
 
     case EAbilityDamageSource::Pure:
         // Pure damage ignores all stats — Multiplier is the flat damage value
-        return FMath::Max(0.f, Multiplier);
+        return FMath::Max(0, FMath::RoundToInt(Multiplier));
     }
 
-    return 0.f;
+    return 0;
 }
 
-float FCombatFormulas::ComputeHeal(
+int32 FCombatFormulas::ComputeHeal(
     const FBattleUnitState& Source,
     float                   Multiplier
 )
 {
-    return FMath::Max(0.f, Source.MagicalPower * Multiplier);
+    return FMath::Max(0, FMath::RoundToInt(Source.MagicalPower * Multiplier));
 }
 
 float FCombatFormulas::ComputeHitChance(
@@ -71,12 +73,13 @@ bool FCombatFormulas::RollCrit(const FBattleUnitState& Source)
     return FMath::FRand() <= GetCritChanceFraction(Source);
 }
 
-float FCombatFormulas::ApplyCritMultiplier(float BaseDamage)
+int32 FCombatFormulas::ApplyCritMultiplier(int32 BaseDamage)
 {
-    return BaseDamage * CritMultiplier;
+    // Round crit result so 3 * 1.5 = 5 (not 4.5)
+    return FMath::RoundToInt(BaseDamage * CritMultiplier);
 }
 
-float FCombatFormulas::EstimateDamage(
+int32 FCombatFormulas::EstimateDamage(
     const FBattleUnitState& Source,
     const FBattleUnitState& Target,
     EAbilityDamageSource    DamageSource,
@@ -85,11 +88,10 @@ float FCombatFormulas::EstimateDamage(
     bool                    bCanMiss
 )
 {
-    const float BaseDamage  = ComputeDamage(Source, Target, DamageSource, Multiplier);
-    const float HitChance   = ComputeHitChance(Source, Target, BaseHitChance, bCanMiss);
+    const int32 BaseDamage   = ComputeDamage(Source, Target, DamageSource, Multiplier);
+    const float HitChance    = ComputeHitChance(Source, Target, BaseHitChance, bCanMiss);
     const float CritFraction = GetCritChanceFraction(Source);
 
-    // Expected value: damage * P(hit) * (1 + P(crit) * (CritMult - 1))
-    // Simplified: BaseDamage * HitChance * (1 + CritFraction * 0.5)
-    return BaseDamage * HitChance * (1.f + CritFraction * (CritMultiplier - 1.f));
+    // Expected value rounded to int: BaseDamage * P(hit) * (1 + P(crit) * (CritMult-1))
+    return FMath::RoundToInt(BaseDamage * HitChance * (1.f + CritFraction * (CritMultiplier - 1.f)));
 }

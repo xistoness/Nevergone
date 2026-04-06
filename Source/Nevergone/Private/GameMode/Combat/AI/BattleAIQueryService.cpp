@@ -56,7 +56,23 @@ bool UBattleAIQueryService::CanUnitStillAct(const ACharacterBase* Unit) const
     }
 
     const FBattleUnitState* State = BattleState->FindUnitState(const_cast<ACharacterBase*>(Unit));
-    return State && State->CurrentActionPoints > 0;
+    if (!State) { return false; }
+
+    // Use CanAct() which checks AP, death, AND ASC tags (Stun, Charm, Incapacitated).
+    // Checking only CurrentActionPoints > 0 here would allow stunned AI units to still
+    // gather candidates and act, bypassing the status effect entirely.
+    const bool bCanAct = State->CanAct();
+
+    if (!bCanAct)
+    {
+        UE_LOG(LogTemp, Verbose,
+            TEXT("[BattleAIQueryService] CanUnitStillAct: %s cannot act (AP=%d, CanAct=%s)"),
+            *GetNameSafe(Unit),
+            State->CurrentActionPoints,
+            bCanAct ? TEXT("true") : TEXT("false"));
+    }
+
+    return bCanAct;
 }
 
 bool UBattleAIQueryService::IsUnitAlive(const ACharacterBase* Unit) const

@@ -19,6 +19,8 @@ struct NEVERGONE_API FGeneratedPlayerData
     TSubclassOf<class ACharacterBase> PlayerClass;
     FGameplayTagContainer Tags;
     int32 Level = 1;
+    int32 PersistentHP = 0;
+    FGuid CharacterID;
 };
 
 UENUM()
@@ -289,6 +291,12 @@ public:
 
     UPROPERTY()
     EBattleUnitTeam WinningTeam = EBattleUnitTeam::None;
+    
+    UPROPERTY()
+    TArray<FGeneratedPlayerData> GeneratedParty;
+    
+    UPROPERTY()
+    int32 TotalEnemies = 0;
 
     UPROPERTY()
     int32 SurvivingAllies = 0;

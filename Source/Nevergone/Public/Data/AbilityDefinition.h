@@ -8,6 +8,7 @@
 #include "AbilityDefinition.generated.h"
 
 class UBattleGameplayAbility;
+class UStatusEffectDefinition;
 
 // Determines which source stat drives the damage calculation and which
 // defensive stat on the target mitigates it.
@@ -41,25 +42,6 @@ enum class EAbilityTargetFaction : uint8
     Enemy,
     Ally,
     Any,
-};
-
-USTRUCT(BlueprintType)
-struct FAbilityStatusEffect
-{
-    GENERATED_BODY()
-
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-    FGameplayTag StatusTag;
-
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-    FString DisplayLabel;
-
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-    TObjectPtr<UTexture2D> Icon = nullptr;
-
-    // How many full turn cycles the status lasts (0 = permanent until cleared manually)
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta = (ClampMin = "0"))
-    int32 DurationTurns = 1;
 };
 
 UCLASS()
@@ -135,36 +117,32 @@ public:
     int32 CooldownTurns = 0;
 
     // --- Status Effects ---
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-    TArray<FAbilityStatusEffect> OnHitStatusEffects;
 
+    // Status effects applied to each unit hit by this ability.
+    // Each entry is a UStatusEffectDefinition asset — all parameters live there.
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-    TArray<FAbilityStatusEffect> SelfStatusEffects;
+    TArray<TObjectPtr<UStatusEffectDefinition>> OnHitStatusEffects;
+
+    // Status effects applied to the caster when this ability executes.
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+    TArray<TObjectPtr<UStatusEffectDefinition>> SelfStatusEffects;
     
     // --- Audio ---
  
-    /**
-     * Sound played at the SOURCE actor's location when this ability executes.
-     * Examples: sword swing, staff charge, bow draw.
-     * Played before damage/heal is applied — represents the action itself.
-     */
+    // Sound played at the SOURCE actor's location when this ability executes.
+    // Examples: sword swing, staff charge, bow draw.
+    // Played before damage/heal is applied — represents the action itself.
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Audio")
     TObjectPtr<USoundBase> CastSound;
  
-    /**
-     * Sound played at the TARGET actor's location when this ability connects.
-     * Examples: sword impact, arrow hit, explosion.
-     * Played at the moment of hit — distinct from the cast sound.
-     * Leave null to use the AudioSubsystem's DefaultHitSFX fallback.
-     */
+    // Sound played at the TARGET actor's location when this ability connects.
+    // Examples: sword impact, arrow hit, explosion.
+    // Leave null to use the AudioSubsystem's DefaultHitSFX fallback.
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Audio")
     TObjectPtr<USoundBase> ImpactSound;
  
-    /**
-     * Sound played at the SOURCE actor's location when this ability is
-     * used on a movement (footstep-style or dash whoosh).
-     * Only relevant for movement abilities — leave null for attacks/heals.
-     */
+    // Sound played at the SOURCE actor's location for movement abilities.
+    // Only relevant for movement abilities — leave null for attacks/heals.
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Audio")
     TObjectPtr<USoundBase> MovementSound;
 };

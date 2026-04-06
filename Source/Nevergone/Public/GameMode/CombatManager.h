@@ -19,6 +19,7 @@ class UBattleState;
 class UGridManager;
 class UBattleTeamAIPlanner;
 class UActionHotbar;
+class UStatusEffectManager;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCombatFinished, EBattleUnitTeam, WinningTeam);
 
@@ -57,6 +58,9 @@ public:
 	void CancelPreparation();
 	void ClearCurrentSelectedUnit();
 	void EndCombatWithWinner(EBattleUnitTeam WinningTeam);
+	
+	UFUNCTION(BlueprintCallable, Category="Combat")
+	const TArray<ACharacterBase*>& GetSpawnedAllies() const { return SpawnedAllies; }
 	
 	UFUNCTION(BlueprintCallable, Category="Combat")
 	int32 GetAliveAllies() const;
@@ -131,6 +135,10 @@ private:
 	UFUNCTION()
 	void HandleUnitOutOfAP(ACharacterBase* Unit);
 
+	// Re-checks whether the current player unit can still act after a status is applied.
+	// Advances selection if e.g. Stun is applied to the active unit mid-turn.
+	void HandleStatusApplied(ACharacterBase* Target, const FGameplayTag& StatusTag, UTexture2D* Icon);
+
 	void FocusCameraOnActingEnemy(ACharacterBase* ActingUnit);
 	static void LogActivePlayerController(UWorld* World, const FString& Context);
 	
@@ -168,6 +176,9 @@ private:
 
 	UPROPERTY()
 	UCombatEventBus* EventBus = nullptr;
+
+	UPROPERTY()
+	UStatusEffectManager* StatusEffectManager = nullptr;
 
 	UPROPERTY()
 	bool bCombatEnding = false;

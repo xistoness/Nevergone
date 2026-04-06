@@ -70,7 +70,7 @@ public:
     // HP is persisted because it carries between exploration and battle.
     // Other derived stats are recomputed each battle from attributes + definition.
     UPROPERTY(SaveGame)
-    float PersistentHP = 0.f;
+    int32 PersistentHP = 0;
 
     // The 8 base attributes invested by the player over level-ups.
     UPROPERTY(SaveGame)
@@ -92,7 +92,7 @@ public:
     // ===== Getters — persistent =====
     int32 GetAllyTeam() const;
     int32 GetEnemyTeam() const;
-    float GetCurrentHP() const;
+    int32 GetCurrentHP() const;
     bool IsAlive() const;
     const UUnitDefinition* GetDefinition() const { return Definition; }
     FGridTraversalParams GetTraversalParams() const;
@@ -100,12 +100,12 @@ public:
     // ===== Getters — concrete stats derived from attributes + definition =====
     // These are used to POPULATE BattleUnitState at battle start.
     // During combat, read from BattleUnitState instead.
-    float GetMaxHP() const;
-    float GetPhysicalAttack() const;
-    float GetRangedAttack() const;
-    float GetMagicalPower() const;
-    float GetPhysicalDefense() const;
-    float GetMagicalDefense() const;
+    int32 GetMaxHP() const;
+    int32 GetPhysicalAttack() const;
+    int32 GetRangedAttack() const;
+    int32 GetMagicalPower() const;
+    int32 GetPhysicalDefense() const;
+    int32 GetMagicalDefense() const;
     int32 GetActionPoints() const;
     int32 GetMovementRange() const;
     int32 GetHitChanceModifier() const;
@@ -118,7 +118,7 @@ public:
 
     // Raw HP write — clamps to [0, MaxHP] and fires OnUnitDeath if HP reaches zero.
     // All combat-facing HP changes must go through UCombatEventBus.
-    void SetCurrentHP(float NewHP);
+    void SetCurrentHP(int32 NewHP);
     void SetCurrentActionPoints(int32 ActionPoints);
 
     FOnUnitDeath OnUnitDeath;

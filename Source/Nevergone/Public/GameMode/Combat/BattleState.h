@@ -31,10 +31,8 @@ public:
 	void MarkUnitMoved(ACharacterBase* Unit);
 	void ConsumeActionPoints(ACharacterBase* Unit, int32 Amount);
 
-	void ApplyDamage(ACharacterBase* Unit, float Amount);
-	void ApplyHeal(ACharacterBase* Unit, float Amount);
-	void ApplyStatusTag(ACharacterBase* Unit, const FGameplayTag& StatusTag);
-	void ClearStatusTag(ACharacterBase* Unit, const FGameplayTag& StatusTag);
+	void ApplyDamage(ACharacterBase* Unit, int32 Amount);
+	void ApplyHeal(ACharacterBase* Unit, int32 Amount);
 
 	/**
 	 * Read-only access to all unit states.

@@ -11,6 +11,7 @@
 #include "EngineUtils.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
+#include "Party/PartyManagerSubsystem.h"
 #include "Widgets/LoadingScreenWidget.h"
 #include "World/WorldManagerSubsystem.h"
 
@@ -388,8 +389,8 @@ bool UMyGameInstance::CreateNewSave(const FString& SlotName)
 	if (!NewSave)
 		return false;
 
-	ActiveSave = NewSave;
-	ActiveSlotName = SlotName; // Keep in sync
+	ActiveSave      = NewSave;
+	ActiveSlotName  = SlotName;
 
 	ActiveSave->SaveSlotName    = SlotName;
 	ActiveSave->LastSavedAt     = FDateTime::UtcNow();
@@ -399,6 +400,14 @@ bool UMyGameInstance::CreateNewSave(const FString& SlotName)
 	PartyData       = FPartyData();
 	ProgressionData = FProgressionData();
 	GlobalFlags.Empty();
+
+	// Populate default party for a new game.
+	// This runs only once — subsequent loads read from the save slot.
+	// TODO: replace with proper new game initialization when that system exists.
+	if (UPartyManagerSubsystem* PartyMgr = GetSubsystem<UPartyManagerSubsystem>())
+	{
+		PartyMgr->SyncFromGameInstance(); // clears subsystem to match empty PartyData
+	}
 
 	CommitSave();
 
@@ -424,12 +433,16 @@ bool UMyGameInstance::LoadSaveSlot(const FString& SlotName)
 	if (!ActiveSave)
 		return false;
 
-	// Keep ActiveSlotName in sync so AutoSave always writes to the right slot
-	ActiveSlotName = SlotName;
-
+	ActiveSlotName  = SlotName;
 	PartyData       = ActiveSave->PartyData;
 	ProgressionData = ActiveSave->ProgressionData;
 	GlobalFlags     = ActiveSave->GlobalFlags;
+
+	// Keep PartyManagerSubsystem in sync so BuildBattleParty sees the loaded data.
+	if (UPartyManagerSubsystem* PartyMgr = GetSubsystem<UPartyManagerSubsystem>())
+	{
+		PartyMgr->SyncFromGameInstance();
+	}
 
 	OnSaveLoaded.Broadcast();
 	return true;

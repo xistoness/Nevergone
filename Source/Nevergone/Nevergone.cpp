@@ -27,7 +27,19 @@ UE_DEFINE_GAMEPLAY_TAG(TAG_Ability_Move,			"Ability.Move")
 UE_DEFINE_GAMEPLAY_TAG(TAG_Mode_Combat,				"Mode.Combat")
 UE_DEFINE_GAMEPLAY_TAG(TAG_Turn_CanAct,				"Turn.CanAct")
 
+//Debuffs
 UE_DEFINE_GAMEPLAY_TAG(TAG_State_Stunned,			"State.Stunned")
 UE_DEFINE_GAMEPLAY_TAG(TAG_Status_Incapacitated,	"Status.Incapacitated")
+UE_DEFINE_GAMEPLAY_TAG(TAG_State_Silenced,	"State.Silenced")
+UE_DEFINE_GAMEPLAY_TAG(TAG_State_Charmed,	"State.Charmed")
+UE_DEFINE_GAMEPLAY_TAG(TAG_State_Rooted,	"State.Rooted")
+UE_DEFINE_GAMEPLAY_TAG(TAG_State_Bleeding,	"State.Bleeding")
+UE_DEFINE_GAMEPLAY_TAG(TAG_State_Poisoned,	"State.Poisoned")
+UE_DEFINE_GAMEPLAY_TAG(TAG_State_Slowed,	"State.Slowed")
 
-UE_DEFINE_GAMEPLAY_TAG(TAG_State_AbilityOnCooldown, "State.AbilityOnCooldown")
+//Buffs
+UE_DEFINE_GAMEPLAY_TAG(TAG_State_Regen,	"State.Regen")
+UE_DEFINE_GAMEPLAY_TAG(TAG_State_Shielded,	"State.Shielded")
+UE_DEFINE_GAMEPLAY_TAG(TAG_State_Haste,	"State.Haste")
+UE_DEFINE_GAMEPLAY_TAG(TAG_State_Respite,	"State.Respite")
+UE_DEFINE_GAMEPLAY_TAG(TAG_State_Cure,	"State.Cure")

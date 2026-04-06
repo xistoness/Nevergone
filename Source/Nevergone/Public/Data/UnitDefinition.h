@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
 #include "Types/BattleTypes.h"
 #include "Types/CharacterTypes.h"
 #include "Engine/DataAsset.h"
@@ -65,4 +66,13 @@ public:
     // --- Abilities ---
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Battle")
     TArray<FUnitAbilityEntry> BattleAbilities;
+
+    // --- Immunities ---
+    // Tags granted to the unit's ASC at battle start.
+    // Convention: "Immunity.<StatusTagName_with_dots_as_underscores>"
+    // Example: to make a unit immune to Stun (tag "State.Stunned"), add "Immunity.State_Stunned".
+    // StatusEffectManager checks the ASC for these before applying any status effect.
+    // Equipment, terrain, and other runtime effects can grant additional immunity tags at any time.
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Battle")
+    FGameplayTagContainer InnateImmunityTags;
 };

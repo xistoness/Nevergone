@@ -28,6 +28,14 @@ public:
     virtual EBattleAbilitySelectionMode GetSelectionMode() const;
     virtual void FinalizeAbilityExecution();
     virtual void ApplyAbilityCompletionEffects();
+    
+    /**
+     * Returns true if the CURRENT AbilityDefinition is on cooldown.
+     * Reads from BattleModeComponent so the state is keyed per-definition,
+     * not per GAS instance. Safe to call on CDO and live instances alike.
+     */
+    bool IsOnCooldown() const;
+    int32 GetRemainingCooldownTurns() const;
 
     void CleanupAbilityDelegates();
 
@@ -88,6 +96,13 @@ protected:
     void TryStartCooldown(ACharacterBase* SourceCharacter);
     void ApplyOnHitStatusEffects(ACharacterBase* SourceCharacter, const TArray<ACharacterBase*>& HitActors);
     void ApplySelfStatusEffects(ACharacterBase* SourceCharacter);
+
+    /**
+     * Resolves the caster stat to snapshot for status effect formulas (PercentOfCasterStat, Shield).
+     * Mirrors AbilityDefinition->DamageSource: Physical→PhysicalAttack, Ranged→RangedAttack, Magical→MagicalPower.
+     * Returns 0 if BattleState or SourceCharacter is unavailable (safe fallback for passives like Stun).
+     */
+    int32 ResolveCasterStatSnapshot(ACharacterBase* SourceCharacter) const;
     
     bool HasSufficientAP(const FActionContext& Context) const;
 
@@ -95,17 +110,10 @@ private:
     void OnTurnStateChanged(EBattleTurnOwner NewOwner, EBattleTurnPhase NewPhase);
     void ClearCooldown();
 
-    // Applies a single FAbilityStatusEffect to a target through the event bus
-    void ApplyStatusEffect(
-        ACharacterBase* SourceCharacter,
-        ACharacterBase* TargetCharacter,
-        const struct FAbilityStatusEffect& Effect
-    );
-
     // Kept separate from any CachedCharacter in subclasses — persists after EndAbility
+    // CooldownOwner retained so ClearCooldown can unsubscribe from TurnManager.
     UPROPERTY()
     TObjectPtr<ACharacterBase> CooldownOwner = nullptr;
 
-    int32 RemainingCooldownTurns = 0;
     FDelegateHandle CooldownTurnHandle;
 };
