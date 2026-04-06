@@ -10,7 +10,7 @@
 
 class UFloorEncounterData;
 class UBoxComponent;
-class USkeletalMeshComponent;
+class UStaticMeshComponent;
 
 /**
  * Self-contained encounter actor.
@@ -78,11 +78,41 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Battle Grid", meta = (ClampMin = "100"))
 	float GridHeight = 500.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Encounter")
-	USkeletalMeshComponent* SkeletalMeshComponent;
-	
+	/** Visual indicator mesh. Animates with a gentle bob and slow Z-axis rotation. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Encounter")
+	TObjectPtr<UStaticMeshComponent> IndicatorMesh;
+
+	// -----------------------------------------------------------------------
+	// Indicator animation parameters — tweak in the Blueprint CDO or viewport
+	// -----------------------------------------------------------------------
+
+	/** Total vertical travel distance of the bob (peak-to-peak), in cm. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Encounter|Animation", meta = (ClampMin = "0"))
+	float BobAmplitude = 15.f;
+
+	/** How many full bob cycles occur per second. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Encounter|Animation", meta = (ClampMin = "0"))
+	float BobFrequency = 0.6f;
+
+	/** Degrees per second for the slow Z-axis rotation. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Encounter|Animation", meta = (ClampMin = "0"))
+	float RotationSpeed = 30.f;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Save")
 	USaveableComponent* SaveableComponent;
+
+	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaTime) override;
+
+private:
+
+	// Stores the mesh's base Z position (set in BeginPlay) so the bob is applied
+	// as a delta on top of the intended placement rather than drifting over time.
+	float MeshBaseZ = 0.f;
+
+	// Accumulated time for the sine wave — wrapped at 2PI to avoid float
+	// precision loss in very long sessions.
+	float BobTime = 0.f;
 
 protected:
 	UFUNCTION()

@@ -193,9 +193,9 @@ private:
 	// CombatEventBus handlers
 	// -----------------------------------------------------------------------
 
-	void HandleDamageApplied(ACharacterBase* Source, ACharacterBase* Target, float Amount);
+	void HandleDamageApplied(ACharacterBase* Source, ACharacterBase* Target, int32 Amount);
 	void HandleUnitDied(ACharacterBase* Unit);
-	void HandleHealApplied(ACharacterBase* Source, ACharacterBase* Target, float Amount);
+	void HandleHealApplied(ACharacterBase* Source, ACharacterBase* Target, int32 Amount);
 
 	// -----------------------------------------------------------------------
 	// Internal

@@ -5,6 +5,8 @@
 
 #include "Audio/AudioSubsystem.h"
 #include "Characters/CharacterBase.h"
+#include "Characters/PlayerControllers/BattlePreparationController.h"
+#include "Characters/PlayerControllers/BattleResultsController.h"
 #include "GameInstance/GameContextManager.h"
 
 #include "Kismet/GameplayStatics.h"
@@ -36,18 +38,26 @@ void ATowerFloorGameMode::BeginPlay()
 			ContextManager->RequestInitialState(InitialContextState);
 		}
 	}
- 
-	// Debug Party feeding
 	UPartyManagerSubsystem* Party = GetGameInstance()->GetSubsystem<UPartyManagerSubsystem>();
-	Party->ClearParty();
-	for (int i = 0; i < 4; ++i)
+	if (Party && Party->GetPartyData().Members.Num() == 0)
 	{
-		FPartyMemberData DebugMember;
-		DebugMember.CharacterClass = TestCharClass[i];
-		DebugMember.Level = 1 + i;
-		DebugMember.bIsAlive = true;
-		Party->AddPartyMember(DebugMember);
+		// No party loaded from save — populate debug party for testing.
+		// This only runs when the party is genuinely empty (new game, no save data).
+		for (int32 i = 0; i < TestCharClass.Num(); ++i)
+		{
+			if (!TestCharClass[i]) { continue; }
+			FPartyMemberData DebugMember;
+			DebugMember.CharacterClass = TestCharClass[i];
+			DebugMember.Level          = 1 + i;
+			DebugMember.bIsAlive       = true;
+			DebugMember.CurrentHP      = 0.f; // 0 = use MaxHP on first battle init
+			DebugMember.CharacterID    = FGuid::NewGuid();
+			Party->AddPartyMember(DebugMember);
+		}
+		// Push to GameInstance so the save system sees the debug party.
+		Party->FlushToGameInstance();
 	}
+
 }
 
 void ATowerFloorGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -156,8 +166,25 @@ void ATowerFloorGameMode::HandleGameContextChanged(EGameContextState NewState)
 		}
 
 	case EGameContextState::BattlePreparation:
-		SwitchPlayerController(BattlePreparationControllerClass);
-		break;
+		{
+			APlayerController* NewPC = SpawnAndSwapPlayerController(BattlePreparationControllerClass); 
+			if (NewPC)
+			{
+				if (GI)
+				{
+					if (UGameContextManager* ContextManager = GI->GetSubsystem<UGameContextManager>())
+					{
+						if (ABattlePreparationController* PrepPC =
+							Cast<ABattlePreparationController>(NewPC))
+						{
+							PrepPC->SetPreparationContext(
+								ContextManager->GetActivePrepContext());
+						}
+					}
+				}
+			}
+			break;
+		}
 
 	case EGameContextState::Battle:
 		if (Audio)
@@ -166,7 +193,35 @@ void ATowerFloorGameMode::HandleGameContextChanged(EGameContextState NewState)
 		}
 		SwitchPlayerController(BattleControllerClass);
 		break;
+	
+	case EGameContextState::BattleResults:
+		{
+			if (!BattleResultsControllerClass)
+			{
+				UE_LOG(LogTemp, Error,
+					TEXT("[TowerFloorGameMode] BattleResultsControllerClass not set — assign in BP CDO"));
+				break;
+			}
 
+			// Spawn the results controller and hand it the context so it can
+			// build the widget. No pawn is possessed during this state.
+			APlayerController* NewPC = SpawnAndSwapPlayerController(BattleResultsControllerClass);
+			if (!NewPC) { break; }
+
+			if (GI)
+			{
+				if (UGameContextManager* ContextManager = GI->GetSubsystem<UGameContextManager>())
+				{
+					if (ABattleResultsController* ResultsPC =
+						Cast<ABattleResultsController>(NewPC))
+					{
+						ResultsPC->SetResultsContext(ContextManager->GetActiveResultsContext());
+					}
+				}
+			}
+			break;
+		}
+		
 	default:
 		break;
 	}

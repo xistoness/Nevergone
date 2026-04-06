@@ -3,12 +3,14 @@
 #include "Widgets/Combat/BattleHUDWidget.h"
 
 #include "Characters/CharacterBase.h"
-#include "Components/VerticalBox.h"
+#include "Components/CanvasPanel.h"
+#include "Components/CanvasPanelSlot.h"
 #include "GameMode/CombatManager.h"
 #include "GameMode/Combat/BattleState.h"
 #include "GameMode/Combat/BattleUnitState.h"
 #include "GameMode/Combat/CombatEventBus.h"
 #include "GameMode/TurnManager.h"
+#include "Blueprint/WidgetLayoutLibrary.h"
 #include "Widgets/Combat/BattleResultsWidget.h"
 #include "Widgets/Combat/TurnIndicatorWidget.h"
 #include "Widgets/Combat/UnitHPBarWidget.h"
@@ -22,13 +24,11 @@ void UBattleHUDWidget::InitializeWithCombatManager(UCombatManager* InCombatManag
 	}
 
 	CombatManager = InCombatManager;
-
-	// Subscribe to combat end so we can show the results screen
 	CombatManager->OnCombatFinished.AddDynamic(this, &UBattleHUDWidget::HandleCombatFinished);
 
-	UBattleState*   BattleState  = CombatManager->GetBattleState();
-	UTurnManager*   TurnManager  = CombatManager->GetTurnManager();
-	UCombatEventBus* EventBus    = CombatManager->GetCombatEventBus();
+	UBattleState*    BattleState = CombatManager->GetBattleState();
+	UTurnManager*    TurnManager = CombatManager->GetTurnManager();
+	UCombatEventBus* EventBus   = CombatManager->GetCombatEventBus();
 
 	if (BattleState && EventBus)
 	{
@@ -42,54 +42,110 @@ void UBattleHUDWidget::InitializeWithCombatManager(UCombatManager* InCombatManag
 	if (TurnManager)
 	{
 		SpawnTurnIndicator(TurnManager);
-
-		// Mirror current turn state immediately so the indicator is correct on spawn
 		TurnStateHandle = TurnManager->OnTurnStateChanged.AddUObject(
 			this, &UBattleHUDWidget::HandleTurnStateChanged);
 	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[BattleHUDWidget] TurnManager null — turn indicator skipped"));
-	}
 
-	UE_LOG(LogTemp, Log, TEXT("[BattleHUDWidget] Initialized with %d HP bars"), HPBarMap.Num());
-
+	UE_LOG(LogTemp, Log, TEXT("[BattleHUDWidget] Initialized with %d HP bars"), HPBarWidgets.Num());
 	OnHUDInitialized();
 }
 
 void UBattleHUDWidget::Deinitialize()
 {
-	// Unsubscribe from combat finished
 	if (CombatManager)
 	{
 		CombatManager->OnCombatFinished.RemoveDynamic(this, &UBattleHUDWidget::HandleCombatFinished);
-	}
 
-	// Unsubscribe from turn state
-	if (CombatManager && CombatManager->GetTurnManager() && TurnStateHandle.IsValid())
-	{
-		CombatManager->GetTurnManager()->OnTurnStateChanged.Remove(TurnStateHandle);
-		TurnStateHandle.Reset();
-	}
-
-	// Deinitialize and remove all HP bars
-	for (auto& Pair : HPBarMap)
-	{
-		if (Pair.Value)
+		if (UTurnManager* TM = CombatManager->GetTurnManager())
 		{
-			Pair.Value->Deinitialize();
-			Pair.Value->RemoveFromParent();
+			if (TurnStateHandle.IsValid())
+			{
+				TM->OnTurnStateChanged.Remove(TurnStateHandle);
+				TurnStateHandle.Reset();
+			}
 		}
 	}
-	HPBarMap.Empty();
 
-	// Deinitialize turn indicator
+	for (UUnitHPBarWidget* Bar : HPBarWidgets)
+	{
+		if (Bar) { Bar->Deinitialize(); }
+	}
+	HPBarWidgets.Empty();
+	HPBarUnits.Empty();
+
 	if (TurnIndicatorInstance)
 	{
 		TurnIndicatorInstance->Deinitialize();
 	}
 
 	UE_LOG(LogTemp, Log, TEXT("[BattleHUDWidget] Deinitialized"));
+}
+
+// ---------------------------------------------------------------------------
+// NativeTick — reposition every HP bar each frame using its CanvasPanelSlot
+// ---------------------------------------------------------------------------
+
+void UBattleHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+
+	if (!HPBarCanvas) { return; }
+
+	APlayerController* PC = GetOwningPlayer();
+	if (!PC) { return; }
+
+	const float DPIScale = UWidgetLayoutLibrary::GetViewportScale(this);
+
+	for (int32 i = 0; i < HPBarUnits.Num(); ++i)
+	{
+		ACharacterBase* Unit  = HPBarUnits[i].Get();
+		UUnitHPBarWidget* Bar = HPBarWidgets[i].Get();
+
+		if (!IsValid(Unit) || !Bar) { continue; }
+
+		// Keep dead units hidden regardless of camera position
+		if (CombatManager && CombatManager->GetBattleState())
+		{
+			const FBattleUnitState* State = CombatManager->GetBattleState()->FindUnitState(Unit);
+			if (State && State->bIsDead)
+			{
+				Bar->SetVisibility(ESlateVisibility::Hidden);
+				continue;
+			}
+		}
+
+		const FVector WorldPos = Unit->GetActorLocation() + FVector(0.f, 0.f, HPBarWorldZOffset);
+
+		FVector2D ScreenPos;
+		if (!PC->ProjectWorldLocationToScreen(WorldPos, ScreenPos, false))
+		{
+			Bar->SetVisibility(ESlateVisibility::Hidden);
+			continue;
+		}
+
+		// Dot product check — hide if unit is behind the camera
+		FVector CamLoc;
+		FRotator CamRot;
+		PC->GetPlayerViewPoint(CamLoc, CamRot);
+		if (FVector::DotProduct(CamRot.Vector(), (WorldPos - CamLoc).GetSafeNormal()) <= 0.f)
+		{
+			Bar->SetVisibility(ESlateVisibility::Hidden);
+			continue;
+		}
+
+		Bar->SetVisibility(ESlateVisibility::HitTestInvisible);
+
+		// Convert pixels to DPI-independent canvas coordinates
+		const FVector2D CanvasPos = (ScreenPos / DPIScale) - (HPBarSize * 0.5f);
+
+		// Move the slot — this is guaranteed to work because we added the bar
+		// as a child of HPBarCanvas, so its slot is always a UCanvasPanelSlot
+		if (UCanvasPanelSlot* HPSlot = Cast<UCanvasPanelSlot>(Bar->Slot))
+		{
+			HPSlot->SetPosition(CanvasPos);
+			HPSlot->SetSize(HPBarSize);
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -104,61 +160,55 @@ void UBattleHUDWidget::SpawnHPBars(UBattleState* BattleState)
 		return;
 	}
 
+	if (!HPBarCanvas)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[BattleHUDWidget] HPBarCanvas is null — add a CanvasPanel named 'HPBarCanvas' to WBP_BattleHUD"));
+		return;
+	}
+
 	UCombatEventBus* EventBus = CombatManager->GetCombatEventBus();
 
-	// Iterate all unit states and create one HP bar widget per unit
 	for (const FBattleUnitState& UnitState : BattleState->GetAllUnitStates())
 	{
 		ACharacterBase* Unit = UnitState.UnitActor.Get();
-		if (!IsValid(Unit))
-		{
-			continue;
-		}
+		if (!IsValid(Unit)) { continue; }
 
-		UUnitHPBarWidget* HPBar = CreateWidget<UUnitHPBarWidget>(GetOwningPlayer(), HPBarWidgetClass);
-		if (!HPBar)
+		UUnitHPBarWidget* Bar = CreateWidget<UUnitHPBarWidget>(GetOwningPlayer(), HPBarWidgetClass);
+		if (!Bar)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("[BattleHUDWidget] Failed to create HPBar for %s"), *GetNameSafe(Unit));
 			continue;
 		}
 
-		// Add to viewport at a high Z-order so it renders above world geometry
-		HPBar->AddToViewport(10);
-		HPBar->InitializeForUnit(Unit, EventBus, UnitState.MaxHP, UnitState.CurrentHP);
+		// Add as child of HPBarCanvas — this gives us a UCanvasPanelSlot we can reposition each tick
+		UCanvasPanelSlot* HPSlot = HPBarCanvas->AddChildToCanvas(Bar);
+		if (HPSlot)
+		{
+			HPSlot->SetSize(HPBarSize);
+			HPSlot->SetPosition(FVector2D::ZeroVector); // Will be corrected on first tick
+		}
 
-		HPBarMap.Add(Unit, HPBar);
+		// Start hidden — first tick will show it if it's on screen
+		Bar->SetVisibility(ESlateVisibility::Hidden);
+		Bar->InitializeForUnit(Unit, EventBus, UnitState.MaxHP, UnitState.CurrentHP);
 
-		UE_LOG(LogTemp, Log, TEXT("[BattleHUDWidget] HP bar spawned for %s (HP %.0f/%.0f)"),
-			*GetNameSafe(Unit), UnitState.CurrentHP, UnitState.MaxHP);
+		HPBarUnits.Add(Unit);
+		HPBarWidgets.Add(Bar);
+
+		UE_LOG(LogTemp, Log, TEXT("[BattleHUDWidget] HP bar spawned for %s"), *GetNameSafe(Unit));
 	}
 }
 
-void UBattleHUDWidget::SpawnTurnIndicator(UTurnManager* TurnManager)
+void UBattleHUDWidget::SpawnTurnIndicator(UTurnManager* InTurnManager)
 {
-	if (!TurnIndicatorClass)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[BattleHUDWidget] TurnIndicatorClass not set — turn indicator disabled"));
-		return;
-	}
+	if (!TurnIndicatorClass) { return; }
 
 	TurnIndicatorInstance = CreateWidget<UTurnIndicatorWidget>(GetOwningPlayer(), TurnIndicatorClass);
-	if (!TurnIndicatorInstance)
-	{
-		UE_LOG(LogTemp, Error, TEXT("[BattleHUDWidget] Failed to create TurnIndicatorWidget"));
-		return;
-	}
+	if (!TurnIndicatorInstance) { return; }
 
-	if (TurnIndicatorContainer)
-	{
-		TurnIndicatorContainer->AddChild(TurnIndicatorInstance);
-	}
-	else
-	{
-		// Fallback: add directly to viewport if no container is bound
-		TurnIndicatorInstance->AddToViewport(11);
-	}
-
-	TurnIndicatorInstance->InitializeWithTurnManager(TurnManager);
+	// Add directly to this widget's canvas at a fixed position, or to the viewport
+	TurnIndicatorInstance->AddToViewport(11);
+	TurnIndicatorInstance->InitializeWithTurnManager(InTurnManager);
 
 	UE_LOG(LogTemp, Log, TEXT("[BattleHUDWidget] Turn indicator spawned"));
 }
@@ -169,37 +219,19 @@ void UBattleHUDWidget::SpawnTurnIndicator(UTurnManager* TurnManager)
 
 void UBattleHUDWidget::HandleCombatFinished(EBattleUnitTeam WinningTeam)
 {
-	if (!BattleResultsClass)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[BattleHUDWidget] BattleResultsClass not set — results screen skipped"));
-		return;
-	}
-
-	UBattleResultsWidget* Results = CreateWidget<UBattleResultsWidget>(GetOwningPlayer(), BattleResultsClass);
-	if (!Results)
-	{
-		UE_LOG(LogTemp, Error, TEXT("[BattleHUDWidget] Failed to create BattleResultsWidget"));
-		return;
-	}
-
-	const int32 AliveAllies  = CombatManager ? CombatManager->GetAliveAllies()  : 0;
-	const int32 AliveEnemies = CombatManager ? CombatManager->GetAliveEnemies() : 0;
-
-	// Allies lost = total units initialized minus those still alive.
-	// We expose this through BattleState's total count minus alive count.
-	const int32 TotalAllies  = CombatManager ? CombatManager->GetTotalAllies()  : 0;
-	const int32 AlliesLost   = FMath::Max(0, TotalAllies - AliveAllies);
-
-	Results->AddToViewport(100); // Very high Z so it covers everything
-	Results->ShowResults(WinningTeam, AliveAllies, AliveEnemies, AlliesLost);
-
-	UE_LOG(LogTemp, Log,
-		TEXT("[BattleHUDWidget] Results screen shown — Winner=%d, Allies=%d/%d, Enemies=%d"),
-		(int32)WinningTeam, AliveAllies, TotalAllies, AliveEnemies);
+    // Results display is handled by BattleResultsController, which is spawned
+    // by TowerFloorGameMode when GameContextManager enters the BattleResults state.
+    // This widget must NOT create a BattleResultsWidget here because:
+    //   1. It would have no bind to OnContinueClicked, so Continue does nothing.
+    //   2. BattleResultsController creates its own widget with the correct bind.
+    //   3. SwapPlayerControllers destroys this HUD's owning controller shortly after,
+    //      which would destroy the widget before the player can interact with it.
+    UE_LOG(LogTemp, Log,
+        TEXT("[BattleHUDWidget] Combat finished (Winner=%d) — results handed off to BattleResultsController"),
+        (int32)WinningTeam);
 }
 
 void UBattleHUDWidget::HandleTurnStateChanged(EBattleTurnOwner NewOwner, EBattleTurnPhase NewPhase)
 {
-	const bool bIsPlayerTurn = (NewOwner == EBattleTurnOwner::Player);
-	OnTurnChanged(bIsPlayerTurn);
+	OnTurnChanged(NewOwner == EBattleTurnOwner::Player);
 }

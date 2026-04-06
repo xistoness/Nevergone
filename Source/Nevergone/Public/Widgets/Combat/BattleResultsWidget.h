@@ -37,13 +37,13 @@ public:
 	 * @param WinningTeam       Which team won (Ally = victory, Enemy = defeat)
 	 * @param SurvivingAllies   Number of player units still alive
 	 * @param SurvivingEnemies  Number of enemy units still alive (0 on victory)
-	 * @param AlliesLost        Total player units that died this fight
+	 * @param EnemiesKilled     Total enemy units that died this fight
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Battle Results")
 	void ShowResults(EBattleUnitTeam WinningTeam,
 	                 int32 SurvivingAllies,
 	                 int32 SurvivingEnemies,
-	                 int32 AlliesLost);
+	                 int32 EnemiesKilled);
 
 	/**
 	 * Delegate fired when the player presses "Continue".
@@ -68,7 +68,7 @@ protected:
 
 	/** e.g. "Allies Lost: 1" */
 	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UTextBlock> AlliesLostText;
+	TObjectPtr<UTextBlock> EnemiesKilledText;
 
 	/** Button to dismiss this screen and return to exploration. */
 	UPROPERTY(meta = (BindWidget))

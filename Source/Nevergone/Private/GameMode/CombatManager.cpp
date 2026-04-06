@@ -7,12 +7,14 @@
 #include "ActorComponents/UnitStatsComponent.h"
 #include "Audio/AudioSubsystem.h"
 #include "Characters/Abilities/BattleMovementAbility.h"
+#include "Engine/Texture2D.h"
 #include "GameInstance/MyGameInstance.h"
 #include "GameMode/BattlePreparationContext.h"
 #include "GameMode/Combat/BattleInputManager.h"
 #include "GameMode/Combat/BattleCameraPawn.h"
 #include "GameMode/Combat/BattleState.h"
 #include "GameMode/Combat/CombatEventBus.h"
+#include "GameMode/Combat/StatusEffectManager.h"
 #include "GameMode/Combat/AI/BattleTeamAIPlanner.h"
 #include "Characters/CharacterBase.h"
 #include "Characters/PlayerControllers/BattlePlayerController.h"
@@ -80,6 +82,19 @@ void UCombatManager::SpawnAllies(UBattlePreparationContext& BattlePrepContext, U
 		Entry.UnitActor = Character;
 		Entry.SourceIndex = i;
 		Entry.Team = EBattleUnitTeam::Ally;
+		
+		const FGeneratedPlayerData& PlayerData = BattlePrepContext.PlayerParty[i];
+		if (UUnitStatsComponent* Stats = Character->GetUnitStats())
+		{
+			if (PlayerData.PersistentHP > 0)
+			{
+				Stats->SetCurrentHP(PlayerData.PersistentHP);
+				UE_LOG(LogTemp, Log,
+					TEXT("[CombatManager] Restored PersistentHP=%d for %s"),
+					PlayerData.PersistentHP, *GetNameSafe(Character));
+			}
+			Stats->InitializeForBattle();
+		}
 
 		InitializeSpawnedUnitForBattle(Character, EBattleUnitTeam::Ally, Grid);
 
@@ -174,6 +189,7 @@ void UCombatManager::StartCombat(UBattlePreparationContext& BattlePrepContext)
 	// BattlePrepContext.SpawnedUnits, which is populated during the spawn loop.
 	EventBus = NewObject<UCombatEventBus>(this);
 	EventBus->OnUnitDied.AddUObject(this, &UCombatManager::HandleUnitDeath);
+	EventBus->OnStatusApplied.AddUObject(this, &UCombatManager::HandleStatusApplied);
 	
 	// Bind the AudioSubsystem to this battle's event bus so combat SFX
 	// (hits, deaths, heals) fire automatically for the duration of this session
@@ -217,13 +233,20 @@ void UCombatManager::StartCombat(UBattlePreparationContext& BattlePrepContext)
 
 	// Wire BattleState
 	EventBus->Initialize(BattleState);
+	EventBus->SetStatusEffectManager(StatusEffectManager);
 	BattleTeamAIPlanner->SetBattleState(BattleState);
+
+	// Create and initialize StatusEffectManager — must happen after BattleState
+	// and TurnManager exist, and before units' BattleModeComponents are finalized
+	StatusEffectManager = NewObject<UStatusEffectManager>(this);
+	StatusEffectManager->Initialize(BattleState, EventBus, TurnManager);
 	
 	for (ACharacterBase* Unit : SpawnedAllies)
 	{
 		if (UBattleModeComponent* BattleComp = Unit ? Unit->GetBattleModeComponent() : nullptr)
 		{
 			BattleComp->SetBattleState(BattleState);
+			BattleComp->SetStatusEffectManager(StatusEffectManager);
 		}
 	}
 	for (ACharacterBase* Unit : SpawnedEnemies)
@@ -231,6 +254,25 @@ void UCombatManager::StartCombat(UBattlePreparationContext& BattlePrepContext)
 		if (UBattleModeComponent* BattleComp = Unit ? Unit->GetBattleModeComponent() : nullptr)
 		{
 			BattleComp->SetBattleState(BattleState);
+			BattleComp->SetStatusEffectManager(StatusEffectManager);
+		}
+	}
+
+	// Inject TurnManager into every unit's BattleModeComponent.
+	// This must happen after TurnManager is created (line above SpawnAllies ran
+	// with TurnManager still null, so SetTurnManager got nullptr then).
+	for (ACharacterBase* Unit : SpawnedAllies)
+	{
+		if (UBattleModeComponent* BattleComp = Unit ? Unit->GetBattleModeComponent() : nullptr)
+		{
+			BattleComp->SetTurnManager(TurnManager);
+		}
+	}
+	for (ACharacterBase* Unit : SpawnedEnemies)
+	{
+		if (UBattleModeComponent* BattleComp = Unit ? Unit->GetBattleModeComponent() : nullptr)
+		{
+			BattleComp->SetTurnManager(TurnManager);
 		}
 	}
 
@@ -380,16 +422,21 @@ void UCombatManager::OnPlayerTurnStarted()
 {
 	UE_LOG(LogTemp, Warning, TEXT("[CombatManager]: Player turn started"));
 	if (!InputContextBuilder || bCombatEnding) return;
-	
+
 	ClearCurrentSelectedUnit();
-	
+
 	BattleState->ResetTurnStateForTeam(EBattleUnitTeam::Ally);
 	
+	for (ACharacterBase* Enemy : SpawnedEnemies)
+	{
+		BindToCombatUnitActionEvents(Enemy);
+	}
+
 	InputContextBuilder->SetUnitInputEnabled(true);
 	InputContextBuilder->SetCameraInputEnabled(true);
 	InputContextBuilder->SetHardLock(false);
 	UpdateInputContext();
-	
+
 	SelectedUnit = INDEX_NONE;
 	SelectFirstAvailableUnit();
 }
@@ -398,16 +445,28 @@ void UCombatManager::OnEnemyTurnStarted()
 {
 	UE_LOG(LogTemp, Warning, TEXT("[CombatManager]: Enemy turn started"));
 	if (!InputContextBuilder || bCombatEnding) return;
-	
+
 	ClearCurrentSelectedUnit();
 	OnEnemyTurnBegan.Broadcast();
-	
+
 	BattleState->ResetTurnStateForTeam(EBattleUnitTeam::Enemy);
+	
+	for (ACharacterBase* Enemy : SpawnedEnemies)
+	{
+		if (UBattleModeComponent* BattleComp = Enemy
+			? Enemy->FindComponentByClass<UBattleModeComponent>()
+			: nullptr)
+		{
+			// Keep Started (camera lock) — remove only Finished (recursion source)
+			BattleComp->OnActionUseFinished.RemoveDynamic(
+				this, &UCombatManager::HandleUnitActionFinished);
+		}
+	}
 
 	InputContextBuilder->SetCameraInputEnabled(false);
 	InputContextBuilder->SetHardLock(true);
 	UpdateInputContext();
-	
+
 	BattleTeamAIPlanner->StartTeamTurn();
 }
 
@@ -549,6 +608,26 @@ void UCombatManager::HandleActiveUnitChanged(ACharacterBase* NewActiveUnit)
 	if (BattleInputManager)
 	{
 		BattleInputManager->OnActiveUnitChanged(CurrentSelectedUnit);
+	}
+}
+
+void UCombatManager::HandleStatusApplied(ACharacterBase* Target, const FGameplayTag& StatusTag, UTexture2D* /*Icon*/)
+{
+	// This fires whenever any unit receives a status effect.
+	// We only care if it affected the currently active player unit — e.g. an enemy ability
+	// applies Stun to the player's selected unit mid-turn. In that case we need to
+	// immediately advance selection so the player doesn't try to act with a stunned unit.
+	if (bCombatEnding || !BattleState || !TurnManager) { return; }
+	if (TurnManager->GetCurrentTurnOwner() != EBattleTurnOwner::Player) { return; }
+	if (Target != CurrentSelectedUnit) { return; }
+
+	if (!BattleState->CanUnitAct(Target))
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[CombatManager] Status '%s' applied to active unit %s — unit can no longer act, advancing selection"),
+			*StatusTag.ToString(), *GetNameSafe(Target));
+
+		SelectNextControllableUnit();
 	}
 }
 
@@ -744,6 +823,12 @@ void UCombatManager::Cleanup()
 	if (TurnManager)
 	{
 		TurnManager->OnTurnStateChanged.RemoveAll(this);
+	}
+
+	if (StatusEffectManager)
+	{
+		StatusEffectManager->Shutdown();
+		StatusEffectManager = nullptr;
 	}
 
 	if (UGridManager* Grid = GetWorld()->GetSubsystem<UGridManager>())
@@ -949,27 +1034,35 @@ void UCombatManager::RestoreInputAfterAction(ACharacterBase* ActingUnit)
 
 void UCombatManager::HandleAIActionFinished()
 {
-    if (bCombatEnding || !BattleTeamAIPlanner) { return; }
+	if (bCombatEnding || !BattleTeamAIPlanner) { return; }
 
-    // If the camera is still moving toward the acting unit, poll until it arrives.
-    // This prevents the planner from starting the next action while the camera
-    // is still catching up, which caused the 1s timer to fire mid-movement.
-    if (BattleCameraPawn && BattleCameraPawn->HasLockedActor() && !BattleCameraPawn->IsNearLockedActor())
-    {
-        UE_LOG(LogTemp, Log, TEXT("[CombatManager] AI action finished — waiting for camera to reach actor"));
-        GetWorld()->GetTimerManager().SetTimer(
-            AICameraWaitHandle,
-            this,
-            &UCombatManager::PollCameraReachedActor,
-            0.05f,
-            true
-        );
-    }
-    else
-    {
-        UE_LOG(LogTemp, Log, TEXT("[CombatManager] AI action finished — camera already arrived, continuing"));
-        BattleTeamAIPlanner->ContinueAfterActionDelay();
-    }
+	if (BattleCameraPawn && BattleCameraPawn->HasLockedActor() && !BattleCameraPawn->IsNearLockedActor())
+	{
+		UE_LOG(LogTemp, Log, TEXT("[CombatManager] AI action finished — waiting for camera to reach actor"));
+		GetWorld()->GetTimerManager().SetTimer(
+			AICameraWaitHandle,
+			this,
+			&UCombatManager::PollCameraReachedActor,
+			0.05f,
+			true
+		);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Log, TEXT("[CombatManager] AI action finished — deferring next action to next frame"));
+		GetWorld()->GetTimerManager().SetTimer(
+			AICameraWaitHandle,       // reuse the same handle — it's idle here
+			[this]()
+			{
+				if (!bCombatEnding && BattleTeamAIPlanner)
+				{
+					BattleTeamAIPlanner->ContinueAfterActionDelay();
+				}
+			},
+			0.05f,
+			false                     // false = fires once, not looping
+		);
+	}
 }
 
 void UCombatManager::PollCameraReachedActor()

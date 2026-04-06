@@ -8,8 +8,10 @@
 #include "Characters/CharacterBase.h"
 #include "Characters/Abilities/AbilityPreview/AbilityPreviewRenderer.h"
 #include "Data/AbilityDefinition.h"
+#include "Data/StatusEffectDefinition.h"
 #include "GameMode/Combat/BattleState.h"
 #include "GameMode/Combat/CombatEventBus.h"
+#include "GameMode/Combat/StatusEffectManager.h"
 #include "GameMode/TurnManager.h"
 #include "Nevergone.h"
 #include "ActorComponents/MyAbilitySystemComponent.h"
@@ -21,9 +23,37 @@ UBattleGameplayAbility::UBattleGameplayAbility()
     InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
     bActivateAbilityOnGranted = false;
 
-    // All abilities are blocked while stunned or while this instance is on cooldown
+    // Block activation while stunned.
+    // Cooldown is enforced per-instance via IsOnCooldown() in HasSufficientAP(),
+    // not via a shared ASC tag, so one ability's cooldown never blocks others.
     ActivationBlockedTags.AddTag(TAG_State_Stunned);
-    ActivationBlockedTags.AddTag(TAG_State_AbilityOnCooldown);
+}
+
+// Resolves the owning character from ActorInfo — works on both CDO and live instances.
+static ACharacterBase* GetAvatarCharacter(const UGameplayAbility* Ability)
+{
+    if (!Ability) { return nullptr; }
+    const FGameplayAbilityActorInfo* Info = Ability->GetCurrentActorInfo();
+    if (!Info) { return nullptr; }
+    return Cast<ACharacterBase>(Info->AvatarActor.Get());
+}
+
+bool UBattleGameplayAbility::IsOnCooldown() const
+{
+    if (!AbilityDefinition) { return false; }
+    const ACharacterBase* Char = GetAvatarCharacter(this);
+    if (!Char) { return false; }
+    const UBattleModeComponent* BM = Char->GetBattleModeComponent();
+    return BM ? BM->IsDefinitionOnCooldown(AbilityDefinition) : false;
+}
+
+int32 UBattleGameplayAbility::GetRemainingCooldownTurns() const
+{
+    if (!AbilityDefinition) { return 0; }
+    const ACharacterBase* Char = GetAvatarCharacter(this);
+    if (!Char) { return 0; }
+    const UBattleModeComponent* BM = Char->GetBattleModeComponent();
+    return BM ? BM->GetDefinitionCooldownTurns(AbilityDefinition) : 0;
 }
 
 FActionResult UBattleGameplayAbility::BuildPreview(const FActionContext& Context) const
@@ -156,16 +186,34 @@ void UBattleGameplayAbility::ApplyOnHitStatusEffects(
         return;
     }
 
+    UBattleModeComponent* BattleMode = SourceCharacter
+        ? SourceCharacter->GetBattleModeComponent()
+        : nullptr;
+    UStatusEffectManager* StatusManager = BattleMode
+        ? BattleMode->GetStatusEffectManager()
+        : nullptr;
+
+    if (!StatusManager)
+    {
+        UE_LOG(LogNevergone, Warning,
+            TEXT("[BattleGameplayAbility] ApplyOnHitStatusEffects: StatusEffectManager not found on %s — skipped"),
+            *GetNameSafe(SourceCharacter));
+        return;
+    }
+
+    // Resolve the caster stat that will be snapshotted for PercentOfCasterStat
+    // and Shield formulas. The stat mirrors this ability's own DamageSource so
+    // Poison from a Magical ability scales off MagicalPower, Physical off PhysicalAttack, etc.
+    const int32 CasterStatSnapshot = ResolveCasterStatSnapshot(SourceCharacter);
+
     for (ACharacterBase* Target : HitActors)
     {
-        if (!Target)
-        {
-            continue;
-        }
+        if (!Target) { continue; }
 
-        for (const FAbilityStatusEffect& Effect : AbilityDefinition->OnHitStatusEffects)
+        for (UStatusEffectDefinition* Definition : AbilityDefinition->OnHitStatusEffects)
         {
-            ApplyStatusEffect(SourceCharacter, Target, Effect);
+            if (!Definition) { continue; }
+            StatusManager->ApplyStatusEffect(SourceCharacter, Target, Definition, CasterStatSnapshot);
         }
     }
 }
@@ -177,14 +225,62 @@ void UBattleGameplayAbility::ApplySelfStatusEffects(ACharacterBase* SourceCharac
         return;
     }
 
-    for (const FAbilityStatusEffect& Effect : AbilityDefinition->SelfStatusEffects)
+    UBattleModeComponent* BattleMode = SourceCharacter
+        ? SourceCharacter->GetBattleModeComponent()
+        : nullptr;
+    UStatusEffectManager* StatusManager = BattleMode
+        ? BattleMode->GetStatusEffectManager()
+        : nullptr;
+
+    if (!StatusManager)
     {
-        ApplyStatusEffect(SourceCharacter, SourceCharacter, Effect);
+        UE_LOG(LogNevergone, Warning,
+            TEXT("[BattleGameplayAbility] ApplySelfStatusEffects: StatusEffectManager not found on %s — skipped"),
+            *GetNameSafe(SourceCharacter));
+        return;
     }
+
+    const int32 CasterStatSnapshot = ResolveCasterStatSnapshot(SourceCharacter);
+
+    for (UStatusEffectDefinition* Definition : AbilityDefinition->SelfStatusEffects)
+    {
+        if (!Definition) { continue; }
+        StatusManager->ApplyStatusEffect(SourceCharacter, SourceCharacter, Definition, CasterStatSnapshot);
+    }
+}
+
+int32 UBattleGameplayAbility::ResolveCasterStatSnapshot(ACharacterBase* SourceCharacter) const
+{
+    if (!AbilityDefinition || !SourceCharacter) { return 0; }
+
+    UBattleModeComponent* BattleMode = SourceCharacter->GetBattleModeComponent();
+    const UBattleState* BattleStateRef = BattleMode ? BattleMode->GetBattleState() : nullptr;
+    if (!BattleStateRef) { return 0; }
+
+    const FBattleUnitState* SourceState = BattleStateRef->FindUnitState(SourceCharacter);
+    if (!SourceState) { return 0; }
+
+    // Mirror the ability's own DamageSource so that status DoTs and Shields scale
+    // off the same stat the ability itself uses for direct damage.
+    switch (AbilityDefinition->DamageSource)
+    {
+        case EAbilityDamageSource::Physical: return SourceState->PhysicalAttack;
+        case EAbilityDamageSource::Ranged:   return SourceState->RangedAttack;
+        case EAbilityDamageSource::Magical:  return SourceState->MagicalPower;
+    }
+
+    return 0;
 }
 
 bool UBattleGameplayAbility::HasSufficientAP(const FActionContext& Context) const
 {
+    // Cooldown check — each ability instance tracks its own cooldown independently.
+    // This prevents one ability's cooldown from blocking all others on the unit.
+    if (IsOnCooldown())
+    {
+        return false;
+    }
+
     const ACharacterBase* Source = Cast<ACharacterBase>(Context.SourceActor);
     if (!Source) { return false; }
  
@@ -203,52 +299,11 @@ bool UBattleGameplayAbility::HasSufficientAP(const FActionContext& Context) cons
     if (!bSufficient)
     {
         UE_LOG(LogNevergone, Log,
-            TEXT("[BattleGameplayAbility] HasSufficientAP: %s has %d AP, needs %d — blocked"),
+            TEXT("[BattleGameplayAbility] HasSufficientAP: %s has %d AP, needs %d -- blocked"),
             *GetNameSafe(Source), UnitState->CurrentActionPoints, Cost);
     }
  
     return bSufficient;
-}
-
-void UBattleGameplayAbility::ApplyStatusEffect(
-    ACharacterBase* SourceCharacter,
-    ACharacterBase* TargetCharacter,
-    const FAbilityStatusEffect& Effect
-)
-{
-    if (!TargetCharacter || !Effect.StatusTag.IsValid())
-    {
-        return;
-    }
-
-    // Add the tag to the ASC so GAS-based systems (ActivationBlockedTags, etc.) react
-    if (UAbilitySystemComponent* ASC = TargetCharacter->GetAbilitySystemComponent())
-    {
-        ASC->AddLooseGameplayTags(FGameplayTagContainer(Effect.StatusTag));
-    }
-
-    // Route through the event bus: updates BattleState, spawns floating text, broadcasts delegates
-    UBattleModeComponent* BattleMode = SourceCharacter
-        ? SourceCharacter->GetBattleModeComponent()
-        : nullptr;
-
-    if (UCombatEventBus* Bus = BattleMode ? BattleMode->GetCombatEventBus() : nullptr)
-    {
-        Bus->NotifyStatusApplied(TargetCharacter, Effect.StatusTag, Effect.DisplayLabel, Effect.Icon);
-
-        UE_LOG(LogNevergone, Log,
-            TEXT("[BattleGameplayAbility] Status '%s' applied to %s by %s"),
-            *Effect.StatusTag.ToString(),
-            *GetNameSafe(TargetCharacter),
-            *GetNameSafe(SourceCharacter));
-    }
-    else
-    {
-        UE_LOG(LogNevergone, Warning,
-            TEXT("[BattleGameplayAbility] ApplyStatusEffect: CombatEventBus not found — "
-                 "status '%s' added to ASC only, BattleState not notified"),
-            *Effect.StatusTag.ToString());
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -291,10 +346,16 @@ void UBattleGameplayAbility::TryStartCooldown(ACharacterBase* SourceCharacter)
     }
 
     CooldownOwner = SourceCharacter;
-    RemainingCooldownTurns = AbilityDefinition->CooldownTurns;
+    
+    if (!BattleMode) { return; }
+    // Store CooldownTurns + 1 so the decrement that fires at the start of the
+    // NEXT player turn brings it to CooldownTurns, not CooldownTurns - 1.
+    // Model A: cooldown 2 used on turn 1 -> stored as 3, decrements to 2 on
+    // turn 2 start (still blocked), to 1 on turn 3 start (blocked), to 0 on
+    // turn 4 start -> expires -> available turn 4. 2 full turns skipped.
+    BattleMode->StartDefinitionCooldown(AbilityDefinition, AbilityDefinition->CooldownTurns + 1);
 
-    ASC->AddLooseGameplayTags(FGameplayTagContainer(TAG_State_AbilityOnCooldown));
-
+    // Subscribe to turn ticks to call TickDefinitionCooldowns each player turn.
     CooldownTurnHandle = TurnManager->OnTurnStateChanged.AddUObject(
         this, &UBattleGameplayAbility::OnTurnStateChanged
     );
@@ -312,15 +373,20 @@ void UBattleGameplayAbility::OnTurnStateChanged(EBattleTurnOwner NewOwner, EBatt
         return;
     }
 
-    RemainingCooldownTurns--;
-
-    UE_LOG(LogNevergone, Log,
-        TEXT("[BattleGameplayAbility] %s cooldown tick for %s — %d turns remaining"),
-        *GetName(), *GetNameSafe(CooldownOwner), RemainingCooldownTurns);
-
-    if (RemainingCooldownTurns <= 0)
+    // Tick the definition cooldown map on the owning unit.
+    // TickDefinitionCooldowns decrements all entries; we unsubscribe once ours expires.
+    if (CooldownOwner)
     {
-        ClearCooldown();
+        if (UBattleModeComponent* BM = CooldownOwner->GetBattleModeComponent())
+        {
+            BM->TickDefinitionCooldowns();
+
+            // Unsubscribe when our definition is no longer on cooldown
+            if (!BM->IsDefinitionOnCooldown(AbilityDefinition))
+            {
+                ClearCooldown();
+            }
+        }
     }
 }
 
@@ -343,18 +409,12 @@ void UBattleGameplayAbility::ClearCooldown()
 
     if (CooldownOwner)
     {
-        if (UAbilitySystemComponent* ASC = CooldownOwner->GetAbilitySystemComponent())
-        {
-            ASC->RemoveLooseGameplayTags(FGameplayTagContainer(TAG_State_AbilityOnCooldown));
-
-            UE_LOG(LogNevergone, Log,
-                TEXT("[BattleGameplayAbility] %s cooldown expired for %s — ability available again"),
-                *GetName(), *GetNameSafe(CooldownOwner));
-        }
+        UE_LOG(LogNevergone, Log,
+            TEXT("[BattleGameplayAbility] %s cooldown expired for %s -- ability available again"),
+            *GetName(), *GetNameSafe(CooldownOwner));
     }
 
     CooldownOwner = nullptr;
-    RemainingCooldownTurns = 0;
 }
 
 void UBattleGameplayAbility::PlayCastSFX(ACharacterBase* SourceCharacter) const

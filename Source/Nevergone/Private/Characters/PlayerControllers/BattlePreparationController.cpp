@@ -16,6 +16,18 @@ void ABattlePreparationController::SetupInputComponent()
 	}
 }
 
+void ABattlePreparationController::SetPreparationContext(UBattlePreparationContext* InContext)
+{
+	if (!InContext) { return; }
+	PreparationContext = InContext;
+
+	// Future: spawn preparation widget here and populate from context.
+	// For now, auto-confirm immediately (debug behavior preserved).
+	UE_LOG(LogTemp, Log,
+		TEXT("[BattlePreparationController] PreparationContext received — auto-confirming for now"));
+	SendRequestBattleStart();
+}
+
 void ABattlePreparationController::BeginPlay()
 {
 	Super::BeginPlay();

@@ -1,8 +1,8 @@
 // Copyright Xyzto Works
 
-
 #include "Level/FloorEncounterVolume.h"
 #include "Components/BoxComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Data/ActorSaveData.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
@@ -13,7 +13,9 @@
 
 AFloorEncounterVolume::AFloorEncounterVolume()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	// Tick is needed for the bob + rotation animation.
+	// Disabled when the encounter is resolved so idle encounters cost nothing.
+	PrimaryActorTick.bCanEverTick = true;
 
 	// --- Trigger box (player detection) ---
 	TriggerBox = CreateDefaultSubobject<UBoxComponent>(TEXT("TriggerBox"));
@@ -32,18 +34,54 @@ AFloorEncounterVolume::AFloorEncounterVolume()
 	);
 
 	// --- Battle box (grid area) ---
-	// Positioned relative to the root so you can size and move it independently.
-	// Default: 1000x1000 footprint — adjust in the viewport per encounter.
 	BattleBox = CreateDefaultSubobject<UBoxComponent>(TEXT("BattleBox"));
 	BattleBox->SetupAttachment(RootComponent);
 	BattleBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	BattleBox->SetBoxExtent(FVector(500.f, 500.f, 50.f));
 	BattleBox->SetLineThickness(3.f);
 
-	SkeletalMeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("SkeletalMeshComponent"));
-	SkeletalMeshComponent->SetupAttachment(RootComponent);
-	
+	// --- Indicator mesh (replaces the old SkeletalMeshComponent) ---
+	// Assign a static mesh in the Blueprint CDO or in the viewport.
+	// The bob + rotation are driven purely by Tick — no animation asset needed.
+	IndicatorMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("IndicatorMesh"));
+	IndicatorMesh->SetupAttachment(RootComponent);
+	IndicatorMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	IndicatorMesh->SetGenerateOverlapEvents(false);
+
 	SaveableComponent = CreateDefaultSubobject<USaveableComponent>(TEXT("SaveableComponent"));
+}
+
+void AFloorEncounterVolume::BeginPlay()
+{
+	Super::BeginPlay();
+
+	if (IndicatorMesh)
+	{
+		// Snapshot the mesh's designed Z so the bob is a clean delta on top of it.
+		MeshBaseZ = IndicatorMesh->GetRelativeLocation().Z;
+	}
+}
+
+void AFloorEncounterVolume::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	if (!IndicatorMesh) { return; }
+
+	// --- Bob (vertical sine wave) ---
+	// Wrap BobTime at 2PI to prevent float precision loss over very long sessions.
+	BobTime += DeltaTime * BobFrequency * 2.f * PI;
+	if (BobTime > 2.f * PI) { BobTime -= 2.f * PI; }
+
+	const float BobOffset = FMath::Sin(BobTime) * (BobAmplitude * 0.5f);
+
+	FVector RelLoc = IndicatorMesh->GetRelativeLocation();
+	RelLoc.Z = MeshBaseZ + BobOffset;
+	IndicatorMesh->SetRelativeLocation(RelLoc);
+
+	// --- Rotation (slow spin around local Z) ---
+	const float DeltaYaw = RotationSpeed * DeltaTime;
+	IndicatorMesh->AddLocalRotation(FRotator(0.f, DeltaYaw, 0.f));
 }
 
 // --- Grid config accessors ---
@@ -89,8 +127,6 @@ void AFloorEncounterVolume::ReadSaveData_Implementation(const FActorSaveData& In
 
 void AFloorEncounterVolume::OnPostRestore_Implementation()
 {
-	// State is already in bEncounterResolved from ReadSaveData.
-	// Apply the visual/collision consequences here, after the world is fully loaded.
 	if (bEncounterResolved)
 	{
 		DeactivateEncounter();
@@ -105,6 +141,9 @@ void AFloorEncounterVolume::DeactivateEncounter()
 
 	SetActorEnableCollision(false);
 	SetActorHiddenInGame(true);
+
+	// Stop ticking — no visual to animate when the encounter is gone.
+	SetActorTickEnabled(false);
 
 	bAutoStartOnEnter = false;
 }
@@ -149,12 +188,12 @@ void AFloorEncounterVolume::OnTriggerBeginOverlap(UPrimitiveComponent* Overlappe
 		return;
 	}
 
-	ContextManager->RequestBattlePreparation(this);
-	
-	if (!SkeletalMeshComponent)
+	// Hide the indicator immediately so there's no visual pop when the
+	// battle starts and the actor is later fully deactivated.
+	if (IndicatorMesh)
 	{
-		return;
+		IndicatorMesh->SetVisibility(false);
 	}
-	SkeletalMeshComponent->SetVisibility(false);
-}
 
+	ContextManager->RequestBattlePreparation(this);
+}
