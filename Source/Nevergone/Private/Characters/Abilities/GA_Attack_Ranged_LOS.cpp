@@ -185,6 +185,10 @@ void UGA_Attack_Ranged_LOS::ApplyResolvedAttack()
 	}
 
 	Bus->NotifyDamageApplied(CachedCharacter, CachedTargetCharacter, FinalDamage);
+
+	// Apply on-hit status effects (e.g. Poison, Stun) defined in AbilityDefinition->OnHitStatusEffects.
+	// Must be called after damage so effects that check IsAlive() on the target behave correctly.
+	ApplyOnHitStatusEffects(CachedCharacter, { CachedTargetCharacter });
 }
 
 void UGA_Attack_Ranged_LOS::FinalizeAttackAction()
@@ -208,6 +212,10 @@ void UGA_Attack_Ranged_LOS::ApplyAbilityCompletionEffects()
 			BattleStateRef->ConsumeActionPoints(CachedCharacter, CachedActionPointsCost);
 		}
 	}
+
+	// Apply self-targeting status effects defined in AbilityDefinition->SelfStatusEffects
+	// (e.g. self-buff triggered on use of this ability).
+	ApplySelfStatusEffects(CachedCharacter);
 }
 
 void UGA_Attack_Ranged_LOS::EndAbility(

@@ -16,19 +16,21 @@ class UBattleState;
 class UUnitHPBarWidget;
 class UTurnIndicatorWidget;
 class UBattleResultsWidget;
-class UVerticalBox;
+class UCanvasPanel;
 
 /**
  * Master in-battle HUD.
  *
- * Responsibilities:
- *   - Spawns and positions a UUnitHPBarWidget above every combatant
- *   - Hosts a UTurnIndicatorWidget ("PLAYER TURN / ENEMY TURN")
- *   - Listens to UCombatManager::OnCombatFinished and shows UBattleResultsWidget
+ * owns a full-screen CanvasPanel (HPBarCanvas) where all HP bar widgets
+ * are placed as children. NativeTick projects each unit's world position
+ * to screen space and updates the corresponding CanvasPanelSlot every frame.
+ * This avoids all tick/positioning issues with standalone viewport widgets.
  *
- * Lifecycle:
- *   Created by BattlePlayerController after StartCombat.
- *   Destroyed by BattlePlayerController on Cleanup.
+ * Setup in WBP_BattleHUD:
+ *   - Root widget must be a CanvasPanel sized to fill the screen (Anchors: full)
+ *   - Add a child CanvasPanel named "HPBarCanvas" (also full-screen, no hit-test)
+ *   - Add a child VerticalBox named "TurnIndicatorContainer" anchored where you want
+ *     the turn banner (e.g. top-center)
  */
 UCLASS(Abstract)
 class NEVERGONE_API UBattleHUDWidget : public UUserWidget
@@ -37,81 +39,69 @@ class NEVERGONE_API UBattleHUDWidget : public UUserWidget
 
 public:
 
-	/**
-	 * Wires this HUD to the active combat session.
-	 * Must be called immediately after AddToViewport.
-	 *
-	 * @param InCombatManager  Owning combat manager for this battle
-	 */
 	UFUNCTION(BlueprintCallable, Category = "Battle HUD")
 	void InitializeWithCombatManager(UCombatManager* InCombatManager);
 
-	/** Tears down all delegate bindings. Called before RemoveFromParent. */
 	UFUNCTION(BlueprintCallable, Category = "Battle HUD")
 	void Deinitialize();
 
 protected:
 
 	// -----------------------------------------------------------------------
-	// Widget class references — set in the Blueprint subclass
+	// Widget class references — set in the Blueprint subclass defaults
 	// -----------------------------------------------------------------------
 
-	/** Widget class used for each unit's HP bar floating above them. */
 	UPROPERTY(EditDefaultsOnly, Category = "Battle HUD|Classes")
 	TSubclassOf<UUnitHPBarWidget> HPBarWidgetClass;
 
-	/** Widget class used for the turn indicator banner. */
 	UPROPERTY(EditDefaultsOnly, Category = "Battle HUD|Classes")
 	TSubclassOf<UTurnIndicatorWidget> TurnIndicatorClass;
 
-	/** Widget class shown when combat ends (victory or defeat). */
-	UPROPERTY(EditDefaultsOnly, Category = "Battle HUD|Classes")
-	TSubclassOf<UBattleResultsWidget> BattleResultsClass;
-
 	// -----------------------------------------------------------------------
-	// Blueprint-bound named widgets (bind in UMG designer)
+	// Named widgets — bind in the UMG designer
 	// -----------------------------------------------------------------------
 
-	/** Container in the UMG canvas that receives the turn indicator. */
+	/**
+	 * Full-screen canvas that contains all HP bar widgets.
+	 * Must exist in the WBP and be named exactly "HPBarCanvas".
+	 * Set its Visibility to "Hit Test Invisible" so it doesn't eat input.
+	 */
 	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UVerticalBox> TurnIndicatorContainer;
+	TObjectPtr<UCanvasPanel> HPBarCanvas;
 
 	// -----------------------------------------------------------------------
-	// Blueprint events — implement visual reactions in Blueprint subclass
+	// Blueprint events
 	// -----------------------------------------------------------------------
 
-	/** Called when the HUD finishes initialization and HP bars are ready. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Battle HUD")
 	void OnHUDInitialized();
 
-	/** Called every time the active turn owner changes. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Battle HUD")
 	void OnTurnChanged(bool bIsPlayerTurn);
 
+	// -----------------------------------------------------------------------
+	// Tick — updates all HP bar positions every frame
+	// -----------------------------------------------------------------------
+
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+
+	/** World-space Z offset above the actor origin where HP bars appear. */
+	UPROPERTY(EditDefaultsOnly, Category = "Battle HUD|Layout")
+	float HPBarWorldZOffset = 200.f;
+
+	/** Desired size of each HP bar widget in the canvas (pixels). */
+	UPROPERTY(EditDefaultsOnly, Category = "Battle HUD|Layout")
+	FVector2D HPBarSize = FVector2D(120.f, 16.f);
+
 private:
 
-	// -----------------------------------------------------------------------
-	// Internal setup helpers
-	// -----------------------------------------------------------------------
-
-	/** Creates one UUnitHPBarWidget per combatant and stores them. */
 	void SpawnHPBars(UBattleState* BattleState);
-
-	/** Creates and adds the turn indicator to TurnIndicatorContainer. */
-	void SpawnTurnIndicator(UTurnManager* TurnManager);
-
-	// -----------------------------------------------------------------------
-	// Delegate handlers
-	// -----------------------------------------------------------------------
+	void SpawnTurnIndicator(UTurnManager* InTurnManager);
 
 	UFUNCTION()
 	void HandleCombatFinished(EBattleUnitTeam WinningTeam);
 
 	void HandleTurnStateChanged(EBattleTurnOwner NewOwner, EBattleTurnPhase NewPhase);
-
-	// -----------------------------------------------------------------------
-	// Private state
-	// -----------------------------------------------------------------------
 
 	UPROPERTY()
 	TObjectPtr<UCombatManager> CombatManager;
@@ -119,9 +109,12 @@ private:
 	UPROPERTY()
 	TObjectPtr<UTurnIndicatorWidget> TurnIndicatorInstance;
 
-	/** One HP bar widget per unit, keyed by character pointer. */
+	// Parallel arrays — index matches between them
 	UPROPERTY()
-	TMap<TObjectPtr<ACharacterBase>, TObjectPtr<UUnitHPBarWidget>> HPBarMap;
+	TArray<TObjectPtr<ACharacterBase>> HPBarUnits;
+
+	UPROPERTY()
+	TArray<TObjectPtr<UUnitHPBarWidget>> HPBarWidgets;
 
 	FDelegateHandle TurnStateHandle;
 };

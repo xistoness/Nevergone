@@ -34,7 +34,7 @@ public:
      * Magical  : (MagicalPower    * Multiplier) - MagicalDefense,  min 0
      * Pure     : Multiplier (flat, both stats ignored)
      */
-    static float ComputeDamage(
+    static int32 ComputeDamage(
         const FBattleUnitState& Source,
         const FBattleUnitState& Target,
         EAbilityDamageSource    DamageSource,
@@ -52,7 +52,7 @@ public:
      * NOTE: MagicalPower is used as the heal stat until a dedicated HealPower
      * stat is added to UnitDefinition. Update this method when that happens.
      */
-    static float ComputeHeal(
+    static int32 ComputeHeal(
         const FBattleUnitState& Source,
         float                   Multiplier
     );
@@ -102,7 +102,7 @@ public:
      * Applies the critical hit multiplier to a base damage value.
      * CritMultiplier = 1.5x
      */
-    static float ApplyCritMultiplier(float BaseDamage);
+    static int32 ApplyCritMultiplier(int32 BaseDamage);
 
     // -----------------------------------------------------------------------
     // AI estimation (no RNG — returns expected values for scoring)
@@ -113,7 +113,7 @@ public:
      * Does not roll RNG — returns: ComputeDamage * HitChance * (1 + CritChance * 0.5)
      * The last factor accounts for the expected damage bonus from crits.
      */
-    static float EstimateDamage(
+    static int32 EstimateDamage(
         const FBattleUnitState& Source,
         const FBattleUnitState& Target,
         EAbilityDamageSource    DamageSource,

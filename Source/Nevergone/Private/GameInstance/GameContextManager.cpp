@@ -9,6 +9,7 @@
 #include "GameMode/BattlePreparationContext.h"
 #include "GameMode/BattlefieldLayoutSubsystem.h"
 #include "GameMode/BattlefieldQuerySubsystem.h"
+#include "GameMode/BattleResultsContext.h"
 #include "Level/EncounterGeneratorSubsystem.h"
 #include "Level/FloorEncounterVolume.h"
 #include "Level/GridManager.h"
@@ -107,6 +108,9 @@ void UGameContextManager::RequestBattlePreparation(
 		EncounterSource->EncounterData,
 		ActiveBattlePrepContext->PlayerParty
 	);
+	
+	ActiveBattleSession.GeneratedParty = ActiveBattlePrepContext->PlayerParty;
+	ActiveBattleSession.TotalEnemies = ActiveBattlePrepContext->EnemyParty.Num();
 
 	// 3. Generate tactical grid directly from the encounter volume's BattleBox
 	GetWorld()->GetSubsystem<UGridManager>()->GenerateGrid(EncounterSource, GetWorld());
@@ -183,13 +187,15 @@ void UGameContextManager::EnterBattleResults()
 		return;
 	}
 
+	// Build the context snapshot before entering the state so the
+	// TowerFloorGameMode handler can pass it to the controller immediately.
+	ActiveResultsContext = NewObject<UBattleResultsContext>(this);
+	ActiveResultsContext->Initialize(ActiveBattleSession);
+	ActiveResultsContext->DumpToLog();
+
+	// Enter state — TowerFloorGameMode::HandleGameContextChanged spawns
+	// BattleResultsController and calls SetResultsContext on it.
 	EnterState(EGameContextState::BattleResults);
-
-	UBattleResultsContext* ResultsContext = NewObject<UBattleResultsContext>(this);
-	ResultsContext->Initialize(ActiveBattleSession);
-	ResultsContext->DumpToLog();
-
-	ReturnToExploration();
 }
 
 void UGameContextManager::ReturnToExploration()
@@ -201,34 +207,29 @@ void UGameContextManager::ReturnToExploration()
 	}
 
 	UWorld* World = GetWorld();
-	if (!World)
-	{
-		return;
-	}
+	if (!World) { return; }
 
 	ATowerFloorGameMode* GM = GetActiveFloorGameMode();
-	if (!GM)
-	{
-		return;
-	}
+	if (!GM) { return; }
 
 	APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0);
-	if (!PC)
-	{
-		return;
-	}
+	if (!PC) { return; }
 
+	// Spawn the exploration character before entering Exploration state so
+	// TowerFloorGameMode::HandleGameContextChanged can possess it immediately.
 	ACharacterBase* NewCharacter = World->SpawnActor<ACharacterBase>(
 		ActiveBattleSession.ExplorationCharacterClass,
 		ActiveBattleSession.ExplorationCharacterTransform);
 
 	if (!IsValid(NewCharacter))
 	{
-		UE_LOG(LogTemp, Error, TEXT("[GameContextManager]: Failed to respawn exploration character."));
+		UE_LOG(LogTemp, Error,
+			TEXT("[GameContextManager]: Failed to respawn exploration character."));
 		return;
 	}
-	
+
 	ActiveBattleSession.ExplorationCharacter = NewCharacter;
+	ActiveResultsContext = nullptr;
 
 	EnterState(EGameContextState::Exploration);
 }
@@ -295,20 +296,39 @@ void UGameContextManager::HandleCombatFinished(EBattleUnitTeam WinningTeam)
 		return;
 	}
 
-	ActiveBattleSession.WinningTeam = WinningTeam;
+	ActiveBattleSession.WinningTeam    = WinningTeam;
 	ActiveBattleSession.bCombatFinished = true;
-	ActiveBattleSession.SurvivingAllies = ActiveCombatManager->GetAliveAllies();
+	ActiveBattleSession.SurvivingAllies  = ActiveCombatManager->GetAliveAllies();
 	ActiveBattleSession.SurvivingEnemies = ActiveCombatManager->GetAliveEnemies();
 
 	if (ActiveBattleSession.EncounterSource.IsValid())
 	{
 		ActiveBattleSession.EncounterSource->DeactivateEncounter();
 	}
+	
+	if (UPartyManagerSubsystem* PartyManager =
+		GetGameInstance()->GetSubsystem<UPartyManagerSubsystem>())
+	{
+		PartyManager->WriteBackBattleResults(
+			ActiveCombatManager->GetSpawnedAllies(),
+			ActiveBattleSession.GeneratedParty
+		);
+	}
 
 	ActiveCombatManager->Cleanup();
 	ActiveCombatManager = nullptr;
 
 	EnterBattleResults();
+}
+
+UBattlePreparationContext* UGameContextManager::GetActivePrepContext() const
+{
+	return ActiveBattlePrepContext;
+}
+
+UBattleResultsContext* UGameContextManager::GetActiveResultsContext() const
+{
+	return ActiveResultsContext;
 }
 
 ATowerFloorGameMode* UGameContextManager::GetActiveFloorGameMode() const

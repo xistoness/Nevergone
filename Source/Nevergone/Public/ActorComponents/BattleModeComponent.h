@@ -19,6 +19,8 @@ class UGameplayAbility;
 class ACharacterBase;
 class UTurnManager;
 class UBattleState;
+class UAbilityDefinition;
+class UStatusEffectManager;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAbilitySelectionChanged, int32, NewIndex);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnActionUseStarted, ACharacterBase*, ActingUnit);
@@ -86,9 +88,22 @@ public:
     UTurnManager* GetTurnManager() const { return TurnManager; }
     void SetBattleState(UBattleState* InBattleState);
     UBattleState* GetBattleState() const { return BattleState; }
+    void SetStatusEffectManager(UStatusEffectManager* InManager);
+    UStatusEffectManager* GetStatusEffectManager() const { return StatusEffectManager; }
 
     TSubclassOf<UBattleMovementAbility> GetEquippedMovementAbilityClass() const;
     const TArray<FUnitAbilityEntry>& GetGrantedBattleAbilities() const { return GrantedBattleAbilities; }
+
+    // -----------------------------------------------------------------------
+    // Per-definition cooldown map
+    // Cooldown is stored here (not on the GAS instance) so Thunder and
+    // HealingRain have independent counters even though both use GA_AoE.
+    // -----------------------------------------------------------------------
+
+    bool  IsDefinitionOnCooldown(const UAbilityDefinition* Def) const;
+    int32 GetDefinitionCooldownTurns(const UAbilityDefinition* Def) const;
+    void  StartDefinitionCooldown(const UAbilityDefinition* Def, int32 Turns);
+    void  TickDefinitionCooldowns();
 
     bool SelectAbilityByIndex(int32 AbilityIndex);
     bool SelectAbilityByTag(const FGameplayTag& AbilityTag);
@@ -143,6 +158,9 @@ protected:
     TArray<FUnitAbilityEntry> GrantedBattleAbilities;
 
     UPROPERTY()
+    TMap<TObjectPtr<const UAbilityDefinition>, int32> DefinitionCooldowns;
+
+    UPROPERTY()
     int32 SelectedAbilityIndex = INDEX_NONE;
 
     UPROPERTY()
@@ -156,4 +174,7 @@ protected:
 
     UPROPERTY()
     TObjectPtr<UBattleState> BattleState;
+
+    UPROPERTY()
+    TObjectPtr<UStatusEffectManager> StatusEffectManager;
 };

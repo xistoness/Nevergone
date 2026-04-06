@@ -11,6 +11,7 @@
 class ACharacterBase;
 class UBattleState;
 class USkeletalMeshComponent;
+class UStatusEffectManager;
 
 // ---------------------------------------------------------------------------
 // Delegates — subscribe to these from anywhere inside the combat session
@@ -20,20 +21,21 @@ DECLARE_MULTICAST_DELEGATE_ThreeParams(
 	FOnDamageApplied,
 	ACharacterBase* /*Source*/,
 	ACharacterBase* /*Target*/,
-	float           /*Amount*/
+	int32           /*Amount*/
 );
 
 DECLARE_MULTICAST_DELEGATE_ThreeParams(
 	FOnHealApplied,
 	ACharacterBase* /*Source*/,
 	ACharacterBase* /*Target*/,
-	float           /*Amount*/
+	int32           /*Amount*/
 );
 
-DECLARE_MULTICAST_DELEGATE_TwoParams(
+DECLARE_MULTICAST_DELEGATE_ThreeParams(
 	FOnStatusApplied,
 	ACharacterBase*        /*Target*/,
-	const FGameplayTag&    /*StatusTag*/
+	const FGameplayTag&    /*StatusTag*/,
+	UTexture2D*            /*Icon*/
 );
 
 DECLARE_MULTICAST_DELEGATE_TwoParams(
@@ -75,6 +77,12 @@ public:
 	 */
 	void Initialize(UBattleState* InBattleState);
 
+	/**
+	 * Wires the bus to the StatusEffectManager so shield absorption is applied
+	 * before HP mutation in NotifyDamageApplied. Must be called after Initialize.
+	 */
+	void SetStatusEffectManager(UStatusEffectManager* InManager);
+
 	// -----------------------------------------------------------------------
 	// Notify methods — called by abilities and status systems
 	// -----------------------------------------------------------------------
@@ -84,14 +92,14 @@ public:
 	 * Mutates UnitStatsComponent, syncs BattleState, triggers floating text,
 	 * broadcasts FOnDamageApplied, and fires FOnUnitDied if HP reaches zero.
 	 */
-	void NotifyDamageApplied(ACharacterBase* Source, ACharacterBase* Target, float Amount);
+	void NotifyDamageApplied(ACharacterBase* Source, ACharacterBase* Target, int32 Amount);
 
 	/**
 	 * Applies healing from Source to Target.
 	 * Mutates UnitStatsComponent, syncs BattleState, triggers floating text,
 	 * and broadcasts FOnHealApplied.
 	 */
-	void NotifyHealApplied(ACharacterBase* Source, ACharacterBase* Target, float Amount);
+	void NotifyHealApplied(ACharacterBase* Source, ACharacterBase* Target, int32 Amount);
 
 	/**
 	 * Applies a status tag to Target.
@@ -151,4 +159,7 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UBattleState> BattleState;
+
+	UPROPERTY()
+	TObjectPtr<UStatusEffectManager> StatusEffectManager;
 };

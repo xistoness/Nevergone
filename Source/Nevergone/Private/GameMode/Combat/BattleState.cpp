@@ -2,8 +2,10 @@
 
 #include "GameMode/Combat/BattleState.h"
 
+#include "AbilitySystemComponent.h"
 #include "ActorComponents/UnitStatsComponent.h"
 #include "Characters/CharacterBase.h"
+#include "Data/UnitDefinition.h"
 #include "GameMode/BattlePreparationContext.h"
 #include "Nevergone.h"
 
@@ -48,24 +50,32 @@ void UBattleState::Initialize(UBattlePreparationContext& BattlePrepContext)
             NewState.TraversalParams     = Stats->GetTraversalParams();
         }
 
-        if (Spawned.Team == EBattleUnitTeam::Ally &&
-            BattlePrepContext.PlayerParty.IsValidIndex(Spawned.SourceIndex))
+        // Propagate innate immunity tags from UnitDefinition to the ASC so
+        // StatusEffectManager::IsImmune() can read them via HasMatchingGameplayTag.
+        // Equipment and terrain can add more immunity tags at runtime the same way.
+        if (Stats)
         {
-            NewState.StatusTags.AppendTags(
-                BattlePrepContext.PlayerParty[Spawned.SourceIndex].Tags);
-        }
-        else if (Spawned.Team == EBattleUnitTeam::Enemy &&
-            BattlePrepContext.EnemyParty.IsValidIndex(Spawned.SourceIndex))
-        {
-            NewState.StatusTags.AppendTags(
-                BattlePrepContext.EnemyParty[Spawned.SourceIndex].Tags);
+            if (const UUnitDefinition* UnitDef = Stats->GetDefinition())
+            {
+                if (!UnitDef->InnateImmunityTags.IsEmpty())
+                {
+                    if (UAbilitySystemComponent* ASC = Unit->GetAbilitySystemComponent())
+                    {
+                        ASC->AddLooseGameplayTags(UnitDef->InnateImmunityTags);
+
+                        UE_LOG(LogNevergone, Log,
+                            TEXT("[BattleState] Granted %d innate immunity tag(s) to %s"),
+                            UnitDef->InnateImmunityTags.Num(), *GetNameSafe(Unit));
+                    }
+                }
+            }
         }
 
         Unit->EnableBattleMode();
         UnitStates.Add(MoveTemp(NewState));
 
         UE_LOG(LogNevergone, Log,
-            TEXT("[BattleState] Initialized unit %s | HP=%.0f | PhysAtk=%.0f | AP=%d | Move=%d"),
+            TEXT("[BattleState] Initialized unit %s | HP=%d | PhysAtk=%d | AP=%d | Move=%d"),
             *Unit->GetName(),
             NewState.MaxHP,
             NewState.PhysicalAttack,
@@ -162,40 +172,33 @@ void UBattleState::ResetTurnStateForTeam(EBattleUnitTeam Team)
     }
 }
 
-void UBattleState::ApplyDamage(ACharacterBase* Unit, float Amount)
+void UBattleState::ApplyDamage(ACharacterBase* Unit, int32 Amount)
 {
     FBattleUnitState* State = FindUnitState(Unit);
     if (!State || State->bIsDead) { return; }
 
-    State->CurrentHP = FMath::Max(0.0f, State->CurrentHP - Amount);
+    State->CurrentHP = FMath::Max(0, State->CurrentHP - Amount);
 
-    if (State->CurrentHP <= 0.0f)
+    // On death, clear the active status list so tick effects don't fire on a dead unit.
+    // ASC tags are intentionally NOT removed here: StatusEffectManager handles proper
+    // passive revert and EventBus notification during its own cleanup pass.
+    if (State->CurrentHP <= 0)
     {
         State->bIsDead = true;
-        State->StatusTags.Reset();
+        State->ActiveStatusEffects.Empty();
+
+        UE_LOG(LogNevergone, Log,
+            TEXT("[BattleState] %s died — active status effects cleared"),
+            *GetNameSafe(Unit));
     }
 }
 
-void UBattleState::ApplyHeal(ACharacterBase* Unit, float Amount)
+void UBattleState::ApplyHeal(ACharacterBase* Unit, int32 Amount)
 {
     FBattleUnitState* State = FindUnitState(Unit);
     if (!State || State->bIsDead) { return; }
 
     State->CurrentHP = FMath::Min(State->CurrentHP + Amount, State->MaxHP);
-}
-
-void UBattleState::ApplyStatusTag(ACharacterBase* Unit, const FGameplayTag& StatusTag)
-{
-    FBattleUnitState* State = FindUnitState(Unit);
-    if (!State || State->bIsDead) { return; }
-    State->StatusTags.AddTag(StatusTag);
-}
-
-void UBattleState::ClearStatusTag(ACharacterBase* Unit, const FGameplayTag& StatusTag)
-{
-    FBattleUnitState* State = FindUnitState(Unit);
-    if (!State) { return; }
-    State->StatusTags.RemoveTag(StatusTag);
 }
 
 void UBattleState::PersistToCombatants()
@@ -205,24 +208,16 @@ void UBattleState::PersistToCombatants()
     for (const FBattleUnitState& State : UnitStates)
     {
         ACharacterBase* Unit = State.UnitActor.Get();
-        if (!Unit)
-        {
-            continue;
-        }
+        if (!Unit) { continue; }
 
         UUnitStatsComponent* Stats = Unit->GetUnitStats();
-        if (!Stats)
-        {
-            continue;
-        }
+        if (!Stats) { continue; }
 
         // Write HP back — dead units persist as 0, survivors keep their remaining HP.
-        // SetCurrentHP clamps to [0, MaxHP] and fires the death delegate if needed,
-        // but at this point combat is over so the delegate firing is harmless.
         Stats->SetCurrentHP(State.CurrentHP);
 
         UE_LOG(LogNevergone, Log,
-            TEXT("[BattleState] Persisted %s — HP: %.1f / %.1f | Dead: %s"),
+            TEXT("[BattleState] Persisted %s — HP: %d / %d | Dead: %s"),
             *GetNameSafe(Unit),
             State.CurrentHP,
             State.MaxHP,
@@ -232,8 +227,5 @@ void UBattleState::PersistToCombatants()
 
 void UBattleState::GenerateResult()
 {
-    // GenerateResult is the legacy entry point — delegates to PersistToCombatants.
-    // Future work: build a formal FBattleResult struct here for XP, relationship
-    // changes, and PartyManagerSubsystem flags before calling PersistToCombatants.
     PersistToCombatants();
 }

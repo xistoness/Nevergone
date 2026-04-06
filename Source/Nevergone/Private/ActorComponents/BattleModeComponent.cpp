@@ -37,6 +37,11 @@ void UBattleModeComponent::SetBattleState(UBattleState* InBattleState)
     BattleState = InBattleState;
 }
 
+void UBattleModeComponent::SetStatusEffectManager(UStatusEffectManager* InManager)
+{
+    StatusEffectManager = InManager;
+}
+
 void UBattleModeComponent::TickComponent(
     float DeltaTime,
     ELevelTick TickType,
@@ -642,9 +647,13 @@ bool UBattleModeComponent::ExecuteCurrentAction(const FActionContext& Context, c
 
     if (!bActivated)
     {
-        bActionInProgress = false;
-        UE_LOG(LogNevergone, Error, TEXT("[BattleModeComponent] Failed to activate ability %s for %s"),
+        // Activation failed (e.g. blocked by stun tag).
+        // HandleActionStarted already locked input and the hotbar,
+        // so we must call HandleActionFinished to restore them or combat freezes.
+        UE_LOG(LogNevergone, Error,
+            TEXT("[BattleModeComponent] Failed to activate %s for %s -- restoring input"),
             *GetNameSafe(Context.AbilityClass), *GetNameSafe(Character));
+        HandleActionFinished();
     }
 
     return bActivated;
@@ -711,4 +720,58 @@ bool UBattleModeComponent::HasLineOfSight() const
     );
 
     return !bHit;
+}
+// ---------------------------------------------------------------------------
+// Per-definition cooldown map
+// ---------------------------------------------------------------------------
+
+bool UBattleModeComponent::IsDefinitionOnCooldown(const UAbilityDefinition* Def) const
+{
+    if (!Def) { return false; }
+    const int32* Turns = DefinitionCooldowns.Find(Def);
+    return Turns && *Turns > 0;
+}
+
+int32 UBattleModeComponent::GetDefinitionCooldownTurns(const UAbilityDefinition* Def) const
+{
+    if (!Def) { return 0; }
+    const int32* Turns = DefinitionCooldowns.Find(Def);
+    return Turns ? *Turns : 0;
+}
+
+void UBattleModeComponent::StartDefinitionCooldown(const UAbilityDefinition* Def, int32 Turns)
+{
+    if (!Def || Turns <= 0) { return; }
+    DefinitionCooldowns.Add(Def, Turns);
+    UE_LOG(LogNevergone, Log,
+        TEXT("[BattleModeComponent] Cooldown started: '%s' = %d turns on %s"),
+        *Def->DisplayName.ToString(), Turns, *GetNameSafe(GetOwner()));
+}
+
+void UBattleModeComponent::TickDefinitionCooldowns()
+{
+    // Called once per player turn start from CombatManager.
+    // Decrements each active cooldown and removes entries that expire.
+    TArray<TObjectPtr<const UAbilityDefinition>> Expired;
+
+    for (auto& Pair : DefinitionCooldowns)
+    {
+        Pair.Value--;
+        UE_LOG(LogNevergone, Log,
+            TEXT("[BattleModeComponent] Cooldown tick: '%s' = %d turns remaining on %s"),
+            *GetNameSafe(Pair.Key), Pair.Value, *GetNameSafe(GetOwner()));
+
+        if (Pair.Value <= 0)
+        {
+            Expired.Add(Pair.Key);
+        }
+    }
+
+    for (const auto& Def : Expired)
+    {
+        DefinitionCooldowns.Remove(Def);
+        UE_LOG(LogNevergone, Log,
+            TEXT("[BattleModeComponent] Cooldown expired: '%s' on %s"),
+            *GetNameSafe(Def), *GetNameSafe(GetOwner()));
+    }
 }

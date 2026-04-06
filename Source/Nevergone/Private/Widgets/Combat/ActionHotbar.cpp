@@ -13,6 +13,9 @@
 #include "Types/CharacterTypes.h"
 #include "Widgets/Combat/ActionSlot.h"
 #include "Nevergone.h"
+#include "AbilitySystemComponent.h"
+#include "ActorComponents/MyAbilitySystemComponent.h"
+#include "GameMode/TurnManager.h"
 
 // ---- Public API ------------------------------------------------------------
 
@@ -30,6 +33,13 @@ void UActionHotbar::InitializeWithCombatManager(UCombatManager* InCombatManager)
 
     InCombatManager->OnActiveUnitChanged.AddDynamic(this, &UActionHotbar::HandleActiveUnitChanged);
     InCombatManager->OnEnemyTurnBegan.AddDynamic(this, &UActionHotbar::HandleEnemyTurnBegan);
+
+    // Subscribe to turn changes to update cooldown counts each turn
+    if (UTurnManager* TM = InCombatManager->GetTurnManager())
+    {
+        TurnStateHandle = TM->OnTurnStateChanged.AddUObject(
+            this, &UActionHotbar::HandleTurnStateChangedForCooldown);
+    }
 
     UE_LOG(LogNevergone, Log, TEXT("[ActionHotbar] InitializeWithCombatManager: bound to CombatManager."));
 
@@ -191,6 +201,9 @@ void UActionHotbar::ShowForUnit(ACharacterBase* Unit)
 
     SetVisibility(ESlateVisibility::SelfHitTestInvisible);
     RefreshSelection(InitialIndex);
+
+    // Apply cooldown overlays to any abilities already on cooldown
+    RefreshCooldownStates();
 }
 
 void UActionHotbar::HideHotbar()
@@ -231,6 +244,15 @@ void UActionHotbar::UnbindFromCombatManager()
     {
         TrackedCombatManager->OnActiveUnitChanged.RemoveDynamic(this, &UActionHotbar::HandleActiveUnitChanged);
         TrackedCombatManager->OnEnemyTurnBegan.RemoveDynamic(this, &UActionHotbar::HandleEnemyTurnBegan);
+
+        if (UTurnManager* TM = TrackedCombatManager->GetTurnManager())
+        {
+            if (TurnStateHandle.IsValid())
+            {
+                TM->OnTurnStateChanged.Remove(TurnStateHandle);
+                TurnStateHandle.Reset();
+            }
+        }
 
         UE_LOG(LogNevergone, Log, TEXT("[ActionHotbar] UnbindFromCombatManager: unbound from CombatManager."));
     }
@@ -336,6 +358,9 @@ void UActionHotbar::HandleActionFinished(ACharacterBase* ActingUnit)
 
     // Clear AP cost — the player hasn't hovered a new target yet after the action.
     ClearAPDisplay();
+
+    // Update cooldown overlays — the ability that just ran may have started a cooldown
+    RefreshCooldownStates();
 }
 
 void UActionHotbar::HandleAbilitySelectionChanged(int32 NewIndex)
@@ -348,4 +373,40 @@ void UActionHotbar::HandleAbilitySelectionChanged(int32 NewIndex)
 void UActionHotbar::HandlePreviewUpdated(int32 Cost, int32 Remaining, bool bPreviewIsValid)
 {
     RefreshAPDisplay(Cost, Remaining, bPreviewIsValid);
+}
+// ---- Cooldown display ------------------------------------------------------
+
+void UActionHotbar::RefreshCooldownStates()
+{
+    if (!TrackedUnit.IsValid() || !TrackedBattleMode.IsValid()) { return; }
+
+    const TArray<FUnitAbilityEntry>& Abilities = TrackedBattleMode->GetGrantedBattleAbilities();
+
+    for (int32 Index = 0; Index < Abilities.Num(); ++Index)
+    {
+        if (!Slots.IsValidIndex(Index)) { break; }
+
+        const UAbilityDefinition* Def = Abilities[Index].Definition;
+
+        // Query BattleModeComponent directly -- per-definition cooldown,
+        // Thunder and HealingRain have independent counters.
+        if (Def && TrackedBattleMode->IsDefinitionOnCooldown(Def))
+        {
+            Slots[Index]->SetCooldown(true, TrackedBattleMode->GetDefinitionCooldownTurns(Def));
+        }
+        else
+        {
+            Slots[Index]->SetCooldown(false);
+        }
+    }
+}
+
+void UActionHotbar::HandleTurnStateChangedForCooldown(EBattleTurnOwner NewOwner, EBattleTurnPhase NewPhase)
+{
+    // Refresh on AwaitingOrders — this fires once per turn start, after
+    // BattleGameplayAbility::OnTurnStateChanged has already decremented the counters.
+    if (NewPhase == EBattleTurnPhase::AwaitingOrders)
+    {
+        RefreshCooldownStates();
+    }
 }

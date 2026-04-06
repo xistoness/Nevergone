@@ -9,6 +9,7 @@
 #include "ActorComponents/UnitStatsComponent.h"
 #include "Characters/CharacterBase.h"
 #include "GameMode/Combat/BattleState.h"
+#include "GameMode/Combat/StatusEffectManager.h"
 #include "Widgets/Combat/FloatingCombatTextWidget.h"
 
 void UCombatEventBus::Initialize(UBattleState* InBattleState)
@@ -16,12 +17,17 @@ void UCombatEventBus::Initialize(UBattleState* InBattleState)
 	BattleState = InBattleState;
 }
 
+void UCombatEventBus::SetStatusEffectManager(UStatusEffectManager* InManager)
+{
+	StatusEffectManager = InManager;
+}
+
 void UCombatEventBus::NotifyDamageApplied(
 	ACharacterBase* Source,
 	ACharacterBase* Target,
-	float           Amount)
+	int32           Amount)
 {
-	if (!Target || Amount <= 0.f)
+	if (!Target || Amount <= 0)
 	{
 		return;
 	}
@@ -32,8 +38,25 @@ void UCombatEventBus::NotifyDamageApplied(
 		return;
 	}
 
+	// Run incoming damage through any active Shield layers first.
+	// AbsorbDamageWithShield returns the remaining damage after shields are depleted.
+	// If shields absorb everything, Amount becomes 0 and HP is untouched.
+	int32 EffectiveAmount = Amount;
+	if (StatusEffectManager)
+	{
+		EffectiveAmount = StatusEffectManager->AbsorbDamageWithShield(Target, Amount);
+	}
+
+	if (EffectiveAmount <= 0)
+	{
+		UE_LOG(LogTemp, Log,
+			TEXT("[CombatEventBus] %d damage to %s fully absorbed by shield"),
+			Amount, *GetNameSafe(Target));
+		return;
+	}
+
 	// Mutate the persistent stat component (pure data write, no side effects)
-	const float ClampedAmount = FMath::Min(Amount, TargetStats->GetCurrentHP());
+	const int32 ClampedAmount = FMath::Min(EffectiveAmount, TargetStats->GetCurrentHP());
 	TargetStats->SetCurrentHP(TargetStats->GetCurrentHP() - ClampedAmount);
 
 	// Keep BattleState in sync
@@ -48,7 +71,7 @@ void UCombatEventBus::NotifyDamageApplied(
 
 	// Trigger floating combat text on the target character
 	Target->SpawnFloatingText(
-		FString::FromInt(FMath::RoundToInt(ClampedAmount)),
+		FString::FromInt(ClampedAmount),
 		EFloatingTextType::Damage
 	);
 
@@ -62,18 +85,18 @@ void UCombatEventBus::NotifyDamageApplied(
 	}
 }
 
-void UCombatEventBus::NotifyHealApplied(ACharacterBase* Source, ACharacterBase* Target, float Amount)
+void UCombatEventBus::NotifyHealApplied(ACharacterBase* Source, ACharacterBase* Target, int32 Amount)
 {
 	if (!Target || Amount <= 0.f) return;
 
 	UUnitStatsComponent* TargetStats = Target->GetUnitStats();
 	if (!TargetStats || !TargetStats->IsAlive()) return;
 
-	const float HeadRoom    = TargetStats->GetMaxHP() - TargetStats->GetCurrentHP();
-	const float ClampedHeal = FMath::Min(Amount, HeadRoom);
+	const int32 HeadRoom    = TargetStats->GetMaxHP() - TargetStats->GetCurrentHP();
+	const int32 ClampedHeal = FMath::Min(Amount, HeadRoom);
 
 	// Apply HP only if there's room — but always show feedback
-	if (ClampedHeal > 0.f)
+	if (ClampedHeal > 0)
 	{
 		TargetStats->SetCurrentHP(TargetStats->GetCurrentHP() + ClampedHeal);
 
@@ -85,7 +108,7 @@ void UCombatEventBus::NotifyHealApplied(ACharacterBase* Source, ACharacterBase* 
 
 	// Always show floating text and broadcast — even if heal was fully clamped
 	Target->SpawnFloatingText(
-		FString::Printf(TEXT("+%d"), FMath::RoundToInt(ClampedHeal)),
+		FString::Printf(TEXT("+%d"), ClampedHeal),
 		EFloatingTextType::Heal
 	);
 
@@ -103,16 +126,11 @@ void UCombatEventBus::NotifyStatusApplied(
 		return;
 	}
 
-	// Sync BattleState status tags
-	if (BattleState)
-	{
-		BattleState->ApplyStatusTag(Target, StatusTag);
-	}
-
 	// Trigger floating status text on the target character
 	Target->SpawnFloatingText(DisplayLabel, EFloatingTextType::StatusApply, Icon);
 
-	OnStatusApplied.Broadcast(Target, StatusTag);
+	// Pass Icon along so HP bar widgets can display persistent status icons
+	OnStatusApplied.Broadcast(Target, StatusTag, Icon);
 }
 
 void UCombatEventBus::NotifyStatusCleared(
@@ -122,11 +140,6 @@ void UCombatEventBus::NotifyStatusCleared(
 	if (!Target)
 	{
 		return;
-	}
-
-	if (BattleState)
-	{
-		BattleState->ClearStatusTag(Target, StatusTag);
 	}
 
 	OnStatusCleared.Broadcast(Target, StatusTag);
