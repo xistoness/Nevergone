@@ -54,6 +54,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Controllers")
 	TSubclassOf<APlayerController> BattlePreparationControllerClass;
 	
+	UPROPERTY(EditDefaultsOnly, Category = "Controllers")
+	TSubclassOf<APlayerController> BattleResultsControllerClass;
+	
 	UPROPERTY()
 	APlayerController* ActivePlayerController;
 	

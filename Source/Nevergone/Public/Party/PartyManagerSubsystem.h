@@ -27,6 +27,19 @@ public:
 		const UFloorEncounterData* EncounterData,
 		TArray<FGeneratedPlayerData>& OutPlayerParty
 	) const;
+	
+	// Called by GameContextManager after combat ends, before actors are destroyed.
+	// Reads PersistentHP from each ally's UnitStatsComponent and updates PartyData.
+	void WriteBackBattleResults(const TArray<ACharacterBase*>& SpawnedAllies,
+								 const TArray<FGeneratedPlayerData>& GeneratedParty);
+	
+	// Called once after GameInstance loads a save slot, and after every level load.
+	// Pulls the authoritative PartyData from GameInstance into this subsystem.
+	void SyncFromGameInstance();
+
+	// Called after WriteBackBattleResults to push updated data back to GameInstance
+	// so CommitSave picks it up correctly.
+	void FlushToGameInstance();
 
 protected:
 	/* --- Internal helpers --- */

@@ -19,7 +19,7 @@ void UBattleResultsWidget::NativeConstruct()
 void UBattleResultsWidget::ShowResults(EBattleUnitTeam WinningTeam,
 										int32 SurvivingAllies,
 										int32 SurvivingEnemies,
-										int32 AlliesLost)
+										int32 EnemiesKilled)
 {
 	const bool bIsVictory = (WinningTeam == EBattleUnitTeam::Ally);
 
@@ -36,19 +36,19 @@ void UBattleResultsWidget::ShowResults(EBattleUnitTeam WinningTeam,
 			FString::Printf(TEXT("Surviving Allies: %d"), SurvivingAllies)));
 	}
 
-	if (AlliesLostText)
+	if (EnemiesKilledText)
 	{
-		AlliesLostText->SetText(FText::FromString(
-			FString::Printf(TEXT("Allies Lost: %d"), AlliesLost)));
+		EnemiesKilledText->SetText(FText::FromString(
+			FString::Printf(TEXT("Enemies Killed: %d"), EnemiesKilled)));
 	}
 
 	// Notify Blueprint to play any entry animation
 	OnResultsReady(bIsVictory);
 
 	UE_LOG(LogTemp, Log,
-		TEXT("[BattleResultsWidget] ShowResults — Victory=%s | Allies=%d | Lost=%d | EnemiesLeft=%d"),
+		TEXT("[BattleResultsWidget] ShowResults — Victory=%s | Allies=%d | Killed=%d | EnemiesLeft=%d"),
 		bIsVictory ? TEXT("YES") : TEXT("NO"),
-		SurvivingAllies, AlliesLost, SurvivingEnemies);
+		SurvivingAllies, EnemiesKilled, SurvivingEnemies);
 }
 
 void UBattleResultsWidget::HandleContinueClicked()

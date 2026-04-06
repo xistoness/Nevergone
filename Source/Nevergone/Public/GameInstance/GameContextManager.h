@@ -38,11 +38,15 @@ public:
 	
 	ACharacterBase* GetSavedExplorationCharacter() const;
 	FTransform GetSavedExplorationTransform() const;
-	void ClearBattleSession();
 	
+	UBattlePreparationContext* GetActivePrepContext() const;
+	UBattleResultsContext* GetActiveResultsContext() const;
 	EGameContextState GetCurrentState() const { return CurrentState; }
 	FRotator GetSavedExplorationControlRotation() const;
+	
+	void ClearBattleSession();
 	void DestroyExplorationCharacter(ACharacterBase* Character);
+	
 	FOnGameContextChanged OnGameContextChanged;
 
 private:
@@ -68,4 +72,7 @@ private:
 	// Active battle session
 	UPROPERTY()
 	FBattleSessionData ActiveBattleSession;
+	
+	UPROPERTY()
+	UBattleResultsContext* ActiveResultsContext = nullptr;
 };

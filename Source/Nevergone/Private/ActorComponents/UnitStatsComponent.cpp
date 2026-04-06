@@ -49,7 +49,7 @@ void UUnitStatsComponent::WriteSaveData_Implementation(FActorSaveData& OutData) 
 
     // Persist level, HP, and all 8 base attributes
     int32 TempLevel = Level;
-    float TempHP = PersistentHP;
+    int32 TempHP = PersistentHP;
     FUnitAttributes TempAttrs = Attributes;
 
     Ar << TempLevel;
@@ -94,40 +94,40 @@ void UUnitStatsComponent::ReadSaveData_Implementation(const FActorSaveData& InDa
 // During combat, always read from BattleUnitState instead.
 // ---------------------------------------------------------------------------
 
-float UUnitStatsComponent::GetMaxHP() const
+int32 UUnitStatsComponent::GetMaxHP() const
 {
-    if (!Definition) return 0.f;
-    return (Definition->HPPerLevel * Level) + (Attributes.Constitution * 5.f);
+    if (!Definition) return 0;
+    return FMath::RoundToInt((Definition->HPPerLevel * Level) + (Attributes.Constitution * 5.f));
 }
 
-float UUnitStatsComponent::GetPhysicalAttack() const
+int32 UUnitStatsComponent::GetPhysicalAttack() const
 {
-    if (!Definition) return 0.f;
-    return (Definition->PhysAttkPerLevel * Level) + (Attributes.Strength * 1.5f);
+    if (!Definition) return 0;
+    return FMath::RoundToInt((Definition->PhysAttkPerLevel * Level) + (Attributes.Strength * 1.5f));
 }
 
-float UUnitStatsComponent::GetRangedAttack() const
+int32 UUnitStatsComponent::GetRangedAttack() const
 {
-    if (!Definition) return 0.f;
-    return (Definition->RangedAttkPerLevel * Level) + (Attributes.Dexterity * 1.5f);
+    if (!Definition) return 0;
+    return FMath::RoundToInt((Definition->RangedAttkPerLevel * Level) + (Attributes.Dexterity * 1.5f));
 }
 
-float UUnitStatsComponent::GetMagicalPower() const
+int32 UUnitStatsComponent::GetMagicalPower() const
 {
-    if (!Definition) return 0.f;
-    return (Definition->MagPwrPerLevel * Level) + (Attributes.Knowledge * 1.5f);
+    if (!Definition) return 0;
+    return FMath::RoundToInt((Definition->MagPwrPerLevel * Level) + (Attributes.Knowledge * 1.5f));
 }
 
-float UUnitStatsComponent::GetPhysicalDefense() const
+int32 UUnitStatsComponent::GetPhysicalDefense() const
 {
-    if (!Definition) return 0.f;
-    return (Definition->PhysDefPerLevel * Level) + (Attributes.Constitution * 1.5f);
+    if (!Definition) return 0;
+    return FMath::RoundToInt((Definition->PhysDefPerLevel * Level) + (Attributes.Constitution * 1.5f));
 }
 
-float UUnitStatsComponent::GetMagicalDefense() const
+int32 UUnitStatsComponent::GetMagicalDefense() const
 {
-    if (!Definition) return 0.f;
-    return (Definition->MagDefPerLevel * Level) + (Attributes.Focus / 5.f);
+    if (!Definition) return 0;
+    return FMath::RoundToInt((Definition->MagDefPerLevel * Level) + (Attributes.Focus / 5.f));
 }
 
 int32 UUnitStatsComponent::GetActionPoints() const
@@ -166,7 +166,7 @@ int32 UUnitStatsComponent::GetEnemyTeam() const { return EnemyTeam; }
 void UUnitStatsComponent::SetAllyTeam(int32 Team) { AllyTeam = Team; }
 void UUnitStatsComponent::SetEnemyTeam(int32 Team) { EnemyTeam = Team; }
 
-float UUnitStatsComponent::GetCurrentHP() const { return PersistentHP; }
+int32 UUnitStatsComponent::GetCurrentHP() const { return PersistentHP; }
 
 FGridTraversalParams UUnitStatsComponent::GetTraversalParams() const
 {
@@ -174,10 +174,10 @@ FGridTraversalParams UUnitStatsComponent::GetTraversalParams() const
     return Definition->TraversalParams;
 }
 
-void UUnitStatsComponent::SetCurrentHP(float NewHP)
+void UUnitStatsComponent::SetCurrentHP(int32 NewHP)
 {
     const bool bWasAlive = IsAlive();
-    PersistentHP = FMath::Clamp(NewHP, 0.f, GetMaxHP());
+    PersistentHP = FMath::Clamp(NewHP, 0, GetMaxHP());
 
     if (bWasAlive && !IsAlive())
     {
@@ -197,5 +197,5 @@ void UUnitStatsComponent::SetCurrentActionPoints(int32 ActionPoints)
 
 bool UUnitStatsComponent::IsAlive() const
 {
-    return PersistentHP > 0.f;
+    return PersistentHP > 0;
 }

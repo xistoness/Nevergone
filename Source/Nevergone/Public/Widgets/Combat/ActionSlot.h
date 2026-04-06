@@ -10,6 +10,7 @@ class UAbilityDefinition;
 class UImage;
 class UTextBlock;
 class UBorder;
+class UOverlay;
 
 /**
  * Represents a single slot in the ActionHotbar.
@@ -50,6 +51,17 @@ public:
     UFUNCTION(BlueprintCallable, Category = "ActionSlot")
     void SetSelected(bool bSelected);
 
+    /**
+     * Shows or hides the cooldown overlay on this slot.
+     *
+     * @param bOnCooldown       True = show overlay; False = hide overlay.
+     * @param TurnsRemaining    Number of turns until the ability is available.
+     *                          Displayed as a number in the center of the overlay.
+     *                          Ignored when bOnCooldown is false.
+     */
+    UFUNCTION(BlueprintCallable, Category = "ActionSlot")
+    void SetCooldown(bool bOnCooldown, int32 TurnsRemaining = 0);
+
     // -----------------------------------------------------------------------
     // Designer-facing configuration
     // -----------------------------------------------------------------------
@@ -61,6 +73,25 @@ public:
     /** Border brush color when this slot IS selected. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ActionSlot|Style")
     FLinearColor SelectedBorderColor = FLinearColor(1.0f, 0.85f, 0.0f, 1.0f);
+
+    /**
+     * Semi-transparent overlay shown when the ability is on cooldown.
+     * Bind a UOverlay (or UImage) named "CooldownOverlay" in the Blueprint.
+     * Set its background to a dark semi-transparent color.
+     */
+    UPROPERTY(meta = (BindWidgetOptional))
+    TObjectPtr<UOverlay> CooldownOverlay;
+
+    /**
+     * Text shown in the center of CooldownOverlay with the remaining turn count.
+     * Bind a UTextBlock named "CooldownText" in the Blueprint.
+     */
+    UPROPERTY(meta = (BindWidgetOptional))
+    TObjectPtr<UTextBlock> CooldownText;
+
+    /** Color tint applied to SlotImage when the ability is on cooldown. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ActionSlot|Style")
+    FLinearColor CooldownImageTint = FLinearColor(0.3f, 0.3f, 0.3f, 1.0f);
 
     /** Fallback icon shown when the bound ability has no icon assigned. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ActionSlot|Style")
@@ -102,8 +133,13 @@ private:
     /** Applies border color and name text visibility based on bIsSelected. */
     void RefreshSelectionVisuals();
 
+    /** Applies or removes the cooldown overlay and text. */
+    void RefreshCooldownVisuals();
+
     UPROPERTY()
     TObjectPtr<const UAbilityDefinition> BoundDefinition;
 
     bool bIsSelected = false;
+    bool bIsCooldown = false;
+    int32 CooldownTurnsRemaining = 0;
 };

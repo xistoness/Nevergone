@@ -284,7 +284,7 @@ void UAudioSubsystem::HandleGameContextChanged(EGameContextState NewState)
 // CombatEventBus handlers — fallback SFX for events without a specific sound
 // ---------------------------------------------------------------------------
 
-void UAudioSubsystem::HandleDamageApplied(ACharacterBase* Source, ACharacterBase* Target, float Amount)
+void UAudioSubsystem::HandleDamageApplied(ACharacterBase* Source, ACharacterBase* Target, int32 Amount)
 {
 	if (!Target || !DefaultHitSFX) { return; }
 
@@ -303,7 +303,7 @@ void UAudioSubsystem::HandleUnitDied(ACharacterBase* Unit)
 	UE_LOG(LogTemp, Log, TEXT("[Audio] Death SFX — Unit: %s"), *GetNameSafe(Unit));
 }
 
-void UAudioSubsystem::HandleHealApplied(ACharacterBase* Source, ACharacterBase* Target, float Amount)
+void UAudioSubsystem::HandleHealApplied(ACharacterBase* Source, ACharacterBase* Target, int32 Amount)
 {
 	if (!Target || !DefaultHealSFX) { return; }
 

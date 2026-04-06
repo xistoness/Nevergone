@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Types/BattleInputContext.h"
 #include "ActionHotbar.generated.h"
 
 class ACharacterBase;
@@ -12,6 +13,7 @@ class UCombatManager;
 class UActionSlot;
 class UHorizontalBox;
 class UTextBlock;
+class UTurnManager;
 
 UCLASS()
 class NEVERGONE_API UActionHotbar : public UUserWidget
@@ -83,6 +85,18 @@ private:
     /** Fired by BattleModeComponent::OnPreviewUpdated on every hover update. */
     UFUNCTION()
     void HandlePreviewUpdated(int32 Cost, int32 Remaining, bool bPreviewIsValid);
+
+    // ---- Cooldown display ----
+
+    /**
+     * Queries every ability instance on the tracked unit and calls
+     * SetCooldown() on the corresponding ActionSlot.
+     * Called after ShowForUnit and on every turn state change.
+     */
+    void RefreshCooldownStates();
+    void HandleTurnStateChangedForCooldown(EBattleTurnOwner NewOwner, EBattleTurnPhase NewPhase);
+
+    FDelegateHandle TurnStateHandle;
 
     // ---- State ----
 
