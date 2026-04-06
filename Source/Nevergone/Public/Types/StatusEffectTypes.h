@@ -6,6 +6,30 @@
 #include "Types/BattleTypes.h"
 #include "StatusEffectTypes.generated.h"
 
+// ---------------------------------------------------------------------------
+// EAttributeTarget
+//
+// Identifies which FUnitAttributes field an IncreaseStat/DecreaseStat passive
+// effect targets. Mirrors FUnitAttributes exactly — adding a field there means
+// adding a value here so the StatusEffectManager can find it.
+//
+// StatusEffectManager modifies UnitStatsComponent::TemporaryAttributeBonuses
+// on the target unit and calls RecalculateBattleStats() to propagate the
+// change to all derived combat stats automatically.
+// ---------------------------------------------------------------------------
+UENUM(BlueprintType)
+enum class EAttributeTarget : uint8
+{
+    Constitution,
+    Strength,
+    Dexterity,
+    Knowledge,
+    Focus,
+    Technique,
+    Evasiveness,
+    Speed,
+};
+
 class UStatusEffectDefinition;
 class ACharacterBase;
 
@@ -60,6 +84,17 @@ struct NEVERGONE_API FActiveStatusEffect
     UPROPERTY()
     int32 CachedCasterStatValue = 0;
 
+    // Snapshot of the target movement range at the time of application
+    UPROPERTY()
+    int32 CachedMovementRangeSnapshot = 0;
+
+    // The exact delta applied to the target attribute by an IncreaseStat/DecreaseStat
+    // passive effect. Stored so RevertPassiveEffect can subtract it from
+    // TemporaryAttributeBonuses precisely, even with multiple stacked modifiers.
+    // 0 on all non-IncreaseStat/DecreaseStat instances.
+    UPROPERTY()
+    int32 CachedStatDelta = 0;
+    
     // Unique ID within a single unit's ActiveStatusEffects list.
     // Used to identify a specific instance during stacked removal or expiry.
     UPROPERTY()

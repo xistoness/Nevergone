@@ -21,7 +21,7 @@ void UActionSlot::NativePreConstruct()
 
 void UActionSlot::SetAbility(const UAbilityDefinition* InDefinition)
 {
-    UE_LOG(LogNevergone, Log,
+    UE_LOG(LogTemp, Log,
         TEXT("[ActionSlot] SetAbility: %s"),
         InDefinition ? *InDefinition->DisplayName.ToString() : TEXT("(none)"));
 
@@ -38,7 +38,7 @@ void UActionSlot::SetSelected(bool bSelected)
 
     bIsSelected = bSelected;
 
-    UE_LOG(LogNevergone, Verbose,
+    UE_LOG(LogTemp, Verbose,
         TEXT("[ActionSlot] SetSelected: '%s' → %s"),
         BoundDefinition ? *BoundDefinition->DisplayName.ToString() : TEXT("(empty)"),
         bIsSelected ? TEXT("SELECTED") : TEXT("IDLE"));
@@ -52,7 +52,7 @@ void UActionSlot::RefreshIcon()
 {
     if (!SlotImage)
     {
-        UE_LOG(LogNevergone, Warning,
+        UE_LOG(LogTemp, Warning,
             TEXT("[ActionSlot] RefreshIcon: SlotImage binding is missing — check the widget Blueprint."));
         return;
     }
@@ -77,7 +77,7 @@ void UActionSlot::RefreshIcon()
     {
         SlotImage->SetVisibility(ESlateVisibility::Hidden);
 
-        UE_LOG(LogNevergone, Warning,
+        UE_LOG(LogTemp, Warning,
             TEXT("[ActionSlot] RefreshIcon: no icon for '%s' and no FallbackIcon set."),
             BoundDefinition ? *BoundDefinition->DisplayName.ToString() : TEXT("(none)"));
     }
@@ -95,7 +95,7 @@ void UActionSlot::RefreshSelectionVisuals()
     }
     else
     {
-        UE_LOG(LogNevergone, Warning,
+        UE_LOG(LogTemp, Warning,
             TEXT("[ActionSlot] RefreshSelectionVisuals: SlotBorder binding is missing — check the widget Blueprint."));
     }
 
@@ -114,7 +114,7 @@ void UActionSlot::RefreshSelectionVisuals()
     }
     else
     {
-        UE_LOG(LogNevergone, Warning,
+        UE_LOG(LogTemp, Warning,
             TEXT("[ActionSlot] RefreshSelectionVisuals: AbilityNameText binding is missing — check the widget Blueprint."));
     }
 }

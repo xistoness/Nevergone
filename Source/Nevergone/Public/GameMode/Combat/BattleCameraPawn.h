@@ -27,7 +27,6 @@ protected:
 
 	FVector2D MovementInput = FVector2D::ZeroVector;
 	float ZoomInput = 0.f;
-	float RotationInput = 0.f;
 
 	UPROPERTY(EditAnywhere, Category = "Camera|Movement")
 	float PanSpeed = 2000.0f;
@@ -41,11 +40,21 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Camera|Zoom")
 	float MaxZoom = 3000.0f;
 
+	// --- Snap-to-target rotation ---
+
+	// Degrees added to TargetYaw per rotation press. 45 = 8 steps around the battlefield.
 	UPROPERTY(EditAnywhere, Category = "Camera|Rotation")
-	float RotationSpeed = 90.0f;
+	float RotationSnapDegrees = 45.0f;
+
+	// How fast the current yaw interpolates toward TargetYaw (RInterpTo speed).
+	UPROPERTY(EditAnywhere, Category = "Camera|Rotation")
+	float RotationInterpSpeed = 10.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Camera|Rotation")
 	bool bAllowRotation = false;
+
+	// Current interpolation target — accumulates snap steps.
+	float TargetYaw = 0.f;
 
 	FBox BattlefieldBounds;
 

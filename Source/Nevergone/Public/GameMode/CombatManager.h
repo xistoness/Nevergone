@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameInstance/MySaveGame.h"
 #include "Types/BattleInputContext.h"
 #include "Types/BattleTypes.h"
 #include "UObject/Object.h"
@@ -20,6 +21,7 @@ class UGridManager;
 class UBattleTeamAIPlanner;
 class UActionHotbar;
 class UStatusEffectManager;
+class AFloorEncounterVolume;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCombatFinished, EBattleUnitTeam, WinningTeam);
 
@@ -49,6 +51,20 @@ public:
 
 	/** Spawn units and send to TurnManager */
 	void StartCombat(UBattlePreparationContext& BattlePrepContext);
+
+    /**
+     * Save-aware variant of StartCombat.
+     * Spawns units and wires all subsystems identically to StartCombat, but
+     * calls BattleState::InitializeFromSave so CurrentHP, CurrentAP, and
+     * ActiveStatusEffects are restored from SavedSession.
+     * RestoreCombatFromSave must be called BEFORE this to write
+     * TemporaryAttributeBonuses onto UnitStatsComponents.
+     */
+    void StartCombatFromSave(
+        UBattlePreparationContext& BattlePrepContext,
+        const FSavedCombatSession& SavedSession
+    );
+
 	void InitializeSpawnedUnitForBattle(ACharacterBase* Character, EBattleUnitTeam Team, UGridManager* Grid);
 	void HandleTurnStateChanged(EBattleTurnOwner NewOwner, EBattleTurnPhase NewPhase);
 	void HandleUnitDeath(ACharacterBase* DeadUnit);
@@ -91,6 +107,24 @@ public:
 	void BindToCombatUnitActionEvents(ACharacterBase* Unit);
 	void UnbindFromCombatUnitActionEvents(ACharacterBase* Unit);
 	void RequestEndEnemyTurn();
+
+    // -----------------------------------------------------------------------
+    // Mid-combat save / restore
+    // -----------------------------------------------------------------------
+
+    /**
+     * Serializes the full mid-combat state (HP, AP, status effects, cooldowns,
+     * temporary attribute bonuses) for every unit into OutSession.
+     * Called by EndEnemyTurn before triggering RequestSaveGame.
+     */
+    void CollectCombatSaveData(FSavedCombatSession& OutSession) const;
+
+    /**
+     * Restores volatile combat state (CurrentHP, CurrentAP, status effects,
+     * cooldowns) onto already-spawned units after a mid-combat save is loaded.
+     * BattleState::InitializeFromSave must be called first so unit states exist.
+     */
+    void RestoreCombatFromSave(const FSavedCombatSession& SavedSession);
 
 	// -----------------------------------------------------------------------
 	// Public delegates
@@ -182,6 +216,11 @@ private:
 
 	UPROPERTY()
 	bool bCombatEnding = false;
+
+    // The encounter volume that started this combat session.
+    // Stored so CollectCombatSaveData can write its guid into FSavedCombatSession.
+    UPROPERTY()
+    TObjectPtr<AFloorEncounterVolume> ActiveEncounterVolume = nullptr;
 	
 	FTimerHandle PostActionDelayHandle;
 	FTimerHandle AICameraWaitHandle;

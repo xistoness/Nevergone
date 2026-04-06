@@ -8,6 +8,7 @@
 #include "BattlePreparationContext.generated.h"
 
 class UGridManager;
+class AFloorEncounterVolume;
 
 UCLASS()
 class NEVERGONE_API UBattlePreparationContext : public UObject
@@ -40,6 +41,11 @@ public:
 
 	UPROPERTY(BlueprintReadOnly)
 	FGameplayTagContainer CombatTags;
+
+	// The encounter volume that triggered this battle.
+	// Passed through to CombatManager so it can be recorded in mid-combat saves.
+	UPROPERTY()
+	TObjectPtr<AFloorEncounterVolume> EncounterSource;
 	
 	/* --- Validation --- */
 	void Initialize();

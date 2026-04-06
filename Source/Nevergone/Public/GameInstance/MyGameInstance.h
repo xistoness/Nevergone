@@ -3,9 +3,12 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Audio/AudioSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "Data/PartyData.h"
 #include "Data/ProgressionData.h"
+#include "Sound/SoundBase.h"
+#include "Sound/SoundMix.h"
 #include "Types/LevelTypes.h"
 #include "MyGameInstance.generated.h"
 
@@ -112,6 +115,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Save")
 	FName GetActiveSavedLevelName() const;
 	
+	UMySaveGame* GetActiveSave() const;
+	
 	// Event Broadcasting
 	//OnRestoreParty.Broadcast(PartyData);
 	//OnRestoreProgress.Broadcast(ProgressionData);
@@ -128,6 +133,26 @@ public:
 	// Debugging
 	void Debug_PrintGlobalState() const;
 	void Debug_ResetProgression();
+	
+	/** Fallback SFX fired when an ability damage event has no ImpactSound. */
+	UPROPERTY(EditDefaultsOnly, Category = "Audio|SFX|Defaults")
+	TObjectPtr<USoundBase> DefaultHitSFX;
+
+	/** Fallback SFX fired when a unit dies with no death sound assigned. */
+	UPROPERTY(EditDefaultsOnly, Category = "Audio|SFX|Defaults")
+	TObjectPtr<USoundBase> DefaultDeathSFX;
+
+	/** Fallback SFX fired when a heal is applied with no heal sound assigned. */
+	UPROPERTY(EditDefaultsOnly, Category = "Audio|SFX|Defaults")
+	TObjectPtr<USoundBase> DefaultHealSFX;
+
+	/** Active Sound Mix used for per-category volume control. */
+	UPROPERTY(EditDefaultsOnly, Category = "Audio|Mixing")
+	TObjectPtr<USoundMix> MasterSoundMix;
+
+	/** Per-event UI sound map. Assign assets once — widgets call PlayUISoundEvent() by enum. */
+	UPROPERTY(EditDefaultsOnly, Category = "Audio|UI")
+	TMap<EUISoundEvent, TObjectPtr<USoundBase>> UISoundMap;
 
 protected:
 	
@@ -135,7 +160,6 @@ protected:
 	virtual void Shutdown() override;
 	
 	void SetActiveSave(UMySaveGame* Save);
-	UMySaveGame* GetActiveSave() const;
 	
 	bool LoadSaveSlot(const FString& SlotName);
 	bool CreateNewSave(const FString& SlotName);

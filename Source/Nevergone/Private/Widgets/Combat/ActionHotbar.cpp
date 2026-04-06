@@ -23,7 +23,7 @@ void UActionHotbar::InitializeWithCombatManager(UCombatManager* InCombatManager)
 {
     if (!InCombatManager)
     {
-        UE_LOG(LogNevergone, Warning, TEXT("[ActionHotbar] InitializeWithCombatManager: received null CombatManager."));
+        UE_LOG(LogTemp, Warning, TEXT("[ActionHotbar] InitializeWithCombatManager: received null CombatManager."));
         return;
     }
 
@@ -41,7 +41,7 @@ void UActionHotbar::InitializeWithCombatManager(UCombatManager* InCombatManager)
             this, &UActionHotbar::HandleTurnStateChangedForCooldown);
     }
 
-    UE_LOG(LogNevergone, Log, TEXT("[ActionHotbar] InitializeWithCombatManager: bound to CombatManager."));
+    UE_LOG(LogTemp, Log, TEXT("[ActionHotbar] InitializeWithCombatManager: bound to CombatManager."));
 
     HideHotbar();
 }
@@ -50,7 +50,7 @@ void UActionHotbar::RefreshSelection(int32 AbilityIndex)
 {
     if (bIsLocked)
     {
-        UE_LOG(LogNevergone, Verbose,
+        UE_LOG(LogTemp, Verbose,
             TEXT("[ActionHotbar] RefreshSelection: hotbar locked during execution — ignoring index %d."), AbilityIndex);
         return;
     }
@@ -60,7 +60,7 @@ void UActionHotbar::RefreshSelection(int32 AbilityIndex)
         return;
     }
 
-    UE_LOG(LogNevergone, Log,
+    UE_LOG(LogTemp, Log,
         TEXT("[ActionHotbar] RefreshSelection: %d → %d"), CurrentSelectedIndex, AbilityIndex);
 
     if (Slots.IsValidIndex(CurrentSelectedIndex))
@@ -89,7 +89,7 @@ void UActionHotbar::ClearHotbar()
     bIsLocked = false;
     CurrentSelectedIndex = INDEX_NONE;
 
-    UE_LOG(LogNevergone, Log, TEXT("[ActionHotbar] ClearHotbar: fully reset."));
+    UE_LOG(LogTemp, Log, TEXT("[ActionHotbar] ClearHotbar: fully reset."));
 }
 
 // ---- Protected -------------------------------------------------------------
@@ -120,7 +120,7 @@ void UActionHotbar::ShowForUnit(ACharacterBase* Unit)
     UBattleModeComponent* BattleMode = Unit->GetBattleModeComponent();
     if (!BattleMode)
     {
-        UE_LOG(LogNevergone, Warning,
+        UE_LOG(LogTemp, Warning,
             TEXT("[ActionHotbar] ShowForUnit: unit '%s' has no BattleModeComponent."), *GetNameSafe(Unit));
         HideHotbar();
         return;
@@ -128,14 +128,14 @@ void UActionHotbar::ShowForUnit(ACharacterBase* Unit)
 
     if (!ActionSlotClass)
     {
-        UE_LOG(LogNevergone, Error,
+        UE_LOG(LogTemp, Error,
             TEXT("[ActionHotbar] ShowForUnit: ActionSlotClass is not set — assign it in the Blueprint defaults."));
         return;
     }
 
     if (!SlotsBox)
     {
-        UE_LOG(LogNevergone, Error,
+        UE_LOG(LogTemp, Error,
             TEXT("[ActionHotbar] ShowForUnit: SlotsBox binding is missing — check the widget Blueprint."));
         return;
     }
@@ -150,7 +150,7 @@ void UActionHotbar::ShowForUnit(ACharacterBase* Unit)
 
     const TArray<FUnitAbilityEntry>& Abilities = BattleMode->GetGrantedBattleAbilities();
 
-    UE_LOG(LogNevergone, Log,
+    UE_LOG(LogTemp, Log,
         TEXT("[ActionHotbar] ShowForUnit: building %d slots for unit '%s'."),
         Abilities.Num(), *GetNameSafe(Unit));
 
@@ -161,7 +161,7 @@ void UActionHotbar::ShowForUnit(ACharacterBase* Unit)
         UActionSlot* NewSlot = CreateWidget<UActionSlot>(this, ActionSlotClass);
         if (!NewSlot)
         {
-            UE_LOG(LogNevergone, Error,
+            UE_LOG(LogTemp, Error,
                 TEXT("[ActionHotbar] ShowForUnit: failed to create ActionSlot at index %d."), Index);
             continue;
         }
@@ -209,7 +209,7 @@ void UActionHotbar::ShowForUnit(ACharacterBase* Unit)
 void UActionHotbar::HideHotbar()
 {
     SetVisibility(ESlateVisibility::Collapsed);
-    UE_LOG(LogNevergone, Log, TEXT("[ActionHotbar] HideHotbar: hotbar is now hidden."));
+    UE_LOG(LogTemp, Log, TEXT("[ActionHotbar] HideHotbar: hotbar is now hidden."));
 }
 
 void UActionHotbar::ClearSlots()
@@ -230,7 +230,7 @@ void UActionHotbar::UnbindFromCurrentUnit()
         TrackedBattleMode->OnAbilitySelectionChanged.RemoveDynamic(this, &UActionHotbar::HandleAbilitySelectionChanged);
         TrackedBattleMode->OnPreviewUpdated.RemoveDynamic(this, &UActionHotbar::HandlePreviewUpdated);
 
-        UE_LOG(LogNevergone, Log,
+        UE_LOG(LogTemp, Log,
             TEXT("[ActionHotbar] UnbindFromCurrentUnit: unbound from '%s'."), *GetNameSafe(TrackedUnit.Get()));
     }
 
@@ -254,7 +254,7 @@ void UActionHotbar::UnbindFromCombatManager()
             }
         }
 
-        UE_LOG(LogNevergone, Log, TEXT("[ActionHotbar] UnbindFromCombatManager: unbound from CombatManager."));
+        UE_LOG(LogTemp, Log, TEXT("[ActionHotbar] UnbindFromCombatManager: unbound from CombatManager."));
     }
 
     TrackedCombatManager.Reset();
@@ -300,13 +300,13 @@ void UActionHotbar::HandleActiveUnitChanged(ACharacterBase* NewActiveUnit)
 {
     if (NewActiveUnit)
     {
-        UE_LOG(LogNevergone, Log,
+        UE_LOG(LogTemp, Log,
             TEXT("[ActionHotbar] HandleActiveUnitChanged: showing hotbar for '%s'."), *GetNameSafe(NewActiveUnit));
         ShowForUnit(NewActiveUnit);
     }
     else
     {
-        UE_LOG(LogNevergone, Log, TEXT("[ActionHotbar] HandleActiveUnitChanged: no unit — hiding hotbar."));
+        UE_LOG(LogTemp, Log, TEXT("[ActionHotbar] HandleActiveUnitChanged: no unit — hiding hotbar."));
         UnbindFromCurrentUnit();
         ClearSlots();
         ClearAPDisplay();
@@ -316,7 +316,7 @@ void UActionHotbar::HandleActiveUnitChanged(ACharacterBase* NewActiveUnit)
 
 void UActionHotbar::HandleEnemyTurnBegan()
 {
-    UE_LOG(LogNevergone, Log, TEXT("[ActionHotbar] HandleEnemyTurnBegan: hiding hotbar for enemy turn."));
+    UE_LOG(LogTemp, Log, TEXT("[ActionHotbar] HandleEnemyTurnBegan: hiding hotbar for enemy turn."));
     UnbindFromCurrentUnit();
     ClearSlots();
     ClearAPDisplay();
@@ -326,7 +326,7 @@ void UActionHotbar::HandleEnemyTurnBegan()
 void UActionHotbar::HandleActionStarted(ACharacterBase* ActingUnit)
 {
     bIsLocked = true;
-    UE_LOG(LogNevergone, Log,
+    UE_LOG(LogTemp, Log,
         TEXT("[ActionHotbar] HandleActionStarted: locking hotbar for '%s'."), *GetNameSafe(ActingUnit));
 }
 
@@ -334,7 +334,7 @@ void UActionHotbar::HandleActionFinished(ACharacterBase* ActingUnit)
 {
     bIsLocked = false;
 
-    UE_LOG(LogNevergone, Log,
+    UE_LOG(LogTemp, Log,
         TEXT("[ActionHotbar] HandleActionFinished: unlocking hotbar for '%s'."), *GetNameSafe(ActingUnit));
 
     // Re-sync slot highlight after execution — the active ability may have
@@ -365,7 +365,7 @@ void UActionHotbar::HandleActionFinished(ACharacterBase* ActingUnit)
 
 void UActionHotbar::HandleAbilitySelectionChanged(int32 NewIndex)
 {
-    UE_LOG(LogNevergone, Log,
+    UE_LOG(LogTemp, Log,
         TEXT("[ActionHotbar] HandleAbilitySelectionChanged: new index = %d"), NewIndex);
     RefreshSelection(NewIndex);
 }

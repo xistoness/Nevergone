@@ -24,6 +24,10 @@ class NEVERGONE_API ABattlePlayerController : public ANevergonePlayerController
 public:
 	// Called when battle starts
 	void EnterBattleMode(UCombatManager* InCombatManager);
+	
+	// Returns true if BattleCameraPawn has already been spawned and possessed.
+	// Used by TowerFloorGameMode to avoid calling EnterBattleMode twice.
+	bool HasBattleCamera() const { return BattleCameraPawn != nullptr; }
 
 protected:
 	virtual void BeginPlay() override;

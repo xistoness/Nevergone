@@ -28,6 +28,14 @@ ACharacterBase::ACharacterBase()
 	
 	UnitStatsComponent = CreateDefaultSubobject<UUnitStatsComponent>(TEXT("UnitStatsComponent"));
 	SaveableComponent = CreateDefaultSubobject<USaveableComponent>(TEXT("SaveableComponent"));
+
+    // Characters are spawned and destroyed dynamically by CombatManager and
+    // the exploration system. Their persistent state (HP, attributes, cooldowns)
+    // is managed by UnitStatsComponent and FSavedCombatSession — NOT by the
+    // world actor save/restore pass. Setting this false prevents
+    // CollectWorldSaveData from capturing them as world actors and
+    // SpawnMissingActors from re-spawning them on load (which caused duplicates).
+    SaveableComponent->bPersistAcrossLoads = false;
 	ExplorationMode = CreateDefaultSubobject<UExplorationModeComponent>(TEXT("ExplorationMode"));
 	BattleMode      = CreateDefaultSubobject<UBattleModeComponent>(TEXT("BattleMode"));
 	AbilitySystemComponent = CreateDefaultSubobject<UMyAbilitySystemComponent>(TEXT("AbilitySystem"));

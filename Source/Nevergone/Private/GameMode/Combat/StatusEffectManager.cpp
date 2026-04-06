@@ -3,6 +3,7 @@
 #include "GameMode/Combat/StatusEffectManager.h"
 
 #include "AbilitySystemComponent.h"
+#include "ActorComponents/UnitStatsComponent.h"
 #include "Characters/CharacterBase.h"
 #include "Data/StatusEffectDefinition.h"
 #include "GameMode/Combat/BattleState.h"
@@ -29,7 +30,7 @@ void UStatusEffectManager::Initialize(
         this, &UStatusEffectManager::OnTurnStateChanged
     );
 
-    UE_LOG(LogNevergone, Log, TEXT("[StatusEffectManager] Initialized"));
+    UE_LOG(LogTemp, Log, TEXT("[StatusEffectManager] Initialized"));
 }
 
 void UStatusEffectManager::Shutdown()
@@ -40,7 +41,7 @@ void UStatusEffectManager::Shutdown()
         TurnStateHandle.Reset();
     }
 
-    UE_LOG(LogNevergone, Log, TEXT("[StatusEffectManager] Shutdown"));
+    UE_LOG(LogTemp, Log, TEXT("[StatusEffectManager] Shutdown"));
 }
 
 // ---------------------------------------------------------------------------
@@ -56,7 +57,7 @@ void UStatusEffectManager::ApplyStatusEffect(
 {
     if (!Target || !Definition)
     {
-        UE_LOG(LogNevergone, Warning,
+        UE_LOG(LogTemp, Warning,
             TEXT("[StatusEffectManager] ApplyStatusEffect: null Target or Definition — skipped"));
         return;
     }
@@ -64,7 +65,7 @@ void UStatusEffectManager::ApplyStatusEffect(
     FBattleUnitState* TargetState = BattleState->FindUnitState(Target);
     if (!TargetState || TargetState->bIsDead)
     {
-        UE_LOG(LogNevergone, Warning,
+        UE_LOG(LogTemp, Warning,
             TEXT("[StatusEffectManager] ApplyStatusEffect: no live BattleUnitState for %s — skipped"),
             *GetNameSafe(Target));
         return;
@@ -72,7 +73,7 @@ void UStatusEffectManager::ApplyStatusEffect(
 
     if (IsImmune(Target, Definition))
     {
-        UE_LOG(LogNevergone, Log,
+        UE_LOG(LogTemp, Log,
             TEXT("[StatusEffectManager] %s is immune to '%s' — skipped"),
             *GetNameSafe(Target), *Definition->DisplayName.ToString());
         return;
@@ -95,14 +96,14 @@ void UStatusEffectManager::ApplyStatusEffect(
         switch (Definition->StackBehavior)
         {
             case EStatusStackBehavior::Ignore:
-                UE_LOG(LogNevergone, Log,
+                UE_LOG(LogTemp, Log,
                     TEXT("[StatusEffectManager] '%s' on %s already active — ignoring re-application"),
                     *Tag.ToString(), *GetNameSafe(Target));
                 return;
 
             case EStatusStackBehavior::Refresh:
                 TargetState->ActiveStatusEffects[ExistingIndex].TurnsRemaining = Definition->DurationTurns;
-                UE_LOG(LogNevergone, Log,
+                UE_LOG(LogTemp, Log,
                     TEXT("[StatusEffectManager] '%s' on %s refreshed to %d turns"),
                     *Tag.ToString(), *GetNameSafe(Target), Definition->DurationTurns);
                 return;
@@ -145,7 +146,7 @@ void UStatusEffectManager::ApplyStatusEffect(
         if (UAbilitySystemComponent* ASC = Target->GetAbilitySystemComponent())
         {
             ASC->AddLooseGameplayTags(FGameplayTagContainer(Tag));
-            UE_LOG(LogNevergone, Log,
+            UE_LOG(LogTemp, Log,
                 TEXT("[StatusEffectManager] ASC tag '%s' granted to %s"),
                 *Tag.ToString(), *GetNameSafe(Target));
         }
@@ -157,7 +158,7 @@ void UStatusEffectManager::ApplyStatusEffect(
         EventBus->NotifyStatusApplied(Target, Tag, Definition->DisplayLabel, Definition->Icon);
     }
 
-    UE_LOG(LogNevergone, Log,
+    UE_LOG(LogTemp, Log,
         TEXT("[StatusEffectManager] Applied '%s' to %s by %s — %d turns, casterStat=%d, instanceId=%d"),
         *Tag.ToString(), *GetNameSafe(Target), *GetNameSafe(Caster),
         Definition->DurationTurns, CasterStatSnapshot, StoredInstance.InstanceId);
@@ -169,7 +170,7 @@ void UStatusEffectManager::ApplyStatusEffect(
         && Definition->TickEffect != EStatusTickEffect::None
         && Definition->TickTiming != EStatusTickTiming::None)
     {
-        UE_LOG(LogNevergone, Log,
+        UE_LOG(LogTemp, Log,
             TEXT("[StatusEffectManager] bTickOnApplication=true for '%s' on %s — ticking immediately"),
             *Tag.ToString(), *GetNameSafe(Target));
         TickEffectInstance(Target, StoredInstance);
@@ -198,7 +199,7 @@ void UStatusEffectManager::RemoveStatusEffect(ACharacterBase* Target, const FGam
 
     if (IdsToRemove.IsEmpty())
     {
-        UE_LOG(LogNevergone, Verbose,
+        UE_LOG(LogTemp, Verbose,
             TEXT("[StatusEffectManager] RemoveStatusEffect: '%s' not found on %s"),
             *StatusTag.ToString(), *GetNameSafe(Target));
         return;
@@ -209,7 +210,7 @@ void UStatusEffectManager::RemoveStatusEffect(ACharacterBase* Target, const FGam
         RemoveStatusEffectInstance(Target, Id);
     }
 
-    UE_LOG(LogNevergone, Log,
+    UE_LOG(LogTemp, Log,
         TEXT("[StatusEffectManager] Removed %d instance(s) of '%s' from %s"),
         IdsToRemove.Num(), *StatusTag.ToString(), *GetNameSafe(Target));
 }
@@ -227,7 +228,7 @@ void UStatusEffectManager::RemoveStatusEffectInstance(ACharacterBase* Target, in
 
     if (Index == INDEX_NONE)
     {
-        UE_LOG(LogNevergone, Warning,
+        UE_LOG(LogTemp, Warning,
             TEXT("[StatusEffectManager] RemoveStatusEffectInstance: id=%d not found on %s"),
             InstanceId, *GetNameSafe(Target));
         return;
@@ -261,7 +262,7 @@ void UStatusEffectManager::RemoveStatusEffectInstance(ACharacterBase* Target, in
             EventBus->NotifyStatusCleared(Target, Tag);
         }
 
-        UE_LOG(LogNevergone, Log,
+        UE_LOG(LogTemp, Log,
             TEXT("[StatusEffectManager] '%s' fully cleared from %s"),
             *Tag.ToString(), *GetNameSafe(Target));
     }
@@ -289,7 +290,7 @@ int32 UStatusEffectManager::AbsorbDamageWithShield(ACharacterBase* Target, int32
         Instance.ShieldHP   -= Absorbed;
         RemainingDamage     -= Absorbed;
 
-        UE_LOG(LogNevergone, Log,
+        UE_LOG(LogTemp, Log,
             TEXT("[StatusEffectManager] Shield on %s absorbed %d — %d shield HP left, %d passed through"),
             *GetNameSafe(Target), Absorbed, Instance.ShieldHP, RemainingDamage);
 
@@ -301,7 +302,7 @@ int32 UStatusEffectManager::AbsorbDamageWithShield(ACharacterBase* Target, int32
 
     for (int32 Id : DepletedIds)
     {
-        UE_LOG(LogNevergone, Log,
+        UE_LOG(LogTemp, Log,
             TEXT("[StatusEffectManager] Shield depleted on %s (instanceId=%d)"),
             *GetNameSafe(Target), Id);
         RemoveStatusEffectInstance(Target, Id);
@@ -371,7 +372,7 @@ void UStatusEffectManager::OnTurnStateChanged(EBattleTurnOwner NewOwner, EBattle
     const EBattleUnitTeam ActiveTeam =
         bIsPlayerTurnStart ? EBattleUnitTeam::Ally : EBattleUnitTeam::Enemy;
 
-    UE_LOG(LogNevergone, Log,
+    UE_LOG(LogTemp, Log,
         TEXT("[StatusEffectManager] Turn event — ticking statuses (team=%s, playerStart=%s, enemyStart=%s)"),
         ActiveTeam == EBattleUnitTeam::Ally ? TEXT("Ally") : TEXT("Enemy"),
         bIsPlayerTurnStart ? TEXT("true") : TEXT("false"),
@@ -501,14 +502,14 @@ void UStatusEffectManager::TickEffectInstance(ACharacterBase* Target, FActiveSta
     switch (Instance.Definition->TickEffect)
     {
         case EStatusTickEffect::DamagePerTurn:
-            UE_LOG(LogNevergone, Log,
+            UE_LOG(LogTemp, Log,
                 TEXT("[StatusEffectManager] Tick '%s': %d damage to %s"),
                 *Instance.Definition->StatusTag.ToString(), IntAmount, *GetNameSafe(Target));
             EventBus->NotifyDamageApplied(Instance.Caster.Get(), Target, IntAmount);
             break;
 
         case EStatusTickEffect::HealPerTurn:
-            UE_LOG(LogNevergone, Log,
+            UE_LOG(LogTemp, Log,
                 TEXT("[StatusEffectManager] Tick '%s': %d heal on %s"),
                 *Instance.Definition->StatusTag.ToString(), IntAmount, *GetNameSafe(Target));
             EventBus->NotifyHealApplied(Instance.Caster.Get(), Target, IntAmount);
@@ -542,7 +543,7 @@ void UStatusEffectManager::DecrementAndExpireStatuses()
 
             Instance.TurnsRemaining--;
 
-            UE_LOG(LogNevergone, Verbose,
+            UE_LOG(LogTemp, Verbose,
                 TEXT("[StatusEffectManager] '%s' on %s — %d turns remaining"),
                 *Instance.Definition->StatusTag.ToString(),
                 *GetNameSafe(Unit),
@@ -556,7 +557,7 @@ void UStatusEffectManager::DecrementAndExpireStatuses()
 
         for (int32 Id : ExpiredIds)
         {
-            UE_LOG(LogNevergone, Log,
+            UE_LOG(LogTemp, Log,
                 TEXT("[StatusEffectManager] Status expired on %s (instanceId=%d)"),
                 *GetNameSafe(Unit), Id);
             RemoveStatusEffectInstance(Unit, Id);
@@ -567,6 +568,29 @@ void UStatusEffectManager::DecrementAndExpireStatuses()
 // ---------------------------------------------------------------------------
 // Passive effect helpers
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Attribute modifier helpers
+// ---------------------------------------------------------------------------
+
+// Returns a pointer to the FUnitAttributes field identified by Target.
+// Used by IncreaseStat/DecreaseStat to keep the field-selection switch
+// in one place for both apply and revert.
+static int32* GetAttributeRef(FUnitAttributes& Attrs, EAttributeTarget Target)
+{
+    switch (Target)
+    {
+        case EAttributeTarget::Constitution: return &Attrs.Constitution;
+        case EAttributeTarget::Strength:     return &Attrs.Strength;
+        case EAttributeTarget::Dexterity:    return &Attrs.Dexterity;
+        case EAttributeTarget::Knowledge:    return &Attrs.Knowledge;
+        case EAttributeTarget::Focus:        return &Attrs.Focus;
+        case EAttributeTarget::Technique:    return &Attrs.Technique;
+        case EAttributeTarget::Evasiveness:  return &Attrs.Evasiveness;
+        case EAttributeTarget::Speed:        return &Attrs.Speed;
+    }
+    return nullptr;
+}
 
 void UStatusEffectManager::ApplyPassiveEffect(ACharacterBase* Target, FActiveStatusEffect& Instance)
 {
@@ -586,7 +610,7 @@ void UStatusEffectManager::ApplyPassiveEffect(ACharacterBase* Target, FActiveSta
             ));
             State->MovementRange = FMath::Max(1, State->MovementRange - Penalty);
 
-            UE_LOG(LogNevergone, Log,
+            UE_LOG(LogTemp, Log,
                 TEXT("[StatusEffectManager] Slow on %s — MovementRange reduced by %d (now %d)"),
                 *GetNameSafe(Target), Penalty, State->MovementRange);
             break;
@@ -600,9 +624,18 @@ void UStatusEffectManager::ApplyPassiveEffect(ACharacterBase* Target, FActiveSta
             ));
             State->MovementRange += Bonus;
 
-            UE_LOG(LogNevergone, Log,
+            UE_LOG(LogTemp, Log,
                 TEXT("[StatusEffectManager] Haste on %s — MovementRange increased by %d (now %d)"),
                 *GetNameSafe(Target), Bonus, State->MovementRange);
+            break;
+        }
+        
+        case EStatusPassiveEffect::Root:
+        {
+            // Clamp MovementRange to 0, bypassing the Max(1) floor used by Slow.
+            Instance.CachedMovementRangeSnapshot = State->MovementRange; // save to restore later
+            State->MovementRange = 0;
+            UE_LOG(LogTemp, Log, TEXT("[StatusEffectManager] Root applied to %s — MovementRange set to 0"), *GetNameSafe(Target));
             break;
         }
 
@@ -617,7 +650,7 @@ void UStatusEffectManager::ApplyPassiveEffect(ACharacterBase* Target, FActiveSta
                 Instance.Definition->PassiveEffectFlatAmount + CasterContrib
             );
 
-            UE_LOG(LogNevergone, Log,
+            UE_LOG(LogTemp, Log,
                 TEXT("[StatusEffectManager] Shield on %s — %d HP (flat=%d, casterStat=%d * mult=%.2f)"),
                 *GetNameSafe(Target), Instance.ShieldHP,
                 Instance.Definition->PassiveEffectFlatAmount,
@@ -631,10 +664,24 @@ void UStatusEffectManager::ApplyPassiveEffect(ACharacterBase* Target, FActiveSta
             // AP += PassiveEffectFlatAmount
             State->CurrentActionPoints += Instance.Definition->PassiveEffectFlatAmount;
 
-            UE_LOG(LogNevergone, Log,
+            UE_LOG(LogTemp, Log,
                 TEXT("[StatusEffectManager] Respite on %s — +%d AP (now %d)"),
                 *GetNameSafe(Target), Instance.Definition->PassiveEffectFlatAmount,
                 State->CurrentActionPoints);
+            break;
+        }
+
+        case EStatusPassiveEffect::DrainActionPoints:
+        {
+            // Zero out all remaining AP — the unit is fully exhausted for this turn.
+            // Used by abilities like SkipTurn that should fire even with 1 AP left
+            // but consume everything on execution.
+            const int32 Drained = State->CurrentActionPoints;
+            State->CurrentActionPoints = 0;
+
+            UE_LOG(LogTemp, Log,
+                TEXT("[StatusEffectManager] DrainActionPoints on %s — drained %d AP (now 0)"),
+                *GetNameSafe(Target), Drained);
             break;
         }
 
@@ -650,11 +697,67 @@ void UStatusEffectManager::ApplyPassiveEffect(ACharacterBase* Target, FActiveSta
                 ? EBattleUnitTeam::Enemy
                 : EBattleUnitTeam::Ally;
 
-            UE_LOG(LogNevergone, Log,
+            UE_LOG(LogTemp, Log,
                 TEXT("[StatusEffectManager] Charm on %s — team flipped %s -> %s"),
                 *GetNameSafe(Target),
                 Original     == EBattleUnitTeam::Ally ? TEXT("Ally") : TEXT("Enemy"),
                 State->Team  == EBattleUnitTeam::Ally ? TEXT("Ally") : TEXT("Enemy"));
+            break;
+        }
+
+        case EStatusPassiveEffect::IncreaseStat:
+        case EStatusPassiveEffect::DecreaseStat:
+        {
+            const UStatusEffectDefinition* Def = Instance.Definition;
+
+            UUnitStatsComponent* Stats = Target->GetUnitStats();
+            if (!Stats) { break; }
+
+            // Compute the delta against the current effective attribute value
+            // (base + existing temporary bonuses) so percent buffs stack correctly.
+            int32* BonusPtr = GetAttributeRef(Stats->TemporaryAttributeBonuses, Def->StatModifierTarget);
+            if (!BonusPtr) { break; }
+
+            // Read the current effective attribute value to base percent deltas on.
+            FUnitAttributes Effective = Stats->Attributes;
+            int32* EffectivePtr = GetAttributeRef(Effective, Def->StatModifierTarget);
+            const int32 EffectiveValue = EffectivePtr
+                ? (*EffectivePtr + *BonusPtr)
+                : 0;
+
+            const int32 Delta = Def->bUsePercentForStatModifier
+                ? FMath::FloorToInt(EffectiveValue * Def->PassiveEffectTargetMultiplier)
+                : Def->PassiveEffectFlatAmount;
+
+            Instance.CachedStatDelta = Delta;
+
+            if (Def->PassiveEffect == EStatusPassiveEffect::IncreaseStat)
+            {
+                *BonusPtr += Delta;
+
+                UE_LOG(LogTemp, Log,
+                    TEXT("[StatusEffectManager] IncreaseStat on %s — %s +%d (bonus now %d)"),
+                    *GetNameSafe(Target),
+                    *UEnum::GetValueAsString(Def->StatModifierTarget),
+                    Delta, *BonusPtr);
+            }
+            else
+            {
+                // Clamp so the effective attribute never goes below 0 from a debuff.
+                const int32 MaxDeductible = FMath::Max(0, EffectiveValue);
+                const int32 ActualDelta   = FMath::Min(Delta, MaxDeductible);
+                Instance.CachedStatDelta  = ActualDelta;
+                *BonusPtr -= ActualDelta;
+
+                UE_LOG(LogTemp, Log,
+                    TEXT("[StatusEffectManager] DecreaseStat on %s — %s -%d (bonus now %d)"),
+                    *GetNameSafe(Target),
+                    *UEnum::GetValueAsString(Def->StatModifierTarget),
+                    ActualDelta, *BonusPtr);
+            }
+
+            // Propagate the changed attribute to all derived combat stats immediately.
+            Stats->RecalculateBattleStats(*State);
             break;
         }
 
@@ -682,7 +785,7 @@ void UStatusEffectManager::RevertPassiveEffect(
             const float Divisor = FMath::Max(0.01f, 1.f - Pct);
             State->MovementRange = FMath::RoundToInt(State->MovementRange / Divisor);
 
-            UE_LOG(LogNevergone, Log,
+            UE_LOG(LogTemp, Log,
                 TEXT("[StatusEffectManager] Slow removed from %s — MovementRange restored to %d"),
                 *GetNameSafe(Target), State->MovementRange);
             break;
@@ -694,12 +797,19 @@ void UStatusEffectManager::RevertPassiveEffect(
             const float Divisor = 1.f + Pct;
             State->MovementRange = FMath::RoundToInt(State->MovementRange / Divisor);
 
-            UE_LOG(LogNevergone, Log,
+            UE_LOG(LogTemp, Log,
                 TEXT("[StatusEffectManager] Haste removed from %s — MovementRange restored to %d"),
                 *GetNameSafe(Target), State->MovementRange);
             break;
         }
-
+        
+        case EStatusPassiveEffect::Root:
+        {
+            State->MovementRange = Instance.CachedMovementRangeSnapshot;
+            UE_LOG(LogTemp, Log, TEXT("[StatusEffectManager] Root removed from %s — MovementRange restored to %d"), *GetNameSafe(Target), State->MovementRange);
+            break;
+        }
+        
         case EStatusPassiveEffect::SwitchTeam:
         {
             const EBattleUnitTeam Current = State->Team;
@@ -707,7 +817,7 @@ void UStatusEffectManager::RevertPassiveEffect(
                 ? EBattleUnitTeam::Enemy
                 : EBattleUnitTeam::Ally;
 
-            UE_LOG(LogNevergone, Log,
+            UE_LOG(LogTemp, Log,
                 TEXT("[StatusEffectManager] Charm removed from %s — team restored to %s"),
                 *GetNameSafe(Target),
                 State->Team == EBattleUnitTeam::Ally ? TEXT("Ally") : TEXT("Enemy"));
@@ -716,7 +826,50 @@ void UStatusEffectManager::RevertPassiveEffect(
 
         // Shield: HP already zeroed by AbsorbDamageWithShield or natural expiry — nothing to revert.
         // GrantActionPoints: AP was consumed during the turn; not taken back on expiry by design.
+        // DrainActionPoints: AP was drained for the turn; not restored on expiry by design.
         // CleansesStatuses: one-shot effect; nothing to revert.
+
+        case EStatusPassiveEffect::IncreaseStat:
+        {
+            UUnitStatsComponent* Stats = Target->GetUnitStats();
+            if (!Stats) { break; }
+
+            int32* BonusPtr = GetAttributeRef(Stats->TemporaryAttributeBonuses, Instance.Definition->StatModifierTarget);
+            if (!BonusPtr) { break; }
+
+            *BonusPtr -= Instance.CachedStatDelta;
+
+            // Propagate the changed attribute to all derived combat stats.
+            Stats->RecalculateBattleStats(*State);
+
+            UE_LOG(LogTemp, Log,
+                TEXT("[StatusEffectManager] IncreaseStat removed from %s — %s -%d (bonus now %d)"),
+                *GetNameSafe(Target),
+                *UEnum::GetValueAsString(Instance.Definition->StatModifierTarget),
+                Instance.CachedStatDelta, *BonusPtr);
+            break;
+        }
+
+        case EStatusPassiveEffect::DecreaseStat:
+        {
+            UUnitStatsComponent* Stats = Target->GetUnitStats();
+            if (!Stats) { break; }
+
+            int32* BonusPtr = GetAttributeRef(Stats->TemporaryAttributeBonuses, Instance.Definition->StatModifierTarget);
+            if (!BonusPtr) { break; }
+
+            *BonusPtr += Instance.CachedStatDelta;
+
+            Stats->RecalculateBattleStats(*State);
+
+            UE_LOG(LogTemp, Log,
+                TEXT("[StatusEffectManager] DecreaseStat removed from %s — %s +%d (bonus now %d)"),
+                *GetNameSafe(Target),
+                *UEnum::GetValueAsString(Instance.Definition->StatModifierTarget),
+                Instance.CachedStatDelta, *BonusPtr);
+            break;
+        }
+
         default:
             break;
     }
@@ -726,7 +879,7 @@ void UStatusEffectManager::ApplyCleanse(ACharacterBase* Target, FActiveStatusEff
 {
     if (!Instance.IsValid()) { return; }
 
-    UE_LOG(LogNevergone, Log,
+    UE_LOG(LogTemp, Log,
         TEXT("[StatusEffectManager] Cure on %s — cleansing %d tag(s)"),
         *GetNameSafe(Target), Instance.Definition->TagsToCleanse.Num());
 

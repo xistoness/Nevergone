@@ -110,7 +110,7 @@ int32 UBattleGameplayAbility::GetActionPointsCost() const
 {
     if (!AbilityDefinition)
     {
-        UE_LOG(LogNevergone, Warning, TEXT("[BattleGameplayAbility] GetActionPointsCost: AbilityDefinition null on %s"), *GetName());
+        UE_LOG(LogTemp, Warning, TEXT("[BattleGameplayAbility] GetActionPointsCost: AbilityDefinition null on %s"), *GetName());
         return 1;
     }
     return AbilityDefinition->ActionPointsCost;
@@ -120,7 +120,7 @@ int32 UBattleGameplayAbility::GetMaxRange() const
 {
     if (!AbilityDefinition)
     {
-        UE_LOG(LogNevergone, Warning, TEXT("[BattleGameplayAbility] GetMaxRange: AbilityDefinition null on %s"), *GetName());
+        UE_LOG(LogTemp, Warning, TEXT("[BattleGameplayAbility] GetMaxRange: AbilityDefinition null on %s"), *GetName());
         return 1;
     }
     return AbilityDefinition->MaxRange;
@@ -147,7 +147,7 @@ float UBattleGameplayAbility::ResolveAttackDamage(
 
     if (!FCombatFormulas::RollHit(HitChance))
     {
-        UE_LOG(LogNevergone, Log, TEXT("[BattleGameplayAbility] %s: attack missed"), *GetName());
+        UE_LOG(LogTemp, Log, TEXT("[BattleGameplayAbility] %s: attack missed"), *GetName());
         return 0.f;
     }
 
@@ -160,7 +160,7 @@ float UBattleGameplayAbility::ResolveAttackDamage(
     if (FCombatFormulas::RollCrit(SourceState))
     {
         Damage = FCombatFormulas::ApplyCritMultiplier(Damage);
-        UE_LOG(LogNevergone, Log, TEXT("[BattleGameplayAbility] %s: CRITICAL HIT — damage %.1f"), *GetName(), Damage);
+        UE_LOG(LogTemp, Log, TEXT("[BattleGameplayAbility] %s: CRITICAL HIT — damage %.1f"), *GetName(), Damage);
     }
 
     return Damage;
@@ -195,7 +195,7 @@ void UBattleGameplayAbility::ApplyOnHitStatusEffects(
 
     if (!StatusManager)
     {
-        UE_LOG(LogNevergone, Warning,
+        UE_LOG(LogTemp, Warning,
             TEXT("[BattleGameplayAbility] ApplyOnHitStatusEffects: StatusEffectManager not found on %s — skipped"),
             *GetNameSafe(SourceCharacter));
         return;
@@ -234,7 +234,7 @@ void UBattleGameplayAbility::ApplySelfStatusEffects(ACharacterBase* SourceCharac
 
     if (!StatusManager)
     {
-        UE_LOG(LogNevergone, Warning,
+        UE_LOG(LogTemp, Warning,
             TEXT("[BattleGameplayAbility] ApplySelfStatusEffects: StatusEffectManager not found on %s — skipped"),
             *GetNameSafe(SourceCharacter));
         return;
@@ -298,7 +298,7 @@ bool UBattleGameplayAbility::HasSufficientAP(const FActionContext& Context) cons
  
     if (!bSufficient)
     {
-        UE_LOG(LogNevergone, Log,
+        UE_LOG(LogTemp, Log,
             TEXT("[BattleGameplayAbility] HasSufficientAP: %s has %d AP, needs %d -- blocked"),
             *GetNameSafe(Source), UnitState->CurrentActionPoints, Cost);
     }
@@ -319,7 +319,7 @@ void UBattleGameplayAbility::TryStartCooldown(ACharacterBase* SourceCharacter)
 
     if (!SourceCharacter)
     {
-        UE_LOG(LogNevergone, Warning,
+        UE_LOG(LogTemp, Warning,
             TEXT("[BattleGameplayAbility] TryStartCooldown: SourceCharacter is null on %s — skipping"),
             *GetName());
         return;
@@ -330,7 +330,7 @@ void UBattleGameplayAbility::TryStartCooldown(ACharacterBase* SourceCharacter)
 
     if (!TurnManager)
     {
-        UE_LOG(LogNevergone, Warning,
+        UE_LOG(LogTemp, Warning,
             TEXT("[BattleGameplayAbility] TryStartCooldown: TurnManager not available for %s — skipping"),
             *GetNameSafe(SourceCharacter));
         return;
@@ -339,7 +339,7 @@ void UBattleGameplayAbility::TryStartCooldown(ACharacterBase* SourceCharacter)
     UAbilitySystemComponent* ASC = SourceCharacter->GetAbilitySystemComponent();
     if (!ASC)
     {
-        UE_LOG(LogNevergone, Warning,
+        UE_LOG(LogTemp, Warning,
             TEXT("[BattleGameplayAbility] TryStartCooldown: ASC not found on %s — skipping"),
             *GetNameSafe(SourceCharacter));
         return;
@@ -360,7 +360,7 @@ void UBattleGameplayAbility::TryStartCooldown(ACharacterBase* SourceCharacter)
         this, &UBattleGameplayAbility::OnTurnStateChanged
     );
 
-    UE_LOG(LogNevergone, Log,
+    UE_LOG(LogTemp, Log,
         TEXT("[BattleGameplayAbility] %s cooldown started for %s — %d turns remaining"),
         *GetName(), *GetNameSafe(SourceCharacter), AbilityDefinition->CooldownTurns);
 }
@@ -409,7 +409,7 @@ void UBattleGameplayAbility::ClearCooldown()
 
     if (CooldownOwner)
     {
-        UE_LOG(LogNevergone, Log,
+        UE_LOG(LogTemp, Log,
             TEXT("[BattleGameplayAbility] %s cooldown expired for %s -- ability available again"),
             *GetName(), *GetNameSafe(CooldownOwner));
     }
@@ -438,7 +438,7 @@ void UBattleGameplayAbility::PlayCastSFX(ACharacterBase* SourceCharacter) const
  
     Audio->PlaySFXAtLocation(AbilityDefinition->CastSound, SourceCharacter->GetActorLocation());
  
-    UE_LOG(LogNevergone, Verbose,
+    UE_LOG(LogTemp, Verbose,
         TEXT("[%s] Cast SFX played at source '%s'"),
         *GetName(), *GetNameSafe(SourceCharacter));
 }
@@ -472,7 +472,7 @@ void UBattleGameplayAbility::PlayImpactSFX(ACharacterBase* TargetCharacter) cons
     {
         Audio->PlaySFXAtLocation(Sound, TargetCharacter->GetActorLocation());
  
-        UE_LOG(LogNevergone, Verbose,
+        UE_LOG(LogTemp, Verbose,
             TEXT("[%s] Impact SFX played at target '%s'"),
             *GetName(), *GetNameSafe(TargetCharacter));
     }

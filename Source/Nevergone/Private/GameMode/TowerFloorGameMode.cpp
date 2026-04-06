@@ -5,9 +5,11 @@
 
 #include "Audio/AudioSubsystem.h"
 #include "Characters/CharacterBase.h"
+#include "Characters/PlayerControllers/BattlePlayerController.h"
 #include "Characters/PlayerControllers/BattlePreparationController.h"
 #include "Characters/PlayerControllers/BattleResultsController.h"
 #include "GameInstance/GameContextManager.h"
+#include "GameMode/CombatManager.h"
 
 #include "Kismet/GameplayStatics.h"
 #include "Party/PartyManagerSubsystem.h"
@@ -191,7 +193,38 @@ void ATowerFloorGameMode::HandleGameContextChanged(EGameContextState NewState)
 		{
 			Audio->PlayMusic(BattleMusic, EMusicState::Battle);
 		}
-		SwitchPlayerController(BattleControllerClass);
+		
+		{
+			APlayerController* NewPC = SpawnAndSwapPlayerController(BattleControllerClass);
+
+			// If this is a mid-combat restore, the CombatManager already exists —
+			// call EnterBattleMode on the freshly spawned BattlePlayerController
+			// so it spawns and possesses BattleCameraPawn correctly.
+			// In a normal battle flow, EnterBattleMode is called by StartCombat
+			// before the controller swap — here we need it after.
+			if (NewPC)
+			{
+				if (ABattlePlayerController* BattlePC = Cast<ABattlePlayerController>(NewPC))
+				{
+					if (GI)
+					{
+						if (UGameContextManager* CtxMgr = GI->GetSubsystem<UGameContextManager>())
+						{
+							if (UCombatManager* CM = CtxMgr->GetActiveCombatManager())
+							{
+								// Only call if BattleCameraPawn hasn't been set yet —
+								// avoids double-calling in the normal (non-restore) path
+								// where EnterBattleMode was already called by StartCombat.
+								if (!BattlePC->HasBattleCamera())
+								{
+									BattlePC->EnterBattleMode(CM);
+								}
+							}
+						}
+					}
+				}
+			}
+		}
 		break;
 	
 	case EGameContextState::BattleResults:
@@ -324,59 +357,4 @@ void ATowerFloorGameMode::SwitchToBattleController()
 	{
 		NewPC->Possess(ExistingPawn);
 	}
-}
-
-void ATowerFloorGameMode::SwitchPlayerController(
-	TSubclassOf<APlayerController> NewControllerClass)
-{
-	if (!NewControllerClass)
-	{
-		return;
-	}
-
-	if (!ActivePlayerController)
-	{
-		ActivePlayerController = UGameplayStatics::GetPlayerController(this, 0);
-	}
-
-	if (!ActivePlayerController || ActivePlayerController->IsA(NewControllerClass))
-	{
-		return;
-	}
-
-	APlayerController* OldPC = ActivePlayerController;
-	APawn* Pawn = OldPC->GetPawn();
-
-	if (Pawn)
-	{
-		UE_LOG(LogTemp, Warning,
-			TEXT("[TowerFloorGameMode]: Unpossessing pawn before controller swap: %s"),
-			*GetNameSafe(Pawn));
-
-		OldPC->UnPossess();
-	}
-
-	APlayerController* NewPC = GetWorld()->SpawnActor<APlayerController>(NewControllerClass);
-	if (!NewPC)
-	{
-		return;
-	}
-
-	SwapPlayerControllers(OldPC, NewPC);
-
-	if (Pawn && IsValid(Pawn))
-	{
-		UE_LOG(LogTemp, Warning,
-			TEXT("[TowerFloorGameMode]: Repossessing pawn after controller swap: %s"),
-			*GetNameSafe(Pawn));
-
-		NewPC->Possess(Pawn);
-	}
-	else
-	{
-		UE_LOG(LogTemp, Error,
-			TEXT("[TowerFloorGameMode]: Pawn became invalid during controller swap."));
-	}
-
-	ActivePlayerController = NewPC;
 }
