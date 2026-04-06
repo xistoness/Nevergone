@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "GameplayTagContainer.h"
+#include "Types/StatusEffectTypes.h"
 #include "StatusEffectDefinition.generated.h"
 
 // ---------------------------------------------------------------------------
@@ -98,6 +99,9 @@ enum class EStatusPassiveEffect : uint8
     // Increases MovementRange by a percentage.
     // Formula: bonus = Floor(CurrentMovementRange * PassiveEffectTargetMultiplier)
     IncreaseMovementRangePercent,
+    
+    // Blocks movement but allows other actions.
+    Root,
 
     // Grants a damage-absorbing shield.
     // Formula: ShieldHP = PassiveEffectFlatAmount + Floor(CasterStat * PassiveEffectCasterMultiplier)
@@ -113,6 +117,27 @@ enum class EStatusPassiveEffect : uint8
 
     // Unit acts for the opposing team for the duration (e.g. Charm).
     SwitchTeam,
+
+    // Drains all remaining AP from the unit immediately on application.
+    // Formula: CurrentActionPoints = 0
+    // Not reverted on expiry — AP consumed this way is gone for the turn.
+    // Use as a SelfStatusEffect on abilities that should exhaust the unit regardless
+    // of how many AP it had (e.g. SkipTurn, heavy commitment moves).
+    DrainActionPoints,
+
+    // Temporarily increases a target combat stat by a flat or percentage amount.
+    // Which stat is controlled by StatModifierTarget.
+    // Formula (flat):    delta = PassiveEffectFlatAmount
+    // Formula (percent): delta = Floor(CurrentStatValue * PassiveEffectTargetMultiplier)
+    // The applied delta is stored in FActiveStatusEffect::CachedStatDelta for exact revert.
+    IncreaseStat,
+
+    // Temporarily decreases a target combat stat by a flat or percentage amount.
+    // Which stat is controlled by StatModifierTarget.
+    // Formula (flat):    delta = PassiveEffectFlatAmount
+    // Formula (percent): delta = Floor(CurrentStatValue * PassiveEffectTargetMultiplier)
+    // Stat is clamped to 0 on application. The applied delta is stored for exact revert.
+    DecreaseStat,
 };
 
 // ---------------------------------------------------------------------------
@@ -230,4 +255,22 @@ public:
     // After cleansing, this instance expires immediately regardless of DurationTurns.
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Passive")
     TArray<FGameplayTag> TagsToCleanse;
+
+    // -----------------------------------------------------------------------
+    // Stat modifier configuration (IncreaseStat / DecreaseStat only)
+    // -----------------------------------------------------------------------
+
+    // Which FUnitAttributes field this modifier targets.
+    // Modifying an attribute causes StatusEffectManager to adjust
+    // TemporaryAttributeBonuses on UnitStatsComponent and call
+    // RecalculateBattleStats() — so all derived stats update automatically.
+    // Only read when PassiveEffect is IncreaseStat or DecreaseStat.
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Passive|StatModifier")
+    EAttributeTarget StatModifierTarget = EAttributeTarget::Strength;
+
+    // If true, the delta is a percentage of the current effective attribute value
+    // (uses PassiveEffectTargetMultiplier). If false, uses PassiveEffectFlatAmount.
+    // Only read when PassiveEffect is IncreaseStat or DecreaseStat.
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Passive|StatModifier")
+    bool bUsePercentForStatModifier = false;
 };

@@ -32,6 +32,10 @@ ABattleCameraPawn::ABattleCameraPawn()
 void ABattleCameraPawn::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// Seed TargetYaw from the actor's spawn rotation so the first interp
+	// frame doesn't snap from 0 to the intended starting angle.
+	TargetYaw = GetActorRotation().Yaw;
 }
 
 void ABattleCameraPawn::Tick(float DeltaTime)
@@ -66,7 +70,8 @@ void ABattleCameraPawn::Tick(float DeltaTime)
 
 	MovementInput = FVector2D::ZeroVector;
 	ZoomInput = 0.f;
-	RotationInput = 0.f;
+	// Note: TargetYaw is NOT reset here — it is a persistent snap target,
+	// not a per-frame accumulator. It only changes when Input_CameraRotate fires.
 }
 
 void ABattleCameraPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -115,6 +120,7 @@ void ABattleCameraPawn::UpdateActorLock(float DeltaTime)
 void ABattleCameraPawn::ResetView()
 {
 	SpringArm->TargetArmLength = (MinZoom + MaxZoom) * 0.5f;
+	TargetYaw = 0.f;
 	SetActorRotation(FRotator::ZeroRotator);
 }
 
@@ -170,10 +176,18 @@ void ABattleCameraPawn::Input_CameraZoom(float Value)
 
 void ABattleCameraPawn::Input_CameraRotate(float Value)
 {
-	if (bAllowRotation)
+	if (!bAllowRotation)
 	{
-		RotationInput = Value;
+		return;
 	}
+
+	// Each press adds one snap step to the target yaw.
+	// Value is expected to be +1 (clockwise) or -1 (counter-clockwise).
+	// Tick will interpolate the actual yaw toward this target.
+	TargetYaw += FMath::Sign(Value) * RotationSnapDegrees;
+
+	// Cancel any one-shot focus — the player is taking manual control.
+	bIsFocusing = false;
 }
 
 /* ----- Internal ----- */
@@ -198,9 +212,8 @@ void ABattleCameraPawn::ApplyMovement(float DeltaTime)
 	{
 		return;
 	}
-	
-	if (!MovementInput.IsNearlyZero() || 
-	!FMath::IsNearlyZero(RotationInput))
+
+	if (!MovementInput.IsNearlyZero())
 	{
 		bIsFocusing = false;
 	}
@@ -231,10 +244,15 @@ void ABattleCameraPawn::ApplyMovement(float DeltaTime)
 		);
 	}
 
-	if (!FMath::IsNearlyZero(RotationInput))
-	{
-		AddActorWorldRotation(
-			FRotator(0.f, RotationInput * RotationSpeed * DeltaTime, 0.f)
-		);
-	}
+	// Smoothly interpolate current yaw toward TargetYaw.
+	// RInterpTo handles the shortest-path wrap automatically.
+	const FRotator CurrentRotation = GetActorRotation();
+	const FRotator TargetRotation(CurrentRotation.Pitch, TargetYaw, CurrentRotation.Roll);
+	const FRotator SmoothedRotation = FMath::RInterpTo(
+		CurrentRotation,
+		TargetRotation,
+		DeltaTime,
+		RotationInterpSpeed
+	);
+	SetActorRotation(SmoothedRotation);
 }

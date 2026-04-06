@@ -72,7 +72,7 @@ void UBattleModeComponent::EnterMode()
     Super::EnterMode();
     SetComponentTickEnabled(true);
 
-    UE_LOG(LogNevergone, Log, TEXT("[BattleModeComponent] Entering battle mode for %s"),
+    UE_LOG(LogTemp, Log, TEXT("[BattleModeComponent] Entering battle mode for %s"),
         *GetNameSafe(GetOwner()));
 
     ActionResolver = NewObject<UActionResolver>(this);
@@ -116,7 +116,7 @@ void UBattleModeComponent::InitializeAbilitiesFromDefinition()
     const UUnitDefinition* UnitDef = Stats->GetDefinition();
     if (!UnitDef)
     {
-        UE_LOG(LogNevergone, Warning, TEXT("[BattleModeComponent] UnitDefinition is null on %s"),
+        UE_LOG(LogTemp, Warning, TEXT("[BattleModeComponent] UnitDefinition is null on %s"),
             *GetNameSafe(GetOwner()));
         return;
     }
@@ -125,7 +125,7 @@ void UBattleModeComponent::InitializeAbilitiesFromDefinition()
     {
         if (!Entry.Definition || !Entry.Definition->AbilityClass)
         {
-            UE_LOG(LogNevergone, Warning,
+            UE_LOG(LogTemp, Warning,
                 TEXT("[BattleModeComponent] Skipping ability entry with null Definition or AbilityClass on %s"),
                 *GetNameSafe(GetOwner()));
             continue;
@@ -145,7 +145,33 @@ void UBattleModeComponent::InitializeAbilitiesFromDefinition()
         }
     }
 
-    UE_LOG(LogNevergone, Log, TEXT("[BattleModeComponent] Loaded %d battle abilities for %s"),
+    // Append SkipTurn as the last ability for every unit — it is never defined
+    // per-unit in UnitDefinition so designers don't need to add it manually.
+    // Placed last so it always appears at the end of the action hotbar.
+    if (SkipTurnDefinition && SkipTurnDefinition->AbilityClass)
+    {
+        FUnitAbilityEntry SkipTurnEntry;
+        SkipTurnEntry.Definition          = SkipTurnDefinition;
+        SkipTurnEntry.bGrantedAtBattleStart = true;
+        SkipTurnEntry.bIsDefaultAction    = false;
+        SkipTurnEntry.bIsMovementAbility  = false;
+
+        GrantedBattleAbilities.Add(SkipTurnEntry);
+        EnsureAbilityGranted(SkipTurnDefinition->AbilityClass);
+        InjectAbilityDefinition(SkipTurnEntry);
+
+        UE_LOG(LogTemp, Log,
+            TEXT("[BattleModeComponent] SkipTurn appended as last ability for %s"),
+            *GetNameSafe(GetOwner()));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning,
+            TEXT("[BattleModeComponent] SkipTurnDefinition not set — universal SkipTurn ability not granted to %s"),
+            *GetNameSafe(GetOwner()));
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("[BattleModeComponent] Loaded %d battle abilities for %s"),
         GrantedBattleAbilities.Num(), *GetNameSafe(GetOwner()));
 }
 
@@ -163,7 +189,7 @@ void UBattleModeComponent::EnsureAbilityGranted(TSubclassOf<UGameplayAbility> Ab
 
     if (Character->HasAuthority())
     {
-        UE_LOG(LogNevergone, Log, TEXT("[BattleModeComponent] Granting ability %s to %s"),
+        UE_LOG(LogTemp, Log, TEXT("[BattleModeComponent] Granting ability %s to %s"),
             *AbilityClass->GetName(), *GetNameSafe(GetOwner()));
         ASC->GiveAbility(FGameplayAbilitySpec(AbilityClass, 1, INDEX_NONE, this));
     }
@@ -195,7 +221,7 @@ void UBattleModeComponent::InjectAbilityDefinition(const FUnitAbilityEntry& Entr
     FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromClass(Entry.Definition->AbilityClass);
     if (!Spec)
     {
-        UE_LOG(LogNevergone, Warning,
+        UE_LOG(LogTemp, Warning,
             TEXT("[BattleModeComponent] InjectAbilityDefinition: no spec found for %s on %s — was EnsureAbilityGranted called first?"),
             *Entry.Definition->AbilityClass->GetName(), *GetNameSafe(GetOwner()));
         return;
@@ -208,7 +234,7 @@ void UBattleModeComponent::InjectAbilityDefinition(const FUnitAbilityEntry& Entr
         // may not exist yet immediately after GiveAbility. This is expected on first call;
         // the player path will re-inject via SetSelectedAbilityFromEntry before use,
         // and the AI path is guarded by ActionResolver falling back to CDO when null.
-        UE_LOG(LogNevergone, Verbose,
+        UE_LOG(LogTemp, Verbose,
             TEXT("[BattleModeComponent] InjectAbilityDefinition: instance not yet available for %s on %s (will be set on first activation)"),
             *Entry.Definition->AbilityClass->GetName(), *GetNameSafe(GetOwner()));
         return;
@@ -216,7 +242,7 @@ void UBattleModeComponent::InjectAbilityDefinition(const FUnitAbilityEntry& Entr
 
     Instance->AbilityDefinition = Entry.Definition;
 
-    UE_LOG(LogNevergone, Log,
+    UE_LOG(LogTemp, Log,
         TEXT("[BattleModeComponent] Injected AbilityDefinition '%s' into '%s' on %s"),
         *Entry.Definition->DisplayName.ToString(),
         *Entry.Definition->AbilityClass->GetName(),
@@ -227,7 +253,7 @@ void UBattleModeComponent::SetSelectedAbilityFromEntry(const FUnitAbilityEntry& 
 {
     if (!Entry.Definition || !Entry.Definition->AbilityClass)
     {
-        UE_LOG(LogNevergone, Warning, TEXT("[BattleModeComponent] SetSelectedAbilityFromEntry: invalid entry"));
+        UE_LOG(LogTemp, Warning, TEXT("[BattleModeComponent] SetSelectedAbilityFromEntry: invalid entry"));
         return;
     }
 
@@ -253,7 +279,7 @@ void UBattleModeComponent::SetSelectedAbilityFromEntry(const FUnitAbilityEntry& 
         CurrentContext.SelectionPhase = EBattleActionSelectionPhase::None;
     }
 
-    UE_LOG(LogNevergone, Log, TEXT("[BattleModeComponent] Selected ability: %s (%s)"),
+    UE_LOG(LogTemp, Log, TEXT("[BattleModeComponent] Selected ability: %s (%s)"),
         *Entry.Definition->DisplayName.ToString(),
         *Entry.Definition->AbilityClass->GetName());
 
@@ -325,7 +351,7 @@ bool UBattleModeComponent::SelectAbilityByTag(const FGameplayTag& AbilityTag)
         }
     }
 
-    UE_LOG(LogNevergone, Warning, TEXT("[BattleModeComponent] SelectAbilityByTag: no ability found with tag %s"),
+    UE_LOG(LogTemp, Warning, TEXT("[BattleModeComponent] SelectAbilityByTag: no ability found with tag %s"),
         *AbilityTag.ToString());
     return false;
 }
@@ -374,7 +400,7 @@ bool UBattleModeComponent::PreviewCurrentAbilityExecution(FActionResult& Executi
 
     if (!ExecutionResult.bIsValid)
     {
-        UE_LOG(LogNevergone, Log, TEXT("[BattleModeComponent] Execution invalid for %s"),
+        UE_LOG(LogTemp, Log, TEXT("[BattleModeComponent] Execution invalid for %s"),
             *CurrentContext.AbilityClass->GetName());
         return false;
     }
@@ -441,7 +467,7 @@ void UBattleModeComponent::PreviewCurrentAbility(FActionResult& PreviewResult)
         }
     }
  
-    UE_LOG(LogNevergone, Verbose,
+    UE_LOG(LogTemp, Verbose,
         TEXT("[BattleModeComponent] PreviewUpdated — APCost: %d, RemainingAP: %d, Valid: %s"),
         APCost, CurrentAP, PreviewResult.bIsValid ? TEXT("true") : TEXT("false"));
  
@@ -546,7 +572,7 @@ void UBattleModeComponent::Input_Hover(const FVector& WorldLocation)
 
     if (!UnitState)
     {
-        UE_LOG(LogNevergone, Warning,
+        UE_LOG(LogTemp, Warning,
             TEXT("[BattleModeComponent] Input_Hover: BattleUnitState not found for %s"),
             *GetNameSafe(Character));
         return;
@@ -609,7 +635,7 @@ bool UBattleModeComponent::ExecuteActionFromAI(const FActionContext& InContext)
                 {
                     if (!Instance->AbilityDefinition)
                     {
-                        UE_LOG(LogNevergone, Log,
+                        UE_LOG(LogTemp, Log,
                             TEXT("[BattleModeComponent] ExecuteActionFromAI: late-injecting AbilityDefinition '%s' into '%s' on %s"),
                             *InContext.AbilityDefinition->DisplayName.ToString(),
                             *InContext.AbilityClass->GetName(),
@@ -638,7 +664,7 @@ bool UBattleModeComponent::ExecuteCurrentAction(const FActionContext& Context, c
     UMyAbilitySystemComponent* ASC = Character->GetAbilitySystemComponent();
     if (!ASC) { return false; }
 
-    UE_LOG(LogNevergone, Log, TEXT("[BattleModeComponent] Activating ability %s for %s"),
+    UE_LOG(LogTemp, Log, TEXT("[BattleModeComponent] Activating ability %s for %s"),
         *Context.AbilityClass->GetName(), *GetNameSafe(Character));
 
     HandleActionStarted();
@@ -650,7 +676,7 @@ bool UBattleModeComponent::ExecuteCurrentAction(const FActionContext& Context, c
         // Activation failed (e.g. blocked by stun tag).
         // HandleActionStarted already locked input and the hotbar,
         // so we must call HandleActionFinished to restore them or combat freezes.
-        UE_LOG(LogNevergone, Error,
+        UE_LOG(LogTemp, Error,
             TEXT("[BattleModeComponent] Failed to activate %s for %s -- restoring input"),
             *GetNameSafe(Context.AbilityClass), *GetNameSafe(Character));
         HandleActionFinished();
@@ -666,7 +692,7 @@ void UBattleModeComponent::HandleActionStarted()
     bActionInProgress = true;
 
     ACharacterBase* Character = Cast<ACharacterBase>(GetOwner());
-    UE_LOG(LogNevergone, Log, TEXT("[BattleModeComponent] Broadcasting ActionStarted for %s"),
+    UE_LOG(LogTemp, Log, TEXT("[BattleModeComponent] Broadcasting ActionStarted for %s"),
         *GetNameSafe(Character));
     OnActionUseStarted.Broadcast(Character);
 }
@@ -675,7 +701,7 @@ void UBattleModeComponent::HandleActionFinished()
 {
     if (!bActionInProgress)
     {
-        UE_LOG(LogNevergone, Warning, TEXT("[BattleModeComponent] Ignoring duplicate ActionFinished."));
+        UE_LOG(LogTemp, Warning, TEXT("[BattleModeComponent] Ignoring duplicate ActionFinished."));
         return;
     }
 
@@ -683,7 +709,7 @@ void UBattleModeComponent::HandleActionFinished()
     ClearLockedTarget();
 
     ACharacterBase* Character = Cast<ACharacterBase>(GetOwner());
-    UE_LOG(LogNevergone, Log, TEXT("[BattleModeComponent] Broadcasting ActionFinished for %s"),
+    UE_LOG(LogTemp, Log, TEXT("[BattleModeComponent] Broadcasting ActionFinished for %s"),
         *GetNameSafe(Character));
     OnActionUseFinished.Broadcast(Character);
 
@@ -743,7 +769,7 @@ void UBattleModeComponent::StartDefinitionCooldown(const UAbilityDefinition* Def
 {
     if (!Def || Turns <= 0) { return; }
     DefinitionCooldowns.Add(Def, Turns);
-    UE_LOG(LogNevergone, Log,
+    UE_LOG(LogTemp, Log,
         TEXT("[BattleModeComponent] Cooldown started: '%s' = %d turns on %s"),
         *Def->DisplayName.ToString(), Turns, *GetNameSafe(GetOwner()));
 }
@@ -757,7 +783,7 @@ void UBattleModeComponent::TickDefinitionCooldowns()
     for (auto& Pair : DefinitionCooldowns)
     {
         Pair.Value--;
-        UE_LOG(LogNevergone, Log,
+        UE_LOG(LogTemp, Log,
             TEXT("[BattleModeComponent] Cooldown tick: '%s' = %d turns remaining on %s"),
             *GetNameSafe(Pair.Key), Pair.Value, *GetNameSafe(GetOwner()));
 
@@ -770,8 +796,55 @@ void UBattleModeComponent::TickDefinitionCooldowns()
     for (const auto& Def : Expired)
     {
         DefinitionCooldowns.Remove(Def);
-        UE_LOG(LogNevergone, Log,
+        UE_LOG(LogTemp, Log,
             TEXT("[BattleModeComponent] Cooldown expired: '%s' on %s"),
             *GetNameSafe(Def), *GetNameSafe(GetOwner()));
+    }
+}
+
+TArray<FSavedCooldown> UBattleModeComponent::CollectCooldownSaveData() const
+{
+    TArray<FSavedCooldown> Result;
+    Result.Reserve(DefinitionCooldowns.Num());
+
+    for (const auto& Pair : DefinitionCooldowns)
+    {
+        if (!Pair.Key || Pair.Value <= 0) { continue; }
+
+        FSavedCooldown Entry;
+        Entry.DefinitionPath  = FSoftObjectPath(Pair.Key->GetPathName());
+        Entry.TurnsRemaining  = Pair.Value;
+        Result.Add(MoveTemp(Entry));
+    }
+
+    UE_LOG(LogTemp, Log,
+        TEXT("[BattleModeComponent] CollectCooldownSaveData: %d cooldown(s) collected for %s"),
+        Result.Num(), *GetNameSafe(GetOwner()));
+
+    return Result;
+}
+
+void UBattleModeComponent::RestoreCooldowns(const TArray<FSavedCooldown>& SavedCooldowns)
+{
+    DefinitionCooldowns.Reset();
+
+    for (const FSavedCooldown& Saved : SavedCooldowns)
+    {
+        if (Saved.TurnsRemaining <= 0) { continue; }
+
+        UAbilityDefinition* Def = Cast<UAbilityDefinition>(Saved.DefinitionPath.TryLoad());
+        if (!Def)
+        {
+            UE_LOG(LogTemp, Warning,
+                TEXT("[BattleModeComponent] RestoreCooldowns: could not load AbilityDefinition at '%s' — skipped"),
+                *Saved.DefinitionPath.ToString());
+            continue;
+        }
+
+        DefinitionCooldowns.Add(Def, Saved.TurnsRemaining);
+
+        UE_LOG(LogTemp, Log,
+            TEXT("[BattleModeComponent] RestoreCooldowns: '%s' restored with %d turns on %s"),
+            *GetNameSafe(Def), Saved.TurnsRemaining, *GetNameSafe(GetOwner()));
     }
 }

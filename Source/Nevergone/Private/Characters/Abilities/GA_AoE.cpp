@@ -46,13 +46,13 @@ bool UGA_AoE::BuildAoEResult(const FActionContext& Context, FActionResult& OutRe
     ACharacterBase* SourceCharacter = Cast<ACharacterBase>(Context.SourceActor);
     if (!SourceCharacter)
     {
-        UE_LOG(LogNevergone, Warning, TEXT("[GA_AoE] BuildAoEResult: no source character"));
+        UE_LOG(LogTemp, Warning, TEXT("[GA_AoE] BuildAoEResult: no source character"));
         return false;
     }
 
     if (!AbilityDefinition)
     {
-        UE_LOG(LogNevergone, Warning, TEXT("[GA_AoE] BuildAoEResult: AbilityDefinition is null on %s"),
+        UE_LOG(LogTemp, Warning, TEXT("[GA_AoE] BuildAoEResult: AbilityDefinition is null on %s"),
             *GetNameSafe(SourceCharacter));
         return false;
     }
@@ -63,7 +63,7 @@ bool UGA_AoE::BuildAoEResult(const FActionContext& Context, FActionResult& OutRe
 
     if (!RangePolicy.IsValid(Context))
     {
-        UE_LOG(LogNevergone, Log, TEXT("[GA_AoE] BuildAoEResult: target out of range for %s"),
+        UE_LOG(LogTemp, Log, TEXT("[GA_AoE] BuildAoEResult: target out of range for %s"),
             *GetNameSafe(SourceCharacter));
         return false;
     }
@@ -73,7 +73,7 @@ bool UGA_AoE::BuildAoEResult(const FActionContext& Context, FActionResult& OutRe
 
     if (!BattleStateRef)
     {
-        UE_LOG(LogNevergone, Warning, TEXT("[GA_AoE] BuildAoEResult: BattleState not available for %s"),
+        UE_LOG(LogTemp, Warning, TEXT("[GA_AoE] BuildAoEResult: BattleState not available for %s"),
             *GetNameSafe(SourceCharacter));
         return false;
     }
@@ -81,7 +81,7 @@ bool UGA_AoE::BuildAoEResult(const FActionContext& Context, FActionResult& OutRe
     const FBattleUnitState* SourceState = BattleStateRef->FindUnitState(SourceCharacter);
     if (!SourceState)
     {
-        UE_LOG(LogNevergone, Warning, TEXT("[GA_AoE] BuildAoEResult: SourceState not found for %s"),
+        UE_LOG(LogTemp, Warning, TEXT("[GA_AoE] BuildAoEResult: SourceState not found for %s"),
             *GetNameSafe(SourceCharacter));
         return false;
     }
@@ -90,7 +90,7 @@ bool UGA_AoE::BuildAoEResult(const FActionContext& Context, FActionResult& OutRe
     if (!GatherAffectedActors(SourceCharacter, BattleStateRef, Context.HoveredGridCoord, AffectedActors)
         || AffectedActors.IsEmpty())
     {
-        UE_LOG(LogNevergone, Log, TEXT("[GA_AoE] BuildAoEResult: no valid targets in AoE for %s"),
+        UE_LOG(LogTemp, Log, TEXT("[GA_AoE] BuildAoEResult: no valid targets in AoE for %s"),
             *GetNameSafe(SourceCharacter));
         return false;
     }
@@ -252,7 +252,7 @@ void UGA_AoE::ApplyResolvedEffect()
 
     if (!Bus || !BattleStateRef)
     {
-        UE_LOG(LogNevergone, Error,
+        UE_LOG(LogTemp, Error,
             TEXT("[GA_AoE] ApplyResolvedEffect: CombatEventBus or BattleState not found for %s"),
             *GetNameSafe(CachedCharacter));
         return;
@@ -261,7 +261,7 @@ void UGA_AoE::ApplyResolvedEffect()
     const FBattleUnitState* SourceState = BattleStateRef->FindUnitState(CachedCharacter);
     if (!SourceState)
     {
-        UE_LOG(LogNevergone, Error, TEXT("[GA_AoE] ApplyResolvedEffect: source BattleUnitState not found"));
+        UE_LOG(LogTemp, Error, TEXT("[GA_AoE] ApplyResolvedEffect: source BattleUnitState not found"));
         return;
     }
 
@@ -285,7 +285,7 @@ void UGA_AoE::ApplyResolvedEffect()
             const float FinalDamage = ResolveAttackDamage(*SourceState, *TargetState);
 
             Bus->NotifyDamageApplied(CachedCharacter, Target, FinalDamage);
-            UE_LOG(LogNevergone, Log, TEXT("[GA_AoE] Damage %.1f applied to %s"),
+            UE_LOG(LogTemp, Log, TEXT("[GA_AoE] Damage %.1f applied to %s"),
                 FinalDamage, *GetNameSafe(Target));
 
             break;
@@ -295,7 +295,7 @@ void UGA_AoE::ApplyResolvedEffect()
             const float FinalHeal = ResolveHeal(*SourceState);
 
             Bus->NotifyHealApplied(CachedCharacter, Target, FinalHeal);
-            UE_LOG(LogNevergone, Log, TEXT("[GA_AoE] Heal %.1f applied to %s"),
+            UE_LOG(LogTemp, Log, TEXT("[GA_AoE] Heal %.1f applied to %s"),
                 FinalHeal, *GetNameSafe(Target));
             break;
         }

@@ -3,6 +3,7 @@
 
 #include "World/WorldManagerSubsystem.h"
 #include "ActorComponents/SaveableComponent.h"
+#include "GameInstance/GameContextManager.h"
 #include "GameInstance/MyGameInstance.h"
 #include "GameInstance/MySaveGame.h"
 
@@ -24,6 +25,12 @@ void UWorldManagerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 void UWorldManagerSubsystem::HandleSaveLoaded()
 {
+    // During a mid-combat restore, RestoreWorldState was already called by
+    // HandleWorldInitializedActors. Running it again via OnSaveLoaded would
+    // trigger SpawnMissingActors and re-spawn combat units that were just
+    // destroyed/replaced by the restore. Skip it entirely.
+    if (bDidRestoreMidCombat) { return; }
+
 	RestoreWorldState();
 }
 
@@ -81,6 +88,23 @@ void UWorldManagerSubsystem::HandleWorldInitializedActors(const FActorsInitializ
 	// This covers both the initial load and every level transition return.
 	RestoreWorldState();
 
+    // After world actors are restored, give GameContextManager a chance to
+    // detect a mid-combat save and reconstruct the battle session.
+    // Guard with bDidRestoreMidCombat so streaming sublevel loads don't
+    // trigger a second restore on the same world.
+    if (!bDidRestoreMidCombat)
+    {
+        bDidRestoreMidCombat = true;
+
+        if (UGameInstance* GI = LoadedWorld->GetGameInstance())
+        {
+            if (UGameContextManager* ContextMgr = GI->GetSubsystem<UGameContextManager>())
+            {
+                ContextMgr->HandleSaveLoaded();
+            }
+        }
+    }
+
 	GameInstance->OnPostLevelLoad();
 }
 
@@ -99,6 +123,9 @@ void UWorldManagerSubsystem::Deinitialize()
 		GameInstance->OnPartyChanged.RemoveAll(this);
 		GameInstance = nullptr;
 	}
+
+    // Reset so the next world load can trigger a mid-combat restore if needed.
+    bDidRestoreMidCombat = false;
 
 	ClearCachedData();
 

@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "UnitStatsComponent.h"
 #include "ActorComponents/CharacterModeComponent.h"
+#include "GameInstance/MySaveGame.h"
 #include "Interfaces/BattleInputReceiver.h"
 #include "Types/BattleTypes.h"
 #include "Types/CharacterTypes.h"
@@ -105,6 +106,14 @@ public:
     void  StartDefinitionCooldown(const UAbilityDefinition* Def, int32 Turns);
     void  TickDefinitionCooldowns();
 
+    // Serializes the current DefinitionCooldowns map into FSavedCooldown entries.
+    // Called by CombatManager when collecting mid-combat save data.
+    TArray<FSavedCooldown> CollectCooldownSaveData() const;
+
+    // Restores DefinitionCooldowns from saved data.
+    // Called by CombatManager after abilities are granted during a save restore.
+    void RestoreCooldowns(const TArray<FSavedCooldown>& SavedCooldowns);
+
     bool SelectAbilityByIndex(int32 AbilityIndex);
     bool SelectAbilityByTag(const FGameplayTag& AbilityTag);
     bool SelectDefaultAbility();
@@ -130,6 +139,16 @@ public:
      */
     UPROPERTY(BlueprintAssignable)
     FOnPreviewUpdated OnPreviewUpdated;
+
+    // -----------------------------------------------------------------------
+    // Universal abilities
+    // -----------------------------------------------------------------------
+
+    // Ability automatically appended as the last entry for every unit at battle start.
+    // Assign the DA_SkipTurn AbilityDefinition asset here on the Blueprint CDO.
+    // If null, no universal ability is injected (safe fallback for testing).
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Battle|Abilities")
+    TObjectPtr<UAbilityDefinition> SkipTurnDefinition;
 
 protected:
     bool HasLineOfSight() const;

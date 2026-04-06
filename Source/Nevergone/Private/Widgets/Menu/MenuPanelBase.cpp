@@ -2,6 +2,10 @@
 
 #include "Widgets/Menu/MenuPanelBase.h"
 
+#include "Audio/AudioSubsystem.h"
+
+class UAudioSubsystem;
+
 void UMenuPanelBase::ConfirmPanel()
 {
 	OnPanelConfirmed.Broadcast();

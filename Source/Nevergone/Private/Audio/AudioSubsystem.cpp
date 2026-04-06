@@ -215,6 +215,20 @@ void UAudioSubsystem::PlayUISound(USoundBase* Sound)
 	UGameplayStatics::PlaySound2D(World, Sound);
 }
 
+void UAudioSubsystem::PlayUISoundEvent(EUISoundEvent Event)
+{
+	const TObjectPtr<USoundBase>* Found = UISoundMap.Find(Event);
+	if (!Found || !(*Found))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Audio] PlayUISoundEvent: no sound mapped for event %d."), (int32)Event);
+		return;
+	}
+
+	PlayUISound(*Found);
+
+	UE_LOG(LogTemp, Verbose, TEXT("[Audio] UI sound event %d -> '%s'."), (int32)Event, *GetNameSafe(*Found));
+}
+
 // ---------------------------------------------------------------------------
 // Volume control
 // ---------------------------------------------------------------------------

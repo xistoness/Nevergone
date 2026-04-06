@@ -53,7 +53,7 @@ bool UGA_Attack_Ranged_LOS::BuildAttackResult(const FActionContext& Context, FAc
 
     if (!SourceCharacter || !TargetCharacter)
     {
-        UE_LOG(LogNevergone, Log, TEXT("[GA_Attack_Ranged_LOS] BuildAttackResult: no source or target"));
+        UE_LOG(LogTemp, Log, TEXT("[GA_Attack_Ranged_LOS] BuildAttackResult: no source or target"));
         return false;
     }
 
@@ -68,7 +68,7 @@ bool UGA_Attack_Ranged_LOS::BuildAttackResult(const FActionContext& Context, FAc
 
     if (!LivePolicy.IsValid(Context))
     {
-        UE_LOG(LogNevergone, Log, TEXT("[GA_Attack_Ranged_LOS] BuildAttackResult: policy invalid"));
+        UE_LOG(LogTemp, Log, TEXT("[GA_Attack_Ranged_LOS] BuildAttackResult: policy invalid"));
         return false;
     }
 
@@ -168,7 +168,7 @@ void UGA_Attack_Ranged_LOS::ApplyResolvedAttack()
 
 	if (!SourceState || !TargetState)
 	{
-		UE_LOG(LogNevergone, Error, TEXT("[GA_Attack_Ranged_LOS] BattleUnitState not found — damage not applied"));
+		UE_LOG(LogTemp, Error, TEXT("[GA_Attack_Ranged_LOS] BattleUnitState not found — damage not applied"));
 		return;
 	}
 
@@ -180,7 +180,7 @@ void UGA_Attack_Ranged_LOS::ApplyResolvedAttack()
 	UCombatEventBus* Bus = BattleMode ? BattleMode->GetCombatEventBus() : nullptr;
 	if (!Bus)
 	{
-		UE_LOG(LogNevergone, Error, TEXT("[GA_Attack_Ranged_LOS] CombatEventBus not found"));
+		UE_LOG(LogTemp, Error, TEXT("[GA_Attack_Ranged_LOS] CombatEventBus not found"));
 		return;
 	}
 

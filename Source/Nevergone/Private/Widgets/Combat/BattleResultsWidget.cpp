@@ -2,8 +2,11 @@
 
 #include "Widgets/Combat/BattleResultsWidget.h"
 
+#include "Audio/AudioSubsystem.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
+
+class UAudioSubsystem;
 
 void UBattleResultsWidget::NativeConstruct()
 {
@@ -56,6 +59,14 @@ void UBattleResultsWidget::HandleContinueClicked()
 	UE_LOG(LogTemp, Log, TEXT("[BattleResultsWidget] Continue button clicked"));
 
 	OnContinueClicked.Broadcast();
+	
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UAudioSubsystem* Audio = GI->GetSubsystem<UAudioSubsystem>())
+		{
+			Audio->PlayUISoundEvent(EUISoundEvent::ButtonConfirm);
+		}
+	}
 
 	// Remove ourselves — the GameContextManager drives the actual transition
 	RemoveFromParent();

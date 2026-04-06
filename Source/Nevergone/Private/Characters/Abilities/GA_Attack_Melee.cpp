@@ -504,7 +504,7 @@ void UGA_Attack_Melee::ApplyResolvedAttack()
  
 	if (!SourceState || !TargetState)
 	{
-		UE_LOG(LogNevergone, Error,
+		UE_LOG(LogTemp, Error,
 			TEXT("[GA_Attack_Melee] ApplyResolvedAttack: BattleUnitState not found — damage not applied"));
 		return;
 	}
@@ -517,7 +517,7 @@ void UGA_Attack_Melee::ApplyResolvedAttack()
 	UCombatEventBus* Bus = BattleMode ? BattleMode->GetCombatEventBus() : nullptr;
 	if (!Bus)
 	{
-		UE_LOG(LogNevergone, Error, TEXT("[GA_Attack_Melee] CombatEventBus not found"));
+		UE_LOG(LogTemp, Error, TEXT("[GA_Attack_Melee] CombatEventBus not found"));
 		return;
 	}
  

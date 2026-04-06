@@ -46,7 +46,10 @@ void AExplorationPlayerController::OnLook(const FInputActionValue& Value)
 
 void AExplorationPlayerController::HandleInteract()
 {
-	if (IExplorationInputReceiver* Actions = GetPawn()->FindComponentByClass<UExplorationModeComponent>())
+	APawn* MyPawn = GetPawn();
+	if (!MyPawn) { return; }
+
+	if (IExplorationInputReceiver* Actions = MyPawn->FindComponentByClass<UExplorationModeComponent>())
 	{
 		Actions->Input_Interact();
 	}
@@ -54,7 +57,10 @@ void AExplorationPlayerController::HandleInteract()
 
 void AExplorationPlayerController::HandleSave()
 {
-	if (IExplorationInputReceiver* Actions = GetPawn()->FindComponentByClass<UExplorationModeComponent>())
+	APawn* MyPawn = GetPawn();
+	if (!MyPawn) { return; }
+
+	if (IExplorationInputReceiver* Actions = MyPawn->FindComponentByClass<UExplorationModeComponent>())
 	{
 		Actions->Input_Save();
 	}
@@ -62,7 +68,10 @@ void AExplorationPlayerController::HandleSave()
 
 void AExplorationPlayerController::HandleLoad()
 {
-	if (IExplorationInputReceiver* Actions = GetPawn()->FindComponentByClass<UExplorationModeComponent>())
+	APawn* MyPawn = GetPawn();
+	if (!MyPawn) { return; }
+
+	if (IExplorationInputReceiver* Actions = MyPawn->FindComponentByClass<UExplorationModeComponent>())
 	{
 		Actions->Input_Load();
 	}

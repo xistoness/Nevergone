@@ -9,6 +9,7 @@
 #include "UnitStatsComponent.generated.h"
 
 class UUnitDefinition;
+struct FBattleUnitState;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnUnitDeath, ACharacterBase*);
 
@@ -76,6 +77,15 @@ public:
     UPROPERTY(SaveGame)
     FUnitAttributes Attributes;
 
+    // Temporary attribute bonuses from active status effects (IncreaseStat/DecreaseStat).
+    // Persisted so mid-combat saves restore the correct effective values.
+    // Zeroed at the start of each battle via ResetTemporaryBonuses().
+    UPROPERTY(SaveGame)
+    FUnitAttributes TemporaryAttributeBonuses;
+
+    // Resets all temporary bonuses to zero — called at battle start.
+    void ResetTemporaryBonuses();
+
     // ===== Battle Session State =====
     // These are reset/assigned by CombatManager at battle start.
     // They are NOT persisted — BattleUnitState is the authority during combat.
@@ -111,6 +121,11 @@ public:
     int32 GetHitChanceModifier() const;
     int32 GetEvasionModifier() const;
     int32 GetCritChance() const;         // Returns percentage (0-100)
+
+    // Repopulates all derived combat stat fields on OutState from the current
+    // effective attributes (Attributes + TemporaryAttributeBonuses).
+    // Call this at battle start and after any TemporaryAttributeBonuses change.
+    void RecalculateBattleStats(struct FBattleUnitState& OutState) const;
 
     // ===== Setters =====
     void SetAllyTeam(int32 Team);

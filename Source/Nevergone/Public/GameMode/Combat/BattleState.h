@@ -9,6 +9,7 @@
 
 class ACharacterBase;
 class UBattlePreparationContext;
+struct FSavedCombatSession;
 
 UCLASS()
 class NEVERGONE_API UBattleState : public UObject
@@ -18,6 +19,19 @@ class NEVERGONE_API UBattleState : public UObject
 public:
 	/* ----- Lifecycle ----- */
 	void Initialize(UBattlePreparationContext& BattlePrepContext);
+
+    /**
+     * Restores combat state from a mid-combat save.
+     * Units must already be spawned and present in BattlePrepContext.
+     * Populates CurrentHP, CurrentActionPoints, and ActiveStatusEffects
+     * from SavedSession WITHOUT re-applying passive effects — the saved
+     * values already reflect all active passives.
+     */
+    void InitializeFromSave(
+        UBattlePreparationContext&   BattlePrepContext,
+        const FSavedCombatSession&   SavedSession
+    );
+
 	bool CanUnitAct(ACharacterBase* Unit);
 	bool IsUnitExhausted(ACharacterBase* Unit);
 

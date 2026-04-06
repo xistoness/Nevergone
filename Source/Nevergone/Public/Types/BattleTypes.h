@@ -326,4 +326,17 @@ public:
         ExplorationControlRotation = FRotator::ZeroRotator;
         ExplorationArmLength = 400.f;
     }
+    
+    void ResetCombatResults()
+    {
+        bSessionActive   = false;
+        bCombatFinished  = false;
+        WinningTeam      = EBattleUnitTeam::None;
+        SurvivingAllies  = 0;
+        SurvivingEnemies = 0;
+        TotalEnemies     = 0;
+        GeneratedParty.Reset();
+        EncounterSource  = nullptr;
+    }   
+    
 };

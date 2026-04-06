@@ -34,6 +34,20 @@ enum class EMusicState : uint8
 };
 
 // ---------------------------------------------------------------------------
+// UI sound event types — used to look up mapped assets without widgets
+// knowing which USoundBase belongs to each action.
+// ---------------------------------------------------------------------------
+UENUM(BlueprintType)
+enum class EUISoundEvent : uint8
+{
+	ButtonConfirm,     // Generic confirm / select
+	ButtonCancel,    // Back / cancel
+	ButtonHover,     // Cursor moved onto a button
+	TabSwitch,       // Switched between tabs or panels
+	AbilityUseInvalid,   // Player tried to use a locked/cooldown ability
+};
+
+// ---------------------------------------------------------------------------
 
 /**
  * Central audio subsystem for Nevergone.
@@ -126,6 +140,11 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Audio|UI")
 	void PlayUISound(USoundBase* Sound);
+	
+	/** Plays a UI sound by event type, resolved against the UISoundMap. */
+	UFUNCTION(BlueprintCallable, Category = "Audio|UI")
+	void PlayUISoundEvent(EUISoundEvent Event);
+
 
 	// -----------------------------------------------------------------------
 	// Volume control
@@ -156,25 +175,20 @@ public:
 	// Assign once in the GameInstance Blueprint.
 	// -----------------------------------------------------------------------
 
-	/** Fires via EventBus when an ability damage event has no ImpactSound. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Audio|SFX|Defaults")
+	UPROPERTY()
 	TObjectPtr<USoundBase> DefaultHitSFX;
 
-	/** Fires via EventBus when a unit dies and no death SFX is set. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Audio|SFX|Defaults")
+	UPROPERTY()
 	TObjectPtr<USoundBase> DefaultDeathSFX;
 
-	/** Fires via EventBus when a heal is applied and no heal SFX is set. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Audio|SFX|Defaults")
+	UPROPERTY()
 	TObjectPtr<USoundBase> DefaultHealSFX;
 
-	// -----------------------------------------------------------------------
-	// Sound Mix — global, assign once in the GameInstance Blueprint.
-	// -----------------------------------------------------------------------
-
-	/** Active Sound Mix used for per-category volume control. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Audio|Mixing")
+	UPROPERTY()
 	TObjectPtr<USoundMix> MasterSoundMix;
+
+	UPROPERTY()
+	TMap<EUISoundEvent, TObjectPtr<USoundBase>> UISoundMap;
 
 private:
 

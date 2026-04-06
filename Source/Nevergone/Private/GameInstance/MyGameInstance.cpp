@@ -56,6 +56,23 @@ void UMyGameInstance::Init()
 	}
 
 	GameContextManager = NewObject<UGameContextManager>(this);
+
+    // Note: GameContextManager::HandleSaveLoaded is called directly by
+    // WorldManagerSubsystem::HandleWorldInitializedActors after RestoreWorldState(),
+    // NOT via OnSaveLoaded, because the world must be fully ready first.
+	
+	// Pass audio configuration to the AudioSubsystem — it cannot hold
+	// EditDefaultsOnly properties directly since it has no Blueprint asset.
+	if (UAudioSubsystem* Audio = GetSubsystem<UAudioSubsystem>())
+	{
+		Audio->DefaultHitSFX   = DefaultHitSFX;
+		Audio->DefaultDeathSFX = DefaultDeathSFX;
+		Audio->DefaultHealSFX  = DefaultHealSFX;
+		Audio->MasterSoundMix  = MasterSoundMix;
+		Audio->UISoundMap      = UISoundMap;
+
+		UE_LOG(LogTemp, Log, TEXT("[MyGameInstance] Audio configuration passed to AudioSubsystem."));
+	}
 }
 
 void UMyGameInstance::Shutdown()

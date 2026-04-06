@@ -13,6 +13,9 @@ namespace SaveKeys
 	// EncounterVolume
 	static const FName EncounterVolume(TEXT("EncounterVolume"));
 
+	// Mid-combat session state (unit HP/AP/status effects/cooldowns)
+	static const FName CombatSession(TEXT("CombatSession"));
+
 	// Test / debug actors
 	static const FName TestInteract(TEXT("TestInteract"));
 }

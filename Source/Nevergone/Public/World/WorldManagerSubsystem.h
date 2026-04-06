@@ -45,4 +45,8 @@ private:
 	
 	UPROPERTY()
 	UMyGameInstance* GameInstance;
+
+	// Guards against HandleSaveLoaded being called twice when streaming sublevels
+	// trigger a second HandleWorldInitializedActors on the same world load.
+	bool bDidRestoreMidCombat = false;
 };

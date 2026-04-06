@@ -1,63 +1,95 @@
 // Copyright Xyzto Works
 
-
 #include "GameMode/BattlefieldLayoutSubsystem.h"
+
+#include "Actors/BattlefieldSpawnZone.h"
+#include "Characters/CharacterBase.h"
 #include "GameMode/BattlePreparationContext.h"
 #include "GameMode/BattlefieldQuerySubsystem.h"
-#include "Characters/CharacterBase.h"
+#include "Level/GridManager.h"
 
-#include "Algo/RandomShuffle.h"
-
-void UBattlefieldLayoutSubsystem::PlanSpawns(UBattlefieldQuerySubsystem& BattlefieldQuery,
+void UBattlefieldLayoutSubsystem::PlanSpawns(
+	UBattlefieldQuerySubsystem& BattlefieldQuery,
+	UGridManager& Grid,
 	UBattlePreparationContext& BattlePrepContext)
 {
 	BattlePrepContext.EnemyPlannedSpawns.Reset();
 	BattlePrepContext.PlayerPlannedSpawns.Reset();
-	PlanEnemySpawns(BattlefieldQuery, BattlePrepContext);
-	PlanAllySpawns(BattlefieldQuery, BattlePrepContext);
+
+	PlanTeamSpawns(BattlefieldQuery, Grid, BattlePrepContext, ESpawnZoneTeam::Enemy);
+	PlanTeamSpawns(BattlefieldQuery, Grid, BattlePrepContext, ESpawnZoneTeam::Ally);
 }
 
-void UBattlefieldLayoutSubsystem::PlanEnemySpawns(UBattlefieldQuerySubsystem& BattlefieldQuery,
-                                                  UBattlePreparationContext& BattlePrepContext)
+void UBattlefieldLayoutSubsystem::PlanTeamSpawns(
+	UBattlefieldQuerySubsystem& BattlefieldQuery,
+	UGridManager& Grid,
+	UBattlePreparationContext& BattlePrepContext,
+	ESpawnZoneTeam Team)
 {
-	TArray<FTransform> EnemySlots;
-	BattlefieldQuery.GetEnemySpawnSlots(EnemySlots);
+	const bool bIsEnemy = (Team == ESpawnZoneTeam::Enemy);
 
-	// Shuffle for variety
-	Algo::RandomShuffle(EnemySlots);
+	// Select the correct party array based on team.
+	const int32 RequiredCount = bIsEnemy
+		? BattlePrepContext.EnemyParty.Num()
+		: BattlePrepContext.PlayerParty.Num();
 
-	const int32 Count = FMath::Min(
-		EnemySlots.Num(),
-		BattlePrepContext.EnemyParty.Num()
-	);
+	if (RequiredCount == 0) { return; }
 
-	for (int32 i = 0; i < Count; ++i)
+	// 1. Gather spawn zones for this team.
+	TArray<ABattlefieldSpawnZone*> Zones;
+	BattlefieldQuery.GetSpawnZones(Team, Zones);
+
+	if (Zones.Num() == 0)
 	{
-		FPlannedSpawn Spawn;
-		Spawn.ActorClass = BattlePrepContext.EnemyParty[i].EnemyClass;
-		Spawn.PlannedTransform = EnemySlots[i];
-
-		BattlePrepContext.EnemyPlannedSpawns.Add(Spawn);
+		// GameContextManager guards against missing enemy zones before calling
+		// PlanSpawns. This log covers the ally case and acts as a secondary guard.
+		UE_LOG(LogTemp, Error,
+			TEXT("[BattlefieldLayoutSubsystem] PlanTeamSpawns: no spawn zones found for team %s — spawns skipped"),
+			bIsEnemy ? TEXT("Enemy") : TEXT("Ally"));
+		return;
 	}
-}
 
-void UBattlefieldLayoutSubsystem::PlanAllySpawns(UBattlefieldQuerySubsystem& BattlefieldQuery,
-	UBattlePreparationContext& BattlePrepContext)
-{
-	TArray<FTransform> PlayerSlots;
-	BattlefieldQuery.GetPlayerSpawnSlots(PlayerSlots);
-
-	const int32 Count = FMath::Min(
-		PlayerSlots.Num(),
-		BattlePrepContext.PlayerParty.Num()
+	// 2. Collect candidate tiles, expanding radius if the pool is too small.
+	TArray<FIntPoint> CandidateTiles;
+	const bool bEnoughTiles = BattlefieldQuery.CollectValidTilesAroundZones(
+		&Grid,
+		Zones,
+		RequiredCount,
+		MaxSpawnRadiusExpansion,
+		CandidateTiles
 	);
 
-	for (int32 i = 0; i < Count; ++i)
+	if (!bEnoughTiles)
 	{
-		FPlannedSpawn Spawn;
-		Spawn.ActorClass = BattlePrepContext.PlayerParty[i].PlayerClass;
-		Spawn.PlannedTransform = PlayerSlots[i];
+		UE_LOG(LogTemp, Warning,
+			TEXT("[BattlefieldLayoutSubsystem] PlanTeamSpawns (%s): only %d valid tiles for %d units — some units will not spawn"),
+			bIsEnemy ? TEXT("Enemy") : TEXT("Ally"), CandidateTiles.Num(), RequiredCount);
+	}
 
-		BattlePrepContext.PlayerPlannedSpawns.Add(Spawn);
-	}	
+	// 3. Assign one tile per unit. CandidateTiles is already shuffled.
+	const int32 SpawnCount = FMath::Min(CandidateTiles.Num(), RequiredCount);
+
+	for (int32 i = 0; i < SpawnCount; ++i)
+	{
+		const FVector TileWorld = Grid.GetTileCenterWorld(CandidateTiles[i]);
+		const FTransform SpawnTransform(FRotator::ZeroRotator, TileWorld);
+
+		FPlannedSpawn Spawn;
+		Spawn.PlannedTransform = SpawnTransform;
+
+		if (bIsEnemy)
+		{
+			Spawn.ActorClass = BattlePrepContext.EnemyParty[i].EnemyClass;
+			BattlePrepContext.EnemyPlannedSpawns.Add(Spawn);
+		}
+		else
+		{
+			Spawn.ActorClass = BattlePrepContext.PlayerParty[i].PlayerClass;
+			BattlePrepContext.PlayerPlannedSpawns.Add(Spawn);
+		}
+	}
+
+	UE_LOG(LogTemp, Log,
+		TEXT("[BattlefieldLayoutSubsystem] PlanTeamSpawns (%s): planned %d/%d spawns"),
+		bIsEnemy ? TEXT("Enemy") : TEXT("Ally"), SpawnCount, RequiredCount);
 }

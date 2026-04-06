@@ -36,13 +36,13 @@ FActionResult UGA_Move_Simple::BuildMovementPreview(const FActionContext& Contex
     ACharacterBase* Character = Cast<ACharacterBase>(Context.SourceActor);
     if (!Character)
     {
-        UE_LOG(LogNevergone, Warning, TEXT("[GA_Move_Simple] BuildMovementPreview: no source character"));
+        UE_LOG(LogTemp, Warning, TEXT("[GA_Move_Simple] BuildMovementPreview: no source character"));
         return Result;
     }
 
     if (!TargetPolicy.IsValid(Context))
     {
-        UE_LOG(LogNevergone, Log, TEXT("[GA_Move_Simple] BuildMovementPreview: target policy invalid for %s"),
+        UE_LOG(LogTemp, Log, TEXT("[GA_Move_Simple] BuildMovementPreview: target policy invalid for %s"),
             *GetNameSafe(Character));
         return Result;
     }
@@ -53,7 +53,7 @@ FActionResult UGA_Move_Simple::BuildMovementPreview(const FActionContext& Contex
 
     if (!Grid)
     {
-        UE_LOG(LogNevergone, Warning, TEXT("[GA_Move_Simple] BuildMovementPreview: GridManager not found"));
+        UE_LOG(LogTemp, Warning, TEXT("[GA_Move_Simple] BuildMovementPreview: GridManager not found"));
         return Result;
     }
 
@@ -61,14 +61,14 @@ FActionResult UGA_Move_Simple::BuildMovementPreview(const FActionContext& Contex
     const FGridTile* Tile = Grid->GetTile(TargetCoord);
     if (!Tile)
     {
-        UE_LOG(LogNevergone, Log, TEXT("[GA_Move_Simple] BuildMovementPreview: target tile invalid"));
+        UE_LOG(LogTemp, Log, TEXT("[GA_Move_Simple] BuildMovementPreview: target tile invalid"));
         return Result;
     }
 
     const int32 Distance = Context.CachedPathCost;
     if (Distance == INDEX_NONE || Distance < 0)
     {
-        UE_LOG(LogNevergone, Log, TEXT("[GA_Move_Simple] BuildMovementPreview: CachedPathCost invalid"));
+        UE_LOG(LogTemp, Log, TEXT("[GA_Move_Simple] BuildMovementPreview: CachedPathCost invalid"));
         return Result;
     }
 
@@ -80,7 +80,7 @@ FActionResult UGA_Move_Simple::BuildMovementPreview(const FActionContext& Contex
 
     if (!UnitState)
     {
-        UE_LOG(LogNevergone, Warning, TEXT("[GA_Move_Simple] BuildMovementPreview: BattleUnitState not found for %s"),
+        UE_LOG(LogTemp, Warning, TEXT("[GA_Move_Simple] BuildMovementPreview: BattleUnitState not found for %s"),
             *GetNameSafe(Character));
         return Result;
     }
@@ -90,7 +90,7 @@ FActionResult UGA_Move_Simple::BuildMovementPreview(const FActionContext& Contex
     TArray<FIntPoint> PathCoords;
     if (!Grid->FindPath(Context.SourceGridCoord, TargetCoord, UnitState->TraversalParams, PathCoords))
     {
-        UE_LOG(LogNevergone, Log, TEXT("[GA_Move_Simple] BuildMovementPreview: pathfinding failed for %s"),
+        UE_LOG(LogTemp, Log, TEXT("[GA_Move_Simple] BuildMovementPreview: pathfinding failed for %s"),
             *GetNameSafe(Character));
         return Result;
     }
@@ -155,7 +155,7 @@ void UGA_Move_Simple::ActivateAbility(
     const FGameplayEventData* TriggerEventData
 )
 {
-    UE_LOG(LogNevergone, Log, TEXT("[GA_Move_Simple] ActivateAbility called"));
+    UE_LOG(LogTemp, Log, TEXT("[GA_Move_Simple] ActivateAbility called"));
 
     if (!ActorInfo || !ActorInfo->AvatarActor.IsValid())
     {
@@ -203,7 +203,7 @@ void UGA_Move_Simple::ApplyAbilityCompletionEffects()
 {
     Super::ApplyAbilityCompletionEffects();
 
-    UE_LOG(LogNevergone, Log, TEXT("[GA_Move_Simple] ApplyAbilityCompletionEffects for %s"),
+    UE_LOG(LogTemp, Log, TEXT("[GA_Move_Simple] ApplyAbilityCompletionEffects for %s"),
         *GetNameSafe(CachedCharacter));
 
     if (!CachedCharacter)

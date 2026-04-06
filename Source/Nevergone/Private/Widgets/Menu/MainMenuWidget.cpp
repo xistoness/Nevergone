@@ -2,11 +2,14 @@
 
 #include "Widgets/Menu/MainMenuWidget.h"
 
+#include "Audio/AudioSubsystem.h"
 #include "Components/WidgetSwitcher.h"
 #include "GameInstance/MyGameInstance.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Widgets/Menu/MenuPanelBase.h"
+
+class UAudioSubsystem;
 
 void UMainMenuWidget::NativeOnInitialized()
 {
@@ -48,6 +51,13 @@ void UMainMenuWidget::NavigateTo(FName PanelId)
 
 	// Notify the new panel
 	(*Found)->OnPanelActivated();
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UAudioSubsystem* Audio = GI->GetSubsystem<UAudioSubsystem>())
+		{
+			Audio->PlayUISoundEvent(EUISoundEvent::TabSwitch);
+		}
+	}
 }
 
 // --- Private helpers ---
@@ -96,6 +106,14 @@ void UMainMenuWidget::HandleNewGameConfirmed()
 		UE_LOG(LogTemp, Warning, TEXT("[MainMenuWidget] HandleNewGameConfirmed: FirstLevelName not set — set it in WBP_MainMenu defaults"));
 		return;
 	}
+	
+	if (GI)
+	{
+		if (UAudioSubsystem* Audio = GI->GetSubsystem<UAudioSubsystem>())
+		{
+			Audio->PlayUISoundEvent(EUISoundEvent::ButtonConfirm);
+		}
+	}
 
 	FLevelTransitionContext Context;
 	Context.FromLevel = NAME_None;
@@ -121,6 +139,14 @@ void UMainMenuWidget::HandleContinueConfirmed()
 			GI->RequestLevelChange(FirstLevelName, Context);
 		}
 		return;
+	}
+	
+	if (GI)
+	{
+		if (UAudioSubsystem* Audio = GI->GetSubsystem<UAudioSubsystem>())
+		{
+			Audio->PlayUISoundEvent(EUISoundEvent::ButtonConfirm);
+		}
 	}
 
 	FLevelTransitionContext Context;
@@ -155,6 +181,14 @@ void UMainMenuWidget::HandleQuitConfirmed()
 	if (!PC)
 	{
 		return;
+	}
+	
+	if (GI)
+	{
+		if (UAudioSubsystem* Audio = GI->GetSubsystem<UAudioSubsystem>())
+		{
+			Audio->PlayUISoundEvent(EUISoundEvent::ButtonConfirm);
+		}
 	}
 
 	UKismetSystemLibrary::QuitGame(GetWorld(), PC, EQuitPreference::Quit, false);
