@@ -1,11 +1,12 @@
+[README.md](https://github.com/user-attachments/files/26572950/README.md)
 # Nevergone
 
 A turn-based tactical RPG built from scratch in **Unreal Engine 5 (C++)** — solo project by [Cristopher / Xyzto Works](https://github.com/xistoness).
 
 Grid-based combat, exploration, and tower-floor progression. Every system described here was designed, architected, and implemented entirely in C++, with no third-party gameplay plugins beyond Unreal's own GAS.
 
-> **Status:** Early vertical slice (Pass 1) — core combat loop functional, animations and audio pass in progress.
-
+> **Status:** Early combat vertical slice (Pass 1) complete — core combat loop functional, animations and audio pass in progress.
+> Starting exploration vertical slice (Pass 2) — level transition functional, interaction, dialogue and inventory systems in progress.
 ---
 
 ## Table of contents
