@@ -71,7 +71,7 @@ public:
 	bool IsTeamDefeated(EBattleUnitTeam Team) const;
 	void UpdateInputContext();
 
-	void CancelPreparation();
+	void CancelPreparation(TWeakObjectPtr<class AFloorEncounterVolume> EncounterSource);
 	void ClearCurrentSelectedUnit();
 	void EndCombatWithWinner(EBattleUnitTeam WinningTeam);
 	
@@ -102,7 +102,7 @@ public:
 	void SelectPreviousControllableUnit();
 	UBattleInputManager* GetBattleInputManager() const { return BattleInputManager; }
 	ABattleCameraPawn* GetBattleCameraPawn() const { return BattleCameraPawn; }
-
+	
 	void Cleanup();
 	void BindToCombatUnitActionEvents(ACharacterBase* Unit);
 	void UnbindFromCombatUnitActionEvents(ACharacterBase* Unit);
@@ -118,6 +118,7 @@ public:
      * Called by EndEnemyTurn before triggering RequestSaveGame.
      */
     void CollectCombatSaveData(FSavedCombatSession& OutSession) const;
+	int32 FindStableSourceIndexForUnit(ACharacterBase* Unit, EBattleUnitTeam Team) const;
 
     /**
      * Restores volatile combat state (CurrentHP, CurrentAP, status effects,
@@ -181,6 +182,12 @@ private:
 	UFUNCTION()
 	void HandleUnitActionFinished(ACharacterBase* ActingUnit);
 	void RestoreInputAfterAction(ACharacterBase* ActingUnit);
+	
+	void HandleAIActionFinished();
+	void PollCameraReachedActor();
+	
+	void RegisterStableSourceIndex(ACharacterBase* Unit, EBattleUnitTeam Team, int32 SourceIndex);
+	void ClearStableSourceIndices();
 
 private:	
 	
@@ -226,8 +233,9 @@ private:
 	FTimerHandle AICameraWaitHandle;
 
 	bool bWaitingForPathFinish = false;
-
-	void HandleAIActionFinished();
-	void PollCameraReachedActor();
-
+	
+	UPROPERTY()
+	TMap<TWeakObjectPtr<ACharacterBase>, int32> AllySourceIndices;
+	UPROPERTY()
+	TMap<TWeakObjectPtr<ACharacterBase>, int32> EnemySourceIndices;
 };

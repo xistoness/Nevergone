@@ -344,6 +344,8 @@ void ABattlePlayerController::CreateAndInitializeHotbar()
 				 "assign WBP_ActionHotbar to the CombatManager Blueprint subclass."));
 		return;
 	}
+	
+	if (ActionHotbar) { return;}
  
 	// CreateWidget requires a valid PlayerController as owner so UMG can
 	// attach the widget to the correct local player and manage its lifetime.

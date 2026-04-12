@@ -35,6 +35,7 @@ public:
 	virtual void ReadSaveData_Implementation(const FActorSaveData& InData) override;
 	virtual void OnPostRestore_Implementation() override;
 	
+	void RestoreEncounterVisual();
 	void DeactivateEncounter();
 
 	// --- Grid config accessors (consumed by GridManager) ---
@@ -50,8 +51,11 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Encounter")
 	bool bAutoStartOnEnter = true;
 
-	UPROPERTY()
+	UPROPERTY(SaveGame)
 	bool bEncounterResolved = false;
+	
+	UPROPERTY(SaveGame)
+	bool bIsInBattle = false;
 
 protected:
 

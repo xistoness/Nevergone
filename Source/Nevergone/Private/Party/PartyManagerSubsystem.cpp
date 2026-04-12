@@ -41,16 +41,18 @@ void UPartyManagerSubsystem::BuildBattleParty(
 	}
 }
 
-void UPartyManagerSubsystem::WriteBackBattleResults(const TArray<ACharacterBase*>& SpawnedAllies,
+void UPartyManagerSubsystem::WriteBackBattleResults(
+	const TMap<int32, ACharacterBase*>& AliveActorsBySourceIndex,
 	const TArray<FGeneratedPlayerData>& GeneratedParty)
 {
-	// SpawnedAllies[i] corresponds to GeneratedParty[i] — same spawn order.
-	// Use CharacterID from GeneratedParty to find the matching FPartyMemberData entry.
-	for (int32 i = 0; i < SpawnedAllies.Num() && i < GeneratedParty.Num(); ++i)
+	// Iterate GeneratedParty — the authoritative list of every member that
+	// entered this combat. GeneratedParty[i] was spawned as SourceIndex=i.
+	// Members absent from AliveActorsBySourceIndex died during combat (or
+	// failed to spawn) and must be written back with HP=0.
+	for (int32 i = 0; i < GeneratedParty.Num(); ++i)
 	{
-		ACharacterBase* Ally = SpawnedAllies[i];
-		const FGuid& ID = GeneratedParty[i].CharacterID;
-
+		const FGeneratedPlayerData& Generated = GeneratedParty[i];
+		const FGuid& ID = Generated.CharacterID;
 		if (!ID.IsValid()) { continue; }
 
 		FPartyMemberData* Member = PartyData.Members.FindByPredicate(
@@ -65,7 +67,10 @@ void UPartyManagerSubsystem::WriteBackBattleResults(const TArray<ACharacterBase*
 			continue;
 		}
 
-		if (IsValid(Ally))
+		ACharacterBase* const* AllyPtr = AliveActorsBySourceIndex.Find(i);
+		ACharacterBase* Ally = (AllyPtr && IsValid(*AllyPtr)) ? *AllyPtr : nullptr;
+
+		if (Ally)
 		{
 			if (UUnitStatsComponent* Stats = Ally->GetUnitStats())
 			{
@@ -75,23 +80,24 @@ void UPartyManagerSubsystem::WriteBackBattleResults(const TArray<ACharacterBase*
 				Member->bIsAlive  = Stats->IsAlive();
 
 				UE_LOG(LogTemp, Log,
-					TEXT("[PartyManagerSubsystem] WriteBack: %s | HP=%.0f | Alive=%s"),
-					*GetNameSafe(Ally),
-					Member->CurrentHP,
+					TEXT("[PartyManagerSubsystem] WriteBack: %s (SourceIndex=%d) | HP=%.0f | Alive=%s"),
+					*GetNameSafe(Ally), i, Member->CurrentHP,
 					Member->bIsAlive ? TEXT("YES") : TEXT("NO"));
 			}
 		}
 		else
 		{
-			// Actor was already destroyed — shouldn't happen if called before Cleanup,
-			// but handle gracefully.
-			UE_LOG(LogTemp, Warning,
-				TEXT("[PartyManagerSubsystem] WriteBack: ally actor invalid for ID=%s — marking dead"),
-				*ID.ToString());
+			// Unit absent from SpawnedAllies — died during combat, failed to
+			// spawn, or was absent on a restore path. Mark dead unconditionally.
 			Member->CurrentHP = 0.f;
 			Member->bIsAlive  = false;
+
+			UE_LOG(LogTemp, Log,
+				TEXT("[PartyManagerSubsystem] WriteBack: SourceIndex=%d (ID=%s) not alive — marked dead"),
+				i, *ID.ToString());
 		}
 	}
+
 	// Push the updated data to GameInstance so CommitSave picks it up.
 	FlushToGameInstance();
 }
