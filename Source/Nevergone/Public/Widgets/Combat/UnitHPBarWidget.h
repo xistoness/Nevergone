@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "GameplayTagContainer.h"
+#include "Types/StatusEffectTypes.h"
 #include "Components/HorizontalBox.h"
 #include "UnitHPBarWidget.generated.h"
 
@@ -38,6 +39,14 @@ public:
     UFUNCTION(BlueprintCallable, Category = "HP Bar")
     void InitializeForUnit(ACharacterBase* InUnit, UCombatEventBus* InEventBus,
                             int32 MaxHP, int32 CurrentHP);
+
+    /**
+     * Populates status icons for effects that were already active when this widget
+     * was created (mid-combat load). Must be called after InitializeForUnit.
+     * Iterates the provided list and fires OnStatusIconAdded once per unique tag,
+     * mirroring what would have happened had the events been broadcast in order.
+     */
+    void SyncInitialStatusIcons(const TArray<struct FActiveStatusEffect>& ActiveEffects);
 
     UFUNCTION(BlueprintCallable, Category = "HP Bar")
     void Deinitialize();

@@ -104,6 +104,39 @@ void ACharacterBase::SetMode(UCharacterModeComponent* NewMode)
 	}
 }
 
+
+void ACharacterBase::PlayDeathVisual_Implementation()
+{
+	UE_LOG(LogTemp, Error, TEXT("[PlayDeathVisual] Called for %s | bIsMoving=%s"),
+	*GetNameSafe(this), bIsMovingAlongPath ? TEXT("YES") : TEXT("NO"));
+	
+	// Stop any in-progress grid movement so the corpse does not slide to a waypoint.
+	StopPathMove();
+
+	// Hide the skeletal mesh — the actor stays alive in memory so Cleanup() can
+	// destroy all units in one batch at the end of combat, avoiding mid-battle hitches.
+	if (USkeletalMeshComponent* SkeletalMesh = GetMesh())
+	{
+		SkeletalMesh->SetVisibility(false);
+		SkeletalMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
+	// Disable the capsule so dead units no longer block pathing or spawn placement.
+	if (UCapsuleComponent* Capsule = GetCapsuleComponent())
+	{
+		Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
+	// Hide the selection decal if it is still showing (e.g. unit was selected when it died).
+	if (SelectionIndicator)
+	{
+		SelectionIndicator->SetVisibility(false);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[CharacterBase] PlayDeathVisual: %s hidden and collision disabled"),
+		*GetNameSafe(this));
+}
+
 void ACharacterBase::BeginPlay()
 {
 	Super::BeginPlay();

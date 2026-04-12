@@ -7,6 +7,7 @@
 #include "Components/TextBlock.h"
 #include "Engine/Texture2D.h"
 #include "GameMode/Combat/CombatEventBus.h"
+#include "Data/StatusEffectDefinition.h"
 
 void UUnitHPBarWidget::InitializeForUnit(ACharacterBase* InUnit, UCombatEventBus* InEventBus,
                                           int32 MaxHP, int32 CurrentHP)
@@ -32,6 +33,34 @@ void UUnitHPBarWidget::InitializeForUnit(ACharacterBase* InUnit, UCombatEventBus
 
 	UE_LOG(LogTemp, Log, TEXT("[UnitHPBarWidget] Initialized for %s (HP %d/%d)"),
 		*GetNameSafe(TrackedUnit), CachedCurrentHP, CachedMaxHP);
+}
+
+void UUnitHPBarWidget::SyncInitialStatusIcons(const TArray<FActiveStatusEffect>& ActiveEffects)
+{
+	// Called immediately after InitializeForUnit during a mid-combat restore.
+	// Events for these statuses were broadcast before this widget existed, so we
+	// replay them here. We call OnStatusIconAdded once per unique tag — matching
+	// the behaviour of StatusEffectManager::ApplyStatusEffect which only grants
+	// the ASC tag (and fires the event) on the first instance of each tag.
+	TSet<FGameplayTag> GrantedTags;
+
+	for (const FActiveStatusEffect& Effect : ActiveEffects)
+	{
+		if (!Effect.IsValid()) { continue; }
+
+		const FGameplayTag& Tag = Effect.Definition->StatusTag;
+		if (!Tag.IsValid()) { continue; }
+
+		// Skip duplicates — one icon per unique tag, same as during live combat
+		if (GrantedTags.Contains(Tag)) { continue; }
+		GrantedTags.Add(Tag);
+
+		UE_LOG(LogTemp, Log,
+			TEXT("[UnitHPBarWidget] SyncInitialStatusIcons: restoring icon '%s' for %s"),
+			*Tag.ToString(), *GetNameSafe(TrackedUnit));
+
+		OnStatusIconAdded(Tag, Effect.Definition->Icon);
+	}
 }
 
 void UUnitHPBarWidget::Deinitialize()

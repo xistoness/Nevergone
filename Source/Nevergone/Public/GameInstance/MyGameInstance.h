@@ -46,6 +46,7 @@ public:
 	
 	UFUNCTION(BlueprintCallable)
 	void RequestSaveGame();
+	void CommitSave() const;
 	
 	// Loads the save from disk and applies it to the current world
 	UFUNCTION(BlueprintCallable)
@@ -165,7 +166,6 @@ protected:
 	bool CreateNewSave(const FString& SlotName);
 	void ClearActiveSave();
 	
-	void CommitSave() const;
 	
 	// LEVEL TRANSITION // 
 	// Called right before leaving the current map

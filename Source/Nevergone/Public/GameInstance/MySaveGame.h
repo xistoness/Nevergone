@@ -74,29 +74,53 @@ struct FSavedCooldown
 USTRUCT()
 struct FSavedCombatUnitState
 {
-    GENERATED_BODY()
+	GENERATED_BODY()
 
-    // Links this record to the actor in the world via its SaveableComponent guid.
-    UPROPERTY(SaveGame)
-    FGuid ActorGuid;
+	// Links this record to the actor in the world via its SaveableComponent guid.
+	UPROPERTY(SaveGame)
+	FGuid ActorGuid;
 
-    UPROPERTY(SaveGame)
-    int32 CurrentHP = 0;
+	UPROPERTY(SaveGame)
+	TSoftClassPtr<ACharacterBase> ActorClass;
 
-    UPROPERTY(SaveGame)
-    int32 CurrentActionPoints = 0;
+	UPROPERTY(SaveGame)
+	EBattleUnitTeam Team = EBattleUnitTeam::Ally;
 
-    // Temporary attribute bonuses active at save time.
-    // Already reflected in the stat values above — restored here so
-    // RecalculateBattleStats() produces the same derived stats.
-    UPROPERTY(SaveGame)
-    FUnitAttributes TemporaryAttributeBonuses;
+	// Index inside the team's original spawn order.
+	// This lets restore match saved data back to BattlePrepContext.PlayerPlannedSpawns
+	// / EnemyPlannedSpawns deterministically, even if some units died.
+	UPROPERTY(SaveGame)
+	int32 SourceIndex = INDEX_NONE;
 
-    UPROPERTY(SaveGame)
-    TArray<FSavedActiveStatusEffect> ActiveStatusEffects;
+	UPROPERTY(SaveGame)
+	int32 CurrentHP = 0;
 
-    UPROPERTY(SaveGame)
-    TArray<FSavedCooldown> Cooldowns;
+	UPROPERTY(SaveGame)
+	int32 CurrentActionPoints = 0;
+
+	// Explicit dead flag so restore logic does not have to infer from HP alone.
+	UPROPERTY(SaveGame)
+	bool bWasDead = false;
+
+	// Tactical position at save time.
+	// This is the authoritative combat position and should be preferred over world space.
+	UPROPERTY(SaveGame)
+	bool bHasSavedGridCoord = false;
+
+	UPROPERTY(SaveGame)
+	FIntPoint SavedGridCoord = FIntPoint::ZeroValue;
+
+	// Temporary attribute bonuses active at save time.
+	// Already reflected in the stat values above — restored here so
+	// RecalculateBattleStats() produces the same derived stats.
+	UPROPERTY(SaveGame)
+	FUnitAttributes TemporaryAttributeBonuses;
+
+	UPROPERTY(SaveGame)
+	TArray<FSavedActiveStatusEffect> ActiveStatusEffects;
+
+	UPROPERTY(SaveGame)
+	TArray<FSavedCooldown> Cooldowns;
 };
 
 // Top-level container written to MySaveGame when saving mid-combat.
@@ -113,10 +137,30 @@ struct FSavedCombatSession
     UPROPERTY(SaveGame)
     TArray<FSavedCombatUnitState> UnitStates;
 
+    // Exploration character data needed to respawn the player pawn after
+    // combat ends following a mid-combat restore. In a normal flow this is
+    // held in FBattleSessionData, but that struct is not serialized — so on
+    // a restore path there is no exploration character to reference.
+    UPROPERTY(SaveGame)
+    TSoftClassPtr<class ACharacterBase> ExplorationCharacterClass;
+
+    UPROPERTY(SaveGame)
+    FTransform ExplorationCharacterTransform;
+
+    UPROPERTY(SaveGame)
+    FRotator ExplorationControlRotation;
+
+    UPROPERTY(SaveGame)
+    float ExplorationArmLength = 400.f;
+
     void Reset()
     {
         EncounterVolumeGuid.Invalidate();
         UnitStates.Reset();
+        ExplorationCharacterClass.Reset();
+        ExplorationCharacterTransform = FTransform::Identity;
+        ExplorationControlRotation = FRotator::ZeroRotator;
+        ExplorationArmLength = 400.f;
     }
 };
 

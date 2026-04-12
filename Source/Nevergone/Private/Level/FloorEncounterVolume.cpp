@@ -60,6 +60,7 @@ void AFloorEncounterVolume::BeginPlay()
 		// Snapshot the mesh's designed Z so the bob is a clean delta on top of it.
 		MeshBaseZ = IndicatorMesh->GetRelativeLocation().Z;
 	}
+
 }
 
 void AFloorEncounterVolume::Tick(float DeltaTime)
@@ -108,6 +109,8 @@ void AFloorEncounterVolume::WriteSaveData_Implementation(FActorSaveData& OutData
 
 	bool TempResolved = bEncounterResolved;
 	Ar << TempResolved;
+	bool TempIsInBattle = bIsInBattle;
+	Ar << TempIsInBattle;
 
 	OutData.CustomDataMap.Add(SaveKeys::EncounterVolume, MoveTemp(Payload));
 }
@@ -123,6 +126,7 @@ void AFloorEncounterVolume::ReadSaveData_Implementation(const FActorSaveData& In
 	FArchive& Ar = Reader;
 
 	Ar << bEncounterResolved;
+	Ar << bIsInBattle;
 }
 
 void AFloorEncounterVolume::OnPostRestore_Implementation()
@@ -130,6 +134,19 @@ void AFloorEncounterVolume::OnPostRestore_Implementation()
 	if (bEncounterResolved)
 	{
 		DeactivateEncounter();
+	}
+	if (bIsInBattle)
+	{
+		IndicatorMesh->SetVisibility(false);
+	}
+}
+
+void AFloorEncounterVolume::RestoreEncounterVisual()
+{
+	if (IndicatorMesh && !bEncounterResolved)
+	{
+		bIsInBattle = false;
+		IndicatorMesh->SetVisibility(true);
 	}
 }
 
@@ -192,6 +209,7 @@ void AFloorEncounterVolume::OnTriggerBeginOverlap(UPrimitiveComponent* Overlappe
 	// battle starts and the actor is later fully deactivated.
 	if (IndicatorMesh)
 	{
+		bIsInBattle = true;
 		IndicatorMesh->SetVisibility(false);
 	}
 

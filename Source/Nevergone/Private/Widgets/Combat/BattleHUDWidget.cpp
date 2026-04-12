@@ -192,6 +192,14 @@ void UBattleHUDWidget::SpawnHPBars(UBattleState* BattleState)
 		Bar->SetVisibility(ESlateVisibility::Hidden);
 		Bar->InitializeForUnit(Unit, EventBus, UnitState.MaxHP, UnitState.CurrentHP);
 
+		// If this unit already has active status effects (mid-combat restore path),
+		// replay the icon events immediately — they were broadcast before this
+		// widget existed and were therefore missed by the event bus subscription.
+		if (!UnitState.ActiveStatusEffects.IsEmpty())
+		{
+			Bar->SyncInitialStatusIcons(UnitState.ActiveStatusEffects);
+		}
+
 		HPBarUnits.Add(Unit);
 		HPBarWidgets.Add(Bar);
 
