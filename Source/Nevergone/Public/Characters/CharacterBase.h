@@ -69,6 +69,17 @@ public:
 	 */
 	void SpawnFloatingText(const FString& Text, EFloatingTextType Type, UTexture2D* Icon = nullptr);
 
+	/**
+	 * Called when this unit's HP reaches zero during combat.
+	 * Hides the mesh and disables capsule collision so the actor stays in memory
+	 * without blocking movement or cluttering the viewport.
+	 * Declared as BlueprintNativeEvent so Blueprint subclasses can layer a death
+	 * animation on top without replacing the C++ behaviour.
+	 */
+	UFUNCTION(BlueprintNativeEvent, Category = "Combat")
+	void PlayDeathVisual();
+	virtual void PlayDeathVisual_Implementation();
+
 protected:
 
 	virtual void BeginPlay() override;

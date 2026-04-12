@@ -30,7 +30,10 @@ public:
 	
 	// Called by GameContextManager after combat ends, before actors are destroyed.
 	// Reads PersistentHP from each ally's UnitStatsComponent and updates PartyData.
-	void WriteBackBattleResults(const TArray<ACharacterBase*>& SpawnedAllies,
+	// AliveActorsBySourceIndex maps each alive ally's SourceIndex to its actor.
+	// GeneratedParty[i] entered this combat as SourceIndex=i; members absent
+	// from the map died during combat and are written back with HP=0.
+	void WriteBackBattleResults(const TMap<int32, ACharacterBase*>& AliveActorsBySourceIndex,
 								 const TArray<FGeneratedPlayerData>& GeneratedParty);
 	
 	// Called once after GameInstance loads a save slot, and after every level load.

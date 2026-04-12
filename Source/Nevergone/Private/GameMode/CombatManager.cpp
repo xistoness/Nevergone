@@ -10,6 +10,8 @@
 #include "Characters/Abilities/BattleMovementAbility.h"
 #include "Engine/Texture2D.h"
 #include "GameInstance/MyGameInstance.h"
+#include "GameInstance/GameContextManager.h"
+#include "World/WorldManagerSubsystem.h"
 #include "GameMode/BattlePreparationContext.h"
 #include "GameMode/Combat/BattleInputManager.h"
 #include "GameMode/Combat/BattleCameraPawn.h"
@@ -18,6 +20,7 @@
 #include "GameMode/Combat/StatusEffectManager.h"
 #include "GameMode/Combat/AI/BattleTeamAIPlanner.h"
 #include "Characters/CharacterBase.h"
+#include "Components/CapsuleComponent.h"
 #include "Characters/PlayerControllers/BattlePlayerController.h"
 #include "Data/StatusEffectDefinition.h"
 #include "GameMode/TurnManager.h"
@@ -27,9 +30,108 @@
 #include "Types/BattleTypes.h"
 
 
+// ---------------------------------------------------------------------------
+// Spawn Z helper
+// ---------------------------------------------------------------------------
+
+// Returns the correct world Z for spawning a character of the given class on a tile.
+//
+// SpawnActor positions the actor with its ORIGIN (capsule centre) at the supplied
+// transform location. GetTileCenterWorld returns the ground surface Z from the
+// line-trace hit. Passing that value directly as origin embeds the bottom half of
+// the capsule below the surface; the collision adjustment then pushes the actor
+// upward, leaving it floating one half-height above the tile.
+//
+// The fix is identical to what GA_Move_Simple does via GetGroundAlignedLocation:
+// offset Z by the capsule half-height so the capsule base sits on the surface.
+// We read the value from the CDO (Class Default Object) — the engine-managed
+// template instance that always exists without requiring a live spawned actor.
+static FVector GetSpawnLocationForClass(UClass* ActorClass, const FVector& TileCenter)
+{
+    if (!ActorClass)
+    {
+        return TileCenter;
+    }
+
+    const ACharacterBase* CDO = Cast<ACharacterBase>(ActorClass->GetDefaultObject());
+    if (!CDO)
+    {
+        return TileCenter;
+    }
+
+    const UCapsuleComponent* Capsule = CDO->GetCapsuleComponent();
+    const float HalfHeight = Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 0.f;
+
+    return TileCenter + FVector(0.f, 0.f, HalfHeight);
+}
+
 void UCombatManager::Initialize()
 {
 	// Setup participants
+}
+
+void UCombatManager::RegisterStableSourceIndex(ACharacterBase* Unit, EBattleUnitTeam Team, int32 SourceIndex)
+{
+	if (!IsValid(Unit) || SourceIndex == INDEX_NONE)
+	{
+		return;
+	}
+
+	switch (Team)
+	{
+	case EBattleUnitTeam::Ally:
+		AllySourceIndices.Add(Unit, SourceIndex);
+		break;
+
+	case EBattleUnitTeam::Enemy:
+		EnemySourceIndices.Add(Unit, SourceIndex);
+		break;
+
+	default:
+		break;
+	}
+}
+
+int32 UCombatManager::FindStableSourceIndexForUnit(ACharacterBase* Unit, EBattleUnitTeam Team) const
+{
+	if (!IsValid(Unit))
+	{
+		return INDEX_NONE;
+	}
+
+	const TMap<TWeakObjectPtr<ACharacterBase>, int32>* MapPtr = nullptr;
+
+	switch (Team)
+	{
+	case EBattleUnitTeam::Ally:
+		MapPtr = &AllySourceIndices;
+		break;
+
+	case EBattleUnitTeam::Enemy:
+		MapPtr = &EnemySourceIndices;
+		break;
+
+	default:
+		return INDEX_NONE;
+	}
+
+	if (!MapPtr)
+	{
+		return INDEX_NONE;
+	}
+
+	if (const int32* Found = MapPtr->Find(Unit))
+	{
+		return *Found;
+	}
+
+	return INDEX_NONE;
+}
+
+void UCombatManager::ClearStableSourceIndices()
+{
+	AllySourceIndices.Reset();
+	EnemySourceIndices.Reset();
 }
 
 void UCombatManager::EnterPreparation(UBattlePreparationContext& BattlePrepContext)
@@ -58,18 +160,35 @@ void UCombatManager::SpawnAllies(UBattlePreparationContext& BattlePrepContext, U
 		}
 
 		FTransform FinalSpawnTransform = Spawn.PlannedTransform;
-		FinalSpawnTransform.SetLocation(Grid->GetTileCenterWorld(SpawnCoord));
+		FinalSpawnTransform.SetLocation(
+			GetSpawnLocationForClass(Spawn.ActorClass, Grid->GetTileCenterWorld(SpawnCoord)));
+
+		// AdjustIfPossibleButAlwaysSpawn: if two planned spawns land on adjacent
+		// tiles whose capsules slightly overlap, the spawn still succeeds instead
+		// of silently failing and dropping the unit from the battle.
+		FActorSpawnParameters AllySpawnParams;
+		AllySpawnParams.SpawnCollisionHandlingOverride =
+			ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
 		AActor* SpawnedAlly = GetWorld()->SpawnActor<AActor>(
 			Spawn.ActorClass,
-			FinalSpawnTransform
+			FinalSpawnTransform,
+			AllySpawnParams
 		);
 
 		ACharacterBase* Character = Cast<ACharacterBase>(SpawnedAlly);
 		if (!Character)
 		{
+			UE_LOG(LogTemp, Error,
+				TEXT("[CombatManager] SpawnAllies: SpawnActor returned null for index %d (class: %s)"),
+				i, *GetNameSafe(Spawn.ActorClass));
 			continue;
 		}
+
+		// Register in the OccupancyMap immediately so the next iteration's
+		// FindClosestValidTileToWorld sees this tile as occupied and won't
+		// assign two units to the same or physically overlapping tile.
+		Grid->UpdateActorPosition(Character, SpawnCoord);
 
 		BindToCombatUnitActionEvents(Character);
 		SpawnedAllies.Add(Character);
@@ -85,6 +204,8 @@ void UCombatManager::SpawnAllies(UBattlePreparationContext& BattlePrepContext, U
 		Entry.UnitActor = Character;
 		Entry.SourceIndex = i;
 		Entry.Team = EBattleUnitTeam::Ally;
+		
+		RegisterStableSourceIndex(Character, EBattleUnitTeam::Ally, i);
 		
 		const FGeneratedPlayerData& PlayerData = BattlePrepContext.PlayerParty[i];
 		if (UUnitStatsComponent* Stats = Character->GetUnitStats())
@@ -133,18 +254,29 @@ void UCombatManager::SpawnEnemies(UBattlePreparationContext& BattlePrepContext, 
 		}
 
 		FTransform FinalSpawnTransform = Spawn.PlannedTransform;
-		FinalSpawnTransform.SetLocation(Grid->GetTileCenterWorld(SpawnCoord));
+		FinalSpawnTransform.SetLocation(
+			GetSpawnLocationForClass(Spawn.ActorClass, Grid->GetTileCenterWorld(SpawnCoord)));
+
+		FActorSpawnParameters EnemySpawnParams;
+		EnemySpawnParams.SpawnCollisionHandlingOverride =
+			ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
 		AActor* SpawnedEnemy = GetWorld()->SpawnActor<AActor>(
 			Spawn.ActorClass,
-			FinalSpawnTransform
+			FinalSpawnTransform,
+			EnemySpawnParams
 		);
 
 		ACharacterBase* Character = Cast<ACharacterBase>(SpawnedEnemy);
 		if (!Character)
 		{
+			UE_LOG(LogTemp, Error,
+				TEXT("[CombatManager] SpawnEnemies: SpawnActor returned null for index %d (class: %s)"),
+				i, *GetNameSafe(Spawn.ActorClass));
 			continue;
 		}
+
+		Grid->UpdateActorPosition(Character, SpawnCoord);
 
 		BindToCombatUnitActionEvents(Character);
 		SpawnedEnemies.Add(Character);
@@ -159,6 +291,8 @@ void UCombatManager::SpawnEnemies(UBattlePreparationContext& BattlePrepContext, 
 		Entry.UnitActor = Character;
 		Entry.SourceIndex = i;
 		Entry.Team = EBattleUnitTeam::Enemy;
+		
+		RegisterStableSourceIndex(Character, EBattleUnitTeam::Enemy, i);
 		
 		InitializeSpawnedUnitForBattle(Character, EBattleUnitTeam::Enemy, Grid);
 
@@ -239,13 +373,14 @@ void UCombatManager::StartCombat(UBattlePreparationContext& BattlePrepContext)
 
 	// Wire BattleState
 	EventBus->Initialize(BattleState);
-	EventBus->SetStatusEffectManager(StatusEffectManager);
 	BattleTeamAIPlanner->SetBattleState(BattleState);
 
 	// Create and initialize StatusEffectManager — must happen after BattleState
 	// and TurnManager exist, and before units' BattleModeComponents are finalized
 	StatusEffectManager = NewObject<UStatusEffectManager>(this);
 	StatusEffectManager->Initialize(BattleState, EventBus, TurnManager);
+	
+	EventBus->SetStatusEffectManager(StatusEffectManager);
 	
 	for (ACharacterBase* Unit : SpawnedAllies)
 	{
@@ -304,122 +439,281 @@ void UCombatManager::StartCombat(UBattlePreparationContext& BattlePrepContext)
 }
 
 void UCombatManager::StartCombatFromSave(
-    UBattlePreparationContext& BattlePrepContext,
-    const FSavedCombatSession& SavedSession
+	UBattlePreparationContext& BattlePrepContext,
+	const FSavedCombatSession& SavedSession
 )
 {
-    UE_LOG(LogTemp, Warning, TEXT("=== StartCombatFromSave ==="));
+	UE_LOG(LogTemp, Warning, TEXT("=== StartCombatFromSave ==="));
 
-    ActiveEncounterVolume = BattlePrepContext.EncounterSource;
+	ActiveEncounterVolume = BattlePrepContext.EncounterSource;
 
-    UGridManager* Grid = GetWorld()->GetSubsystem<UGridManager>();
-    if (!Grid)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("[CombatManager] StartCombatFromSave: Grid is invalid"));
-        return;
-    }
+	UGridManager* Grid = GetWorld()->GetSubsystem<UGridManager>();
+	if (!Grid)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CombatManager] StartCombatFromSave: Grid is invalid"));
+		return;
+	}
 
-    // Identical wiring to StartCombat — EventBus first, then spawn.
-    EventBus = NewObject<UCombatEventBus>(this);
-    EventBus->OnUnitDied.AddUObject(this, &UCombatManager::HandleUnitDeath);
-    EventBus->OnStatusApplied.AddUObject(this, &UCombatManager::HandleStatusApplied);
+	// Reset runtime arrays before restoring.
+	SpawnedAllies.Reset();
+	SpawnedEnemies.Reset();
+	BattlePrepContext.SpawnedUnits.Reset();
+	ClearStableSourceIndices();
 
-    if (UGameInstance* GI = GetWorld() ? GetWorld()->GetGameInstance() : nullptr)
-    {
-        if (UAudioSubsystem* Audio = GI->GetSubsystem<UAudioSubsystem>())
-        {
-            Audio->BindToCombatEventBus(EventBus);
-        }
-    }
+	// Identical wiring to StartCombat — EventBus first.
+	EventBus = NewObject<UCombatEventBus>(this);
+	EventBus->OnUnitDied.AddUObject(this, &UCombatManager::HandleUnitDeath);
+	EventBus->OnStatusApplied.AddUObject(this, &UCombatManager::HandleStatusApplied);
 
-    SpawnAllies(BattlePrepContext, Grid);
-    SpawnEnemies(BattlePrepContext, Grid);
+	if (UGameInstance* GI = GetWorld() ? GetWorld()->GetGameInstance() : nullptr)
+	{
+		if (UAudioSubsystem* Audio = GI->GetSubsystem<UAudioSubsystem>())
+		{
+			Audio->BindToCombatEventBus(EventBus);
+		}
+	}
 
-    TArray<AActor*> AllCombatants;
-    AllCombatants.Append(SpawnedAllies);
-    AllCombatants.Append(SpawnedEnemies);
+	// Build lookup tables by team + original source index.
+	TMap<int32, const FSavedCombatUnitState*> SavedAlliesByIndex;
+	TMap<int32, const FSavedCombatUnitState*> SavedEnemiesByIndex;
 
-    TurnManager = NewObject<UTurnManager>(this);
-    TurnManager->Initialize(AllCombatants);
+	for (const FSavedCombatUnitState& SavedUnit : SavedSession.UnitStates)
+	{
+		if (SavedUnit.SourceIndex == INDEX_NONE)
+		{
+			continue;
+		}
 
-    BattleTeamAIPlanner = NewObject<UBattleTeamAIPlanner>(this);
-    BattleTeamAIPlanner->Initialize(AllCombatants);
-    BattleTeamAIPlanner->OnAIActionFinished.AddUObject(this, &UCombatManager::HandleAIActionFinished);
+		if (SavedUnit.Team == EBattleUnitTeam::Ally)
+		{
+			SavedAlliesByIndex.Add(SavedUnit.SourceIndex, &SavedUnit);
+		}
+		else if (SavedUnit.Team == EBattleUnitTeam::Enemy)
+		{
+			SavedEnemiesByIndex.Add(SavedUnit.SourceIndex, &SavedUnit);
+		}
+	}
 
-    BattleInputManager = NewObject<UBattleInputManager>(this);
-    BattleInputManager->Initialize(TurnManager, BattleCameraPawn, this);
+	auto SpawnSavedTeamUnits =
+		[&](const TArray<FPlannedSpawn>& PlannedSpawns,
+			const TMap<int32, const FSavedCombatUnitState*>& SavedByIndex,
+			EBattleUnitTeam Team)
+	{
+		for (int32 i = 0; i < PlannedSpawns.Num(); ++i)
+		{
+			const FSavedCombatUnitState* SavedUnit = SavedByIndex.FindRef(i);
+			if (!SavedUnit)
+			{
+				// Nothing saved for this original slot.
+				continue;
+			}
 
-    InputContextBuilder = NewObject<UBattleInputContextBuilder>(this);
-    InputContextBuilder->SetTurnManager(TurnManager);
-    UpdateInputContext();
+			// Dead units do not come back.
+			if (SavedUnit->bWasDead || SavedUnit->CurrentHP <= 0)
+			{
+				continue;
+			}
 
-    // KEY DIFFERENCE from StartCombat: use InitializeFromSave so CurrentHP,
-    // CurrentAP, and ActiveStatusEffects come from the saved data, not recalculated
-    // from scratch. TemporaryAttributeBonuses were already written by RestoreCombatFromSave,
-    // so RecalculateBattleStats inside InitializeFromSave produces correct derived stats.
-    BattleState = NewObject<UBattleState>();
-    BattleState->InitializeFromSave(BattlePrepContext, SavedSession);
+			const FPlannedSpawn& PlannedSpawn = PlannedSpawns[i];
 
-    EventBus->Initialize(BattleState);
-    EventBus->SetStatusEffectManager(StatusEffectManager);
-    BattleTeamAIPlanner->SetBattleState(BattleState);
+			FIntPoint SpawnCoord;
+			bool bHasValidSavedCoord = false;
 
-    StatusEffectManager = NewObject<UStatusEffectManager>(this);
-    StatusEffectManager->Initialize(BattleState, EventBus, TurnManager);
+			if (SavedUnit->bHasSavedGridCoord && Grid->GetTile(SavedUnit->SavedGridCoord))
+			{
+				SpawnCoord = SavedUnit->SavedGridCoord;
+				bHasValidSavedCoord = true;
+			}
 
-    for (ACharacterBase* Unit : SpawnedAllies)
-    {
-        if (UBattleModeComponent* BM = Unit ? Unit->GetBattleModeComponent() : nullptr)
-        {
-            BM->SetBattleState(BattleState);
-            BM->SetStatusEffectManager(StatusEffectManager);
-        }
-    }
-    for (ACharacterBase* Unit : SpawnedEnemies)
-    {
-        if (UBattleModeComponent* BM = Unit ? Unit->GetBattleModeComponent() : nullptr)
-        {
-            BM->SetBattleState(BattleState);
-            BM->SetStatusEffectManager(StatusEffectManager);
-        }
-    }
+			if (!bHasValidSavedCoord)
+			{
+				if (!Grid->FindClosestValidTileToWorld(
+					PlannedSpawn.PlannedTransform.GetLocation(),
+					SpawnCoord,
+					true))
+				{
+					UE_LOG(
+						LogTemp,
+						Warning,
+						TEXT("[CombatManager] StartCombatFromSave: failed to find fallback spawn tile for %s index %d"),
+						Team == EBattleUnitTeam::Ally ? TEXT("ally") : TEXT("enemy"),
+						i
+					);
+					continue;
+				}
+			}
 
-    for (ACharacterBase* Unit : SpawnedAllies)
-    {
-        if (UBattleModeComponent* BM = Unit ? Unit->GetBattleModeComponent() : nullptr)
-        {
-            BM->SetTurnManager(TurnManager);
-        }
-    }
-    for (ACharacterBase* Unit : SpawnedEnemies)
-    {
-        if (UBattleModeComponent* BM = Unit ? Unit->GetBattleModeComponent() : nullptr)
-        {
-            BM->SetTurnManager(TurnManager);
-        }
-    }
+			// IMPORTANT:
+			// Restore the exact saved class, NOT the freshly planned class.
+			UClass* ClassToSpawn = SavedUnit->ActorClass.LoadSynchronous();
+			if (!ClassToSpawn)
+			{
+				ClassToSpawn = PlannedSpawn.ActorClass;
+			}
 
-    // Restore cooldowns now that BattleModeComponents have been wired and
-    // abilities have been granted via EnterMode (called inside InitializeFromSave).
-    RestoreCombatFromSave(SavedSession);
+			if (!ClassToSpawn)
+			{
+				UE_LOG(
+					LogTemp,
+					Warning,
+					TEXT("[CombatManager] StartCombatFromSave: no valid class for %s index %d"),
+					Team == EBattleUnitTeam::Ally ? TEXT("ally") : TEXT("enemy"),
+					i
+				);
+				continue;
+			}
 
-    TurnManager->OnTurnStateChanged.AddUObject(
-        this,
-        &UCombatManager::HandleTurnStateChanged
-    );
+			FTransform FinalSpawnTransform = PlannedSpawn.PlannedTransform;
+			FinalSpawnTransform.SetLocation(
+				GetSpawnLocationForClass(ClassToSpawn, Grid->GetTileCenterWorld(SpawnCoord)));
 
-    // Note: EnterBattleMode is NOT called here.
-    // In the restore path, TowerFloorGameMode::HandleGameContextChanged(Battle)
-    // is responsible for calling it on the freshly swapped BattlePlayerController,
-    // after RequestInitialState detects bPendingCombatRestore and enters Battle.
-    // Calling it here would target GetFirstPlayerController() which is still the
-    // ExplorationPC at this point — wrong controller, wrong camera.
+			// Use AdjustIfPossibleButAlwaysSpawn so units are never silently dropped
+			// due to residual physics overlap from actors destroyed earlier this frame.
+			// Without this, SpawnActor returns null on collision and the unit is lost.
+			FActorSpawnParameters SpawnParams;
+			SpawnParams.SpawnCollisionHandlingOverride =
+				ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-    // Start directly on the player turn — saves always happen at end of enemy turn.
-    TurnManager->StartCombat();
+			AActor* SpawnedActor = GetWorld()->SpawnActor<AActor>(
+				ClassToSpawn,
+				FinalSpawnTransform,
+				SpawnParams
+			);
 
-    UE_LOG(LogTemp, Log,
-        TEXT("[CombatManager] StartCombatFromSave: combat restored and running"));
+			ACharacterBase* Character = Cast<ACharacterBase>(SpawnedActor);
+			if (!Character)
+			{
+				UE_LOG(LogTemp, Error,
+					TEXT("[CombatManager] StartCombatFromSave: SpawnActor returned null for %s index %d — class: %s"),
+					(Team == EBattleUnitTeam::Ally ? TEXT("ally") : TEXT("enemy")),
+					i,
+					*GetNameSafe(ClassToSpawn));
+				continue;
+			}
+
+			// Reassign the saved GUID immediately so restore matches correctly.
+			if (USaveableComponent* SaveComp = Character->FindComponentByClass<USaveableComponent>())
+			{
+				SaveComp->SetActorGuid(SavedUnit->ActorGuid);
+			}
+
+			BindToCombatUnitActionEvents(Character);
+
+			if (Team == EBattleUnitTeam::Ally)
+			{
+				SpawnedAllies.Add(Character);
+			}
+			else
+			{
+				SpawnedEnemies.Add(Character);
+			}
+
+			if (UBattleModeComponent* BattleComp = Character->GetBattleModeComponent())
+			{
+				BattleComp->SetCombatEventBus(EventBus);
+				BattleComp->SetTurnManager(TurnManager);
+			}
+
+			InitializeSpawnedUnitForBattle(Character, Team, Grid);
+
+			// Exact tactical position from save.
+			Grid->UpdateActorPosition(Character, SpawnCoord);
+
+			FSpawnedBattleUnit Entry;
+			Entry.UnitActor = Character;
+			Entry.SourceIndex = i;
+			Entry.Team = Team;
+			BattlePrepContext.SpawnedUnits.Add(Entry);
+
+			RegisterStableSourceIndex(Character, Team, i);
+
+			UE_LOG(
+				LogTemp,
+				Log,
+				TEXT("[CombatManager] Restored %s at tile (%d, %d) | SourceIndex=%d"),
+				*GetNameSafe(Character),
+				SpawnCoord.X,
+				SpawnCoord.Y,
+				i
+			);
+		}
+	};
+
+	SpawnSavedTeamUnits(
+		BattlePrepContext.PlayerPlannedSpawns,
+		SavedAlliesByIndex,
+		EBattleUnitTeam::Ally
+	);
+
+	SpawnSavedTeamUnits(
+		BattlePrepContext.EnemyPlannedSpawns,
+		SavedEnemiesByIndex,
+		EBattleUnitTeam::Enemy
+	);
+
+	TArray<AActor*> AllCombatants;
+	AllCombatants.Append(SpawnedAllies);
+	AllCombatants.Append(SpawnedEnemies);
+
+	TurnManager = NewObject<UTurnManager>(this);
+	TurnManager->Initialize(AllCombatants);
+
+	BattleTeamAIPlanner = NewObject<UBattleTeamAIPlanner>(this);
+	BattleTeamAIPlanner->Initialize(AllCombatants);
+	BattleTeamAIPlanner->OnAIActionFinished.AddUObject(this, &UCombatManager::HandleAIActionFinished);
+
+	BattleInputManager = NewObject<UBattleInputManager>(this);
+	BattleInputManager->Initialize(TurnManager, BattleCameraPawn, this);
+
+	InputContextBuilder = NewObject<UBattleInputContextBuilder>(this);
+	InputContextBuilder->SetTurnManager(TurnManager);
+	UpdateInputContext();
+
+	BattleState = NewObject<UBattleState>();
+	BattleState->InitializeFromSave(BattlePrepContext, SavedSession);
+
+	EventBus->Initialize(BattleState);
+	BattleTeamAIPlanner->SetBattleState(BattleState);
+
+	StatusEffectManager = NewObject<UStatusEffectManager>(this);
+	StatusEffectManager->Initialize(BattleState, EventBus, TurnManager);
+	EventBus->SetStatusEffectManager(StatusEffectManager);
+
+	for (ACharacterBase* Unit : SpawnedAllies)
+	{
+		if (UBattleModeComponent* BM = Unit ? Unit->GetBattleModeComponent() : nullptr)
+		{
+			BM->SetBattleState(BattleState);
+			BM->SetStatusEffectManager(StatusEffectManager);
+			BM->SetTurnManager(TurnManager);
+		}
+	}
+
+	for (ACharacterBase* Unit : SpawnedEnemies)
+	{
+		if (UBattleModeComponent* BM = Unit ? Unit->GetBattleModeComponent() : nullptr)
+		{
+			BM->SetBattleState(BattleState);
+			BM->SetStatusEffectManager(StatusEffectManager);
+			BM->SetTurnManager(TurnManager);
+		}
+	}
+
+	RestoreCombatFromSave(SavedSession);
+
+	TurnManager->OnTurnStateChanged.AddUObject(
+		this,
+		&UCombatManager::HandleTurnStateChanged
+	);
+
+	// Save is taken at end of enemy turn, so restore resumes on player turn.
+	TurnManager->StartCombat();
+
+	UE_LOG(
+		LogTemp,
+		Log,
+		TEXT("[CombatManager] StartCombatFromSave: combat restored and running")
+	);
 }
 
 void UCombatManager::InitializeSpawnedUnitForBattle(ACharacterBase* Character, EBattleUnitTeam Team, UGridManager* Grid)
@@ -472,10 +766,16 @@ void UCombatManager::HandleUnitDeath(ACharacterBase* DeadUnit)
 	{
 		return;
 	}
+	
+	
+	UE_LOG(LogTemp, Error, TEXT("[HandleUnitDeath] Called for %s"), *GetNameSafe(DeadUnit));
+	
+	// Hide the mesh and disable collision immediately.
+	// The actor stays alive in memory — all units are destroyed together in Cleanup()
+	// at the end of combat to avoid mid-battle destruction hitches.
+	DeadUnit->PlayDeathVisual();
 
-	UE_LOG(LogTemp, Warning, TEXT("[CombatManager]: Unit died: %s"), *DeadUnit->GetName());
-
-	// Optional: remove from grid occupancy immediately
+	// Remove from grid occupancy so the tile is freed for pathing and spawning.
 	if (UGridManager* Grid = GetWorld()->GetSubsystem<UGridManager>())
 	{
 		Grid->RemoveActorFromGrid(DeadUnit);
@@ -597,6 +897,7 @@ void UCombatManager::OnEnemyTurnStarted()
 
 void UCombatManager::SelectFirstAvailableUnit()
 {
+	UE_LOG(LogTemp, Warning, TEXT("[CombatManager]: Trying to select first available unit..."));
 	if (bCombatEnding) return;
 	for (int32 i = 0; i < SpawnedAllies.Num(); ++i)
 	{
@@ -846,20 +1147,48 @@ void UCombatManager::EndEnemyTurn()
 		InputContextBuilder->SetHardLock(false);		
 	}
 
-    // Auto-save at end of enemy turn — before transitioning to the player turn.
-    // This captures the fully-resolved state of the round so a reload always
-    // returns to the start of the player's next turn.
-    if (UGameInstance* GI = GetWorld() ? GetWorld()->GetGameInstance() : nullptr)
+    // Mid-combat auto-save at end of enemy turn.
+    // This must be equivalent to AutoSaveBeforeTravel: it collects world actor
+    // state (encounter volumes, interactables, global flags) AND the combat
+    // session snapshot so a reload restores the world exactly as left.
+    if (UWorld* W = GetWorld())
     {
-        if (UMyGameInstance* MyGI = Cast<UMyGameInstance>(GI))
+        if (UMyGameInstance* MyGI = Cast<UMyGameInstance>(W->GetGameInstance()))
         {
             if (UMySaveGame* Save = MyGI->GetActiveSave())
             {
+                Save->LastSavedAt     = FDateTime::UtcNow();
                 Save->bSavedMidCombat = true;
+
+                // 1. Collect world actor state (encounter volumes, interactables, etc.).
+                //    This is the same step AutoSaveBeforeTravel performs via
+                //    WorldMgr->CollectWorldSaveData(), ensuring level objects are
+                //    serialized even though we are mid-combat.
+                if (UWorldManagerSubsystem* WorldMgr = W->GetSubsystem<UWorldManagerSubsystem>())
+                {
+                    WorldMgr->CollectWorldSaveData();
+                }
+
+                // 2. Collect combat session snapshot (unit HP, AP, statuses, cooldowns).
                 CollectCombatSaveData(Save->SavedCombatSession);
 
+                // 3. Persist exploration character data so ReturnToExploration() can
+                //    respawn the player pawn after combat ends on a restore path.
+                //    On a normal flow, FBattleSessionData holds this in memory;
+                //    on a restore, that struct is empty so we must save it explicitly.
+                if (UGameContextManager* CTX = MyGI->GetGameContextManager())
+                {
+                    Save->SavedCombatSession.ExplorationCharacterClass     = CTX->GetExplorationCharacterClass();
+                    Save->SavedCombatSession.ExplorationCharacterTransform = CTX->GetSavedExplorationTransform();
+                    Save->SavedCombatSession.ExplorationControlRotation    = CTX->GetSavedExplorationControlRotation();
+                    Save->SavedCombatSession.ExplorationArmLength          = CTX->GetSavedExplorationArmLength();
+                }
+
+                // 4. Flush in-memory party/progression/flags into the save object.
+                MyGI->CommitSave();
+
                 UE_LOG(LogTemp, Log,
-                    TEXT("[CombatManager] EndEnemyTurn: mid-combat save data collected — triggering auto-save"));
+                    TEXT("[CombatManager] EndEnemyTurn: full mid-combat save collected — committing to disk"));
             }
 
             MyGI->RequestSaveGame();
@@ -874,8 +1203,13 @@ void UCombatManager::RequestEndEnemyTurn()
 	EndEnemyTurn();
 }
 
-void UCombatManager::CancelPreparation()
+void UCombatManager::CancelPreparation(TWeakObjectPtr<class AFloorEncounterVolume> EncounterSource)
 {
+	if (EncounterSource.IsValid())
+	{
+		EncounterSource->RestoreEncounterVisual();	
+	}	
+	
 	OnCombatFinished.Broadcast(EBattleUnitTeam::None);
 }
 
@@ -1035,6 +1369,7 @@ void UCombatManager::Cleanup()
 
 	SpawnedAllies.Empty();
 	SpawnedEnemies.Empty();
+	ClearStableSourceIndices();
 
 	if (IsValid(BattleCameraPawn))
 	{
@@ -1293,123 +1628,159 @@ void UCombatManager::LogActivePlayerController(UWorld* World, const FString& Con
 
 void UCombatManager::CollectCombatSaveData(FSavedCombatSession& OutSession) const
 {
-    OutSession.UnitStates.Reset();
+	OutSession.UnitStates.Reset();
 
-    // Record the EncounterVolume guid so GameContextManager can find it on restore.
-    // The guid lives on the volume's SaveableComponent — same pattern as all other actors.
-    if (ActiveEncounterVolume)
-    {
-        if (USaveableComponent* SaveComp =
-            ActiveEncounterVolume->FindComponentByClass<USaveableComponent>())
-        {
-            OutSession.EncounterVolumeGuid = SaveComp->GetOrCreateGuid();
-        }
-    }
+	// Record the EncounterVolume guid so GameContextManager can find it on restore.
+	if (ActiveEncounterVolume)
+	{
+		if (USaveableComponent* SaveComp =
+			ActiveEncounterVolume->FindComponentByClass<USaveableComponent>())
+		{
+			OutSession.EncounterVolumeGuid = SaveComp->GetOrCreateGuid();
+		}
+	}
 
-    auto CollectUnits = [&](const TArray<ACharacterBase*>& Units)
-    {
-        for (ACharacterBase* Unit : Units)
-        {
-            if (!IsValid(Unit)) { continue; }
+	UGridManager* Grid = GetWorld() ? GetWorld()->GetSubsystem<UGridManager>() : nullptr;
 
-            USaveableComponent* SaveComp = Unit->FindComponentByClass<USaveableComponent>();
-            UUnitStatsComponent* Stats   = Unit->GetUnitStats();
-            UBattleModeComponent* BM     = Unit->GetBattleModeComponent();
+	auto CollectUnits = [&](const TArray<ACharacterBase*>& Units, EBattleUnitTeam Team)
+	{
+		for (ACharacterBase* Unit : Units)
+		{
+			if (!IsValid(Unit))
+			{
+				continue;
+			}
 
-            if (!SaveComp || !Stats || !BM) { continue; }
+			USaveableComponent* SaveComp = Unit->FindComponentByClass<USaveableComponent>();
+			UUnitStatsComponent* Stats   = Unit->GetUnitStats();
+			UBattleModeComponent* BM     = Unit->GetBattleModeComponent();
 
-            const FBattleUnitState* State = BattleState ? BattleState->FindUnitState(Unit) : nullptr;
+			if (!SaveComp || !Stats || !BM)
+			{
+				continue;
+			}
 
-            FSavedCombatUnitState UnitData;
-            UnitData.ActorGuid               = SaveComp->GetOrCreateGuid();
-            UnitData.CurrentHP               = State ? State->CurrentHP               : Stats->GetCurrentHP();
-            UnitData.CurrentActionPoints     = State ? State->CurrentActionPoints      : 0;
-            UnitData.TemporaryAttributeBonuses = Stats->TemporaryAttributeBonuses;
-            UnitData.Cooldowns               = BM->CollectCooldownSaveData();
+			const FBattleUnitState* State = BattleState ? BattleState->FindUnitState(Unit) : nullptr;
 
-            // Serialize active status effects.
-            if (State)
-            {
-                for (const FActiveStatusEffect& Effect : State->ActiveStatusEffects)
-                {
-                    if (!Effect.IsValid()) { continue; }
+			const int32 StableSourceIndex = FindStableSourceIndexForUnit(Unit, Team);
+			if (StableSourceIndex == INDEX_NONE)
+			{
+				UE_LOG(
+					LogTemp,
+					Warning,
+					TEXT("[CombatManager] CollectCombatSaveData: missing stable SourceIndex for %s"),
+					*GetNameSafe(Unit)
+				);
+				continue;
+			}
 
-                    FSavedActiveStatusEffect SavedEffect;
-                    SavedEffect.DefinitionPath            = FSoftObjectPath(Effect.Definition->GetPathName());
-                    SavedEffect.CasterTeam                = Effect.CasterTeam;
-                    SavedEffect.TurnsRemaining            = Effect.TurnsRemaining;
-                    SavedEffect.ShieldHP                  = Effect.ShieldHP;
-                    SavedEffect.CachedCasterStatValue     = Effect.CachedCasterStatValue;
-                    SavedEffect.CachedMovementRangeSnapshot = Effect.CachedMovementRangeSnapshot;
-                    SavedEffect.CachedStatDelta           = Effect.CachedStatDelta;
-                    SavedEffect.InstanceId                = Effect.InstanceId;
+			FSavedCombatUnitState UnitData;
+			UnitData.ActorGuid                 = SaveComp->GetOrCreateGuid();
+			UnitData.ActorClass                = TSoftClassPtr<ACharacterBase>(Unit->GetClass());
+			UnitData.Team                      = State ? State->Team : Team;
+			UnitData.SourceIndex               = StableSourceIndex;
+			UnitData.CurrentHP                 = State ? State->CurrentHP : Stats->GetCurrentHP();
+			UnitData.CurrentActionPoints       = State ? State->CurrentActionPoints : 0;
+			UnitData.bWasDead                  = State ? !State->IsAlive() : (Stats->GetCurrentHP() <= 0);
+			UnitData.TemporaryAttributeBonuses = Stats->TemporaryAttributeBonuses;
+			UnitData.Cooldowns                 = BM->CollectCooldownSaveData();
 
-                    // Resolve caster actor to its persistent guid if still alive.
-                    if (ACharacterBase* Caster = Effect.Caster.Get())
-                    {
-                        if (USaveableComponent* CasterSave =
-                            Caster->FindComponentByClass<USaveableComponent>())
-                        {
-                            SavedEffect.CasterGuid = CasterSave->GetOrCreateGuid();
-                        }
-                    }
+			if (Grid)
+			{
+				const FIntPoint GridCoord = Grid->WorldToGrid(Unit->GetActorLocation());
+				if (Grid->GetTile(GridCoord))
+				{
+					UnitData.bHasSavedGridCoord = true;
+					UnitData.SavedGridCoord = GridCoord;
+				}
+			}
 
-                    UnitData.ActiveStatusEffects.Add(MoveTemp(SavedEffect));
-                }
-            }
+			if (State)
+			{
+				for (const FActiveStatusEffect& Effect : State->ActiveStatusEffects)
+				{
+					if (!Effect.IsValid())
+					{
+						continue;
+					}
 
-            OutSession.UnitStates.Add(MoveTemp(UnitData));
-        }
-    };
+					FSavedActiveStatusEffect SavedEffect;
+					SavedEffect.DefinitionPath              = FSoftObjectPath(Effect.Definition->GetPathName());
+					SavedEffect.CasterTeam                  = Effect.CasterTeam;
+					SavedEffect.TurnsRemaining              = Effect.TurnsRemaining;
+					SavedEffect.ShieldHP                    = Effect.ShieldHP;
+					SavedEffect.CachedCasterStatValue       = Effect.CachedCasterStatValue;
+					SavedEffect.CachedMovementRangeSnapshot = Effect.CachedMovementRangeSnapshot;
+					SavedEffect.CachedStatDelta             = Effect.CachedStatDelta;
+					SavedEffect.InstanceId                  = Effect.InstanceId;
 
-    CollectUnits(SpawnedAllies);
-    CollectUnits(SpawnedEnemies);
+					if (ACharacterBase* Caster = Effect.Caster.Get())
+					{
+						if (USaveableComponent* CasterSave =
+							Caster->FindComponentByClass<USaveableComponent>())
+						{
+							SavedEffect.CasterGuid = CasterSave->GetOrCreateGuid();
+						}
+					}
 
-    UE_LOG(LogTemp, Log,
-        TEXT("[CombatManager] CollectCombatSaveData: serialized %d units"),
-        OutSession.UnitStates.Num());
+					UnitData.ActiveStatusEffects.Add(MoveTemp(SavedEffect));
+				}
+			}
+
+			OutSession.UnitStates.Add(MoveTemp(UnitData));
+		}
+	};
+
+	CollectUnits(SpawnedAllies, EBattleUnitTeam::Ally);
+	CollectUnits(SpawnedEnemies, EBattleUnitTeam::Enemy);
+
+	UE_LOG(
+		LogTemp,
+		Log,
+		TEXT("[CombatManager] CollectCombatSaveData: serialized %d units"),
+		OutSession.UnitStates.Num()
+	);
 }
 
 void UCombatManager::RestoreCombatFromSave(const FSavedCombatSession& SavedSession)
 {
-    // Build guid → saved data lookup for O(1) access.
-    TMap<FGuid, const FSavedCombatUnitState*> ByGuid;
-    for (const FSavedCombatUnitState& Entry : SavedSession.UnitStates)
-    {
-        if (Entry.ActorGuid.IsValid())
-        {
-            ByGuid.Add(Entry.ActorGuid, &Entry);
-        }
-    }
+	TMap<FGuid, const FSavedCombatUnitState*> ByGuid;
+	for (const FSavedCombatUnitState& Entry : SavedSession.UnitStates)
+	{
+		if (Entry.ActorGuid.IsValid())
+		{
+			ByGuid.Add(Entry.ActorGuid, &Entry);
+		}
+	}
 
-    auto RestoreUnits = [&](const TArray<ACharacterBase*>& Units)
-    {
-        for (ACharacterBase* Unit : Units)
-        {
-            if (!IsValid(Unit)) { continue; }
+	auto RestoreUnits = [&](const TArray<ACharacterBase*>& Units)
+	{
+		for (ACharacterBase* Unit : Units)
+		{
+			if (!IsValid(Unit)) { continue; }
 
-            USaveableComponent* SaveComp = Unit->FindComponentByClass<USaveableComponent>();
-            UUnitStatsComponent* Stats   = Unit->GetUnitStats();
-            UBattleModeComponent* BM     = Unit->GetBattleModeComponent();
+			USaveableComponent* SaveComp = Unit->FindComponentByClass<USaveableComponent>();
+			UUnitStatsComponent* Stats   = Unit->GetUnitStats();
+			UBattleModeComponent* BM     = Unit->GetBattleModeComponent();
 
-            if (!SaveComp || !Stats || !BM) { continue; }
+			if (!SaveComp || !Stats || !BM) { continue; }
 
-            const FSavedCombatUnitState* Saved = ByGuid.FindRef(SaveComp->GetOrCreateGuid());
-            if (!Saved) { continue; }
+			const FSavedCombatUnitState* Saved = ByGuid.FindRef(SaveComp->GetOrCreateGuid());
+			if (!Saved) { continue; }
 
-            // Restore temporary attribute bonuses so RecalculateBattleStats (called
-            // inside BattleState::InitializeFromSave) produces the correct values.
-            Stats->TemporaryAttributeBonuses = Saved->TemporaryAttributeBonuses;
+			Stats->TemporaryAttributeBonuses = Saved->TemporaryAttributeBonuses;
+			BM->RestoreCooldowns(Saved->Cooldowns);
 
-            // Restore cooldowns after abilities have been granted by EnterMode.
-            BM->RestoreCooldowns(Saved->Cooldowns);
+			UE_LOG(
+				LogTemp,
+				Log,
+				TEXT("[CombatManager] RestoreCombatFromSave: restored %s — %d cooldown(s)"),
+				*GetNameSafe(Unit),
+				Saved->Cooldowns.Num()
+			);
+		}
+	};
 
-            UE_LOG(LogTemp, Log,
-                TEXT("[CombatManager] RestoreCombatFromSave: restored %s — %d cooldown(s)"),
-                *GetNameSafe(Unit), Saved->Cooldowns.Num());
-        }
-    };
-
-    RestoreUnits(SpawnedAllies);
-    RestoreUnits(SpawnedEnemies);
+	RestoreUnits(SpawnedAllies);
+	RestoreUnits(SpawnedEnemies);
 }

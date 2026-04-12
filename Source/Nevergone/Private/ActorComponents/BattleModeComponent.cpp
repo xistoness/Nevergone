@@ -60,13 +60,6 @@ UUnitStatsComponent* UBattleModeComponent::GetUnitStats() const
     return nullptr;
 }
 
-void UBattleModeComponent::HandleUnitDeath(ACharacterBase* OwnerCharacter)
-{
-    FVector DeadLocation = OwnerCharacter->GetActorLocation();
-    DeadLocation.Z -= 1000.f;
-    OwnerCharacter->SetActorLocation(DeadLocation);
-}
-
 void UBattleModeComponent::EnterMode()
 {
     Super::EnterMode();
@@ -85,7 +78,6 @@ void UBattleModeComponent::EnterMode()
 
     if (UUnitStatsComponent* Stats = GetUnitStats())
     {
-        Stats->OnUnitDeath.AddUObject(this, &UBattleModeComponent::HandleUnitDeath);
     }
 
     ASC->InitAbilityActorInfo(Character, Character);
@@ -101,7 +93,6 @@ void UBattleModeComponent::ExitMode()
 
     if (UUnitStatsComponent* Stats = GetUnitStats())
     {
-        Stats->OnUnitDeath.RemoveAll(this);
     }
 }
 

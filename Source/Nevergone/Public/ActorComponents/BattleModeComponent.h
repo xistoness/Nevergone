@@ -56,7 +56,6 @@ public:
     ) override;
     UUnitStatsComponent* GetUnitStats() const;
 
-    void HandleUnitDeath(ACharacterBase* OwnerCharacter);
     virtual void EnterMode() override;
     virtual void ExitMode() override;
 

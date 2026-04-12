@@ -198,7 +198,7 @@ void UGameContextManager::RequestBattlePreparation(
 
 void UGameContextManager::RequestAbortBattle()
 {
-	ActiveCombatManager->CancelPreparation();
+	ActiveCombatManager->CancelPreparation(ActiveBattleSession.EncounterSource);
 	ActiveBattlePrepContext = nullptr;
 }
 
@@ -273,11 +273,31 @@ void UGameContextManager::ReturnToExploration()
 	APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0);
 	if (!PC) { return; }
 
+	// Resolve the spawn transform. If the saved transform is at the world origin
+	// (old save without the field, or a restore where it was never populated),
+	// fall back to the EncounterVolume's location so the pawn lands somewhere valid.
+	FTransform SpawnTransform = ActiveBattleSession.ExplorationCharacterTransform;
+	if (SpawnTransform.GetTranslation().IsNearlyZero())
+	{
+		if (ActiveBattleSession.EncounterSource.IsValid())
+		{
+			SpawnTransform = ActiveBattleSession.EncounterSource->GetActorTransform();
+			UE_LOG(LogTemp, Warning,
+				TEXT("[GameContextManager] ReturnToExploration: saved transform is zero — using EncounterVolume position as fallback."));
+		}
+	}
+
 	// Spawn the exploration character before entering Exploration state so
 	// TowerFloorGameMode::HandleGameContextChanged can possess it immediately.
+	// AdjustIfPossibleButAlwaysSpawn prevents residual combat-actor physics
+	// from silently blocking the spawn and leaving the player without a pawn.
+	FActorSpawnParameters ExploreSpawnParams;
+	ExploreSpawnParams.SpawnCollisionHandlingOverride =
+		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 	ACharacterBase* NewCharacter = World->SpawnActor<ACharacterBase>(
 		ActiveBattleSession.ExplorationCharacterClass,
-		ActiveBattleSession.ExplorationCharacterTransform);
+		SpawnTransform,
+		ExploreSpawnParams);
 
 	if (!IsValid(NewCharacter))
 	{
@@ -297,10 +317,25 @@ void UGameContextManager::ForceReenterExploration()
 	UWorld* World = GetWorld();
 	if (!World) { return; }
 
-	// Spawn the saved exploration character.
+	// Apply the same zero-transform fallback as ReturnToExploration.
+	FTransform ForceSpawnTransform = ActiveBattleSession.ExplorationCharacterTransform;
+	if (ForceSpawnTransform.GetTranslation().IsNearlyZero())
+	{
+		if (ActiveBattleSession.EncounterSource.IsValid())
+		{
+			ForceSpawnTransform = ActiveBattleSession.EncounterSource->GetActorTransform();
+			UE_LOG(LogTemp, Warning,
+				TEXT("[GameContextManager] ForceReenterExploration: saved transform is zero — using EncounterVolume position as fallback."));
+		}
+	}
+
+	FActorSpawnParameters ForceSpawnParams;
+	ForceSpawnParams.SpawnCollisionHandlingOverride =
+		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 	ACharacterBase* NewCharacter = World->SpawnActor<ACharacterBase>(
 		ActiveBattleSession.ExplorationCharacterClass,
-		ActiveBattleSession.ExplorationCharacterTransform);
+		ForceSpawnTransform,
+		ForceSpawnParams);
 
 	if (!IsValid(NewCharacter))
 	{
@@ -412,8 +447,23 @@ void UGameContextManager::HandleCombatFinished(EBattleUnitTeam WinningTeam)
 	if (UPartyManagerSubsystem* PartyManager =
 		GetGameInstance()->GetSubsystem<UPartyManagerSubsystem>())
 	{
+		// Build SourceIndex -> actor map so WriteBackBattleResults can correlate
+		// survivors correctly regardless of array ordering.
+		// GeneratedParty[i] was spawned as SourceIndex=i; units absent from the
+		// map (died or failed to spawn) will be written back with HP=0.
+		TMap<int32, ACharacterBase*> AliveBySourceIndex;
+		for (ACharacterBase* Ally : ActiveCombatManager->GetSpawnedAllies())
+		{
+			if (!IsValid(Ally)) { continue; }
+			const int32 Idx = ActiveCombatManager->FindStableSourceIndexForUnit(Ally, EBattleUnitTeam::Ally);
+			if (Idx != INDEX_NONE)
+			{
+				AliveBySourceIndex.Add(Idx, Ally);
+			}
+		}
+
 		PartyManager->WriteBackBattleResults(
-			ActiveCombatManager->GetSpawnedAllies(),
+			AliveBySourceIndex,
 			ActiveBattleSession.GeneratedParty
 		);
 	}
@@ -447,9 +497,19 @@ ACharacterBase* UGameContextManager::GetSavedExplorationCharacter() const
 	return ActiveBattleSession.ExplorationCharacter;
 }
 
+TSubclassOf<ACharacterBase> UGameContextManager::GetExplorationCharacterClass() const
+{
+	return ActiveBattleSession.ExplorationCharacterClass;
+}
+
 FTransform UGameContextManager::GetSavedExplorationTransform() const
 {
 	return ActiveBattleSession.ExplorationCharacterTransform;
+}
+
+float UGameContextManager::GetSavedExplorationArmLength() const
+{
+	return ActiveBattleSession.ExplorationArmLength;
 }
 
 void UGameContextManager::ClearBattleSession()
@@ -554,6 +614,42 @@ void UGameContextManager::RequestBattleCombatRestore(const FSavedCombatSession& 
     ActiveBattleSession.Reset();
     ActiveBattleSession.bSessionActive    = true;
     ActiveBattleSession.EncounterSource   = EncounterVolume;
+
+    // Restore exploration character data from the saved combat session so
+    // ReturnToExploration() can respawn the player pawn after combat ends.
+    // On a normal flow this data lives in FBattleSessionData (populated by
+    // RequestBattlePreparation); on a restore there is no exploration character
+    // in memory, so we serialized it into FSavedCombatSession at save time.
+    if (SavedSession.ExplorationCharacterClass.IsValid())
+    {
+        ActiveBattleSession.ExplorationCharacterClass     = SavedSession.ExplorationCharacterClass.LoadSynchronous();
+        ActiveBattleSession.ExplorationCharacterTransform = SavedSession.ExplorationCharacterTransform;
+        ActiveBattleSession.ExplorationControlRotation    = SavedSession.ExplorationControlRotation;
+        ActiveBattleSession.ExplorationArmLength          = SavedSession.ExplorationArmLength;
+        UE_LOG(LogTemp, Log,
+            TEXT("[GameContextManager] RequestBattleCombatRestore: exploration class restored — %s"),
+            *GetNameSafe(ActiveBattleSession.ExplorationCharacterClass));
+    }
+    else
+    {
+        // Fallback for saves created before this field was serialized.
+        // Use the GameMode's DefaultPawnClass if set.
+        if (ATowerFloorGameMode* GM = GetActiveFloorGameMode())
+        {
+            if (GM->DefaultPawnClass && GM->DefaultPawnClass->IsChildOf(ACharacterBase::StaticClass()))
+            {
+                ActiveBattleSession.ExplorationCharacterClass = GM->DefaultPawnClass;
+                UE_LOG(LogTemp, Warning,
+                    TEXT("[GameContextManager] RequestBattleCombatRestore: exploration class missing in save — falling back to DefaultPawnClass (%s). Set DefaultPawnClass in BP_TowerFloorGameMode."),
+                    *GetNameSafe(ActiveBattleSession.ExplorationCharacterClass));
+            }
+            else
+            {
+                UE_LOG(LogTemp, Error,
+                    TEXT("[GameContextManager] RequestBattleCombatRestore: no exploration class available — ReturnToExploration will fail. Set DefaultPawnClass in BP_TowerFloorGameMode."));
+            }
+        }
+    }
 
     APawn* DefaultPawn = UGameplayStatics::GetPlayerPawn(World, 0);
     if (DefaultPawn)
@@ -660,13 +756,10 @@ void UGameContextManager::RequestBattleCombatRestore(const FSavedCombatSession& 
     CreateCombatManager();
     ActiveCombatManager->EnterPreparation(*ActiveBattlePrepContext);
 
-    // --- 6. Apply TemporaryAttributeBonuses before BattleState initializes ---
-    // RestoreCombatFromSave writes TemporaryAttributeBonuses onto UnitStatsComponent
-    // so that RecalculateBattleStats (called inside StartCombatFromSave) produces
-    // the correct derived stats.
-    ActiveCombatManager->RestoreCombatFromSave(SavedSession);
-
-    // --- 7. Start combat using the save-aware initialization path ---
+    // --- 6. Start combat using the save-aware initialization path ---
+    // NOTE: RestoreCombatFromSave is called inside StartCombatFromSave (after units
+    // are spawned). Calling it here would be a no-op because SpawnedAllies/Enemies
+    // are not yet populated. The single call inside StartCombatFromSave is authoritative.
     // This calls BattleState::InitializeFromSave instead of Initialize,
     // restoring CurrentHP, CurrentAP, and ActiveStatusEffects without
     // re-applying passive effects.

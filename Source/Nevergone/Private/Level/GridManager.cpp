@@ -439,14 +439,23 @@ void UGridManager::RemoveActorFromGrid(AActor* Actor)
 		return;
 	}
 
-	const FIntPoint Coord = WorldToGrid(Actor->GetActorLocation());
-
-	if (!IsValidCoord(Coord))
+	// Look up by actor pointer, not by recalculating world-to-grid from current location.
+	// Recalculation is unreliable: the actor may have moved slightly (Z snap, physics
+	// adjustment) between registration and removal, causing WorldToGrid to return a
+	// different coordinate than what was stored, leaving the tile permanently occupied.
+	if (const FIntPoint* RegisteredCoord = OccupancyMap.FindKey(Actor))
 	{
-		return;
+		UE_LOG(LogTemp, Log,
+			TEXT("[GridManager] RemoveActorFromGrid: removed %s from tile (%d, %d)"),
+			*GetNameSafe(Actor), RegisteredCoord->X, RegisteredCoord->Y);
+		OccupancyMap.Remove(*RegisteredCoord);
 	}
-
-	OccupancyMap.Remove(Coord);
+	else
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[GridManager] RemoveActorFromGrid: %s not found in OccupancyMap — already removed or never registered"),
+			*GetNameSafe(Actor));
+	}
 }
 
 bool UGridManager::FindClosestValidTileToWorld(
