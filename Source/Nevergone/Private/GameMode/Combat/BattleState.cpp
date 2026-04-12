@@ -139,6 +139,16 @@ void UBattleState::InitializeFromSave(
             NewState.CurrentHP           = Saved->CurrentHP;
             NewState.CurrentActionPoints = Saved->CurrentActionPoints;
 
+            // Sync UnitStatsComponent::PersistentHP with the saved combat HP so that
+            // CombatEventBus::NotifyDamageApplied's IsAlive() guard reads the correct value.
+            // Without this, the UnitStatsComponent may hold a stale HP from the world save
+            // (e.g. 0 if the unit died in a previous session), causing IsAlive() to return
+            // false and OnUnitDied to never broadcast when the unit is killed mid-combat.
+            if (Stats)
+            {
+                Stats->SetCurrentHP(Saved->CurrentHP);
+            }
+
             // Restore status effects WITHOUT calling ApplyPassiveEffect.
             // All stat changes are already baked into the restored TemporaryAttributeBonuses
             // and the FBattleUnitState fields above. We only need the list to be intact
@@ -169,6 +179,38 @@ void UBattleState::InitializeFromSave(
                 // Left null if caster is dead — tick formulas handle null caster gracefully.
 
                 NewState.ActiveStatusEffects.Add(MoveTemp(Restored));
+
+                // Re-grant the ASC gameplay tag for this status so that any system
+                // querying HasMatchingGameplayTag (e.g. immunity checks, stun checks)
+                // sees the correct state after a mid-combat reload.
+                // We grant only once per unique tag even if multiple instances exist,
+                // mirroring the logic in StatusEffectManager::ApplyStatusEffect.
+                const FGameplayTag& StatusTag = Def->StatusTag;
+                if (StatusTag.IsValid())
+                {
+                    if (UAbilitySystemComponent* ASC = Unit->GetAbilitySystemComponent())
+                    {
+                        // Check whether any earlier iteration already granted this tag
+                        // for this unit to avoid stacking the loose tag count.
+                        const bool bTagAlreadyGranted = NewState.ActiveStatusEffects.ContainsByPredicate(
+                            [&StatusTag, &Restored](const FActiveStatusEffect& E)
+                            {
+                                // Compare against all entries except the one we just added.
+                                return E.InstanceId != Restored.InstanceId
+                                    && E.Definition
+                                    && E.Definition->StatusTag == StatusTag;
+                            }
+                        );
+
+                        if (!bTagAlreadyGranted)
+                        {
+                            ASC->AddLooseGameplayTags(FGameplayTagContainer(StatusTag));
+                            UE_LOG(LogTemp, Log,
+                                TEXT("[BattleState] InitializeFromSave: re-granted ASC tag '%s' to %s"),
+                                *StatusTag.ToString(), *GetNameSafe(Unit));
+                        }
+                    }
+                }
             }
 
             UE_LOG(LogTemp, Log,

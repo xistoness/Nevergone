@@ -128,6 +128,11 @@ void ATowerFloorGameMode::HandleGameContextChanged(EGameContextState NewState)
 
 				SwapPlayerControllers(OldPC, NewPC);
 				ActivePlayerController = NewPC;
+
+				// Destroy the old controller so its widgets (ActionHotbar, BattleHUD)
+				// are removed from the viewport. SwapPlayerControllers does NOT
+				// destroy the old controller — it must be done explicitly here.
+				OldPC->Destroy();
 			}
 			
 			if (Audio)
@@ -293,6 +298,12 @@ APlayerController* ATowerFloorGameMode::SpawnAndSwapPlayerController(
 
 	SwapPlayerControllers(OldPC, NewPC);
 	ActivePlayerController = NewPC;
+
+	// Destroy the old controller so its widgets (ActionHotbar, BattleHUD, etc.)
+	// are removed from the viewport. SwapPlayerControllers transfers the net
+	// connection but does NOT destroy the old controller — leaving it alive
+	// causes its AddToViewport widgets to persist across context transitions.
+	OldPC->Destroy();
 
 	return NewPC;
 }

@@ -47,7 +47,9 @@ public:
 	UCombatManager* GetActiveCombatManager() const { return ActiveCombatManager; }
 
 	ACharacterBase* GetSavedExplorationCharacter() const;
+	TSubclassOf<ACharacterBase> GetExplorationCharacterClass() const;
 	FTransform GetSavedExplorationTransform() const;
+	float GetSavedExplorationArmLength() const;
 	
 	UBattlePreparationContext* GetActivePrepContext() const;
 	UBattleResultsContext* GetActiveResultsContext() const;
