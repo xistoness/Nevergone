@@ -8,6 +8,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Widgets/Menu/MenuPanelBase.h"
+#include "World/QuestSubsystem.h"
 
 class UAudioSubsystem;
 
@@ -119,6 +120,8 @@ void UMainMenuWidget::HandleNewGameConfirmed()
 	Context.FromLevel = NAME_None;
 	Context.ToLevel   = FirstLevelName;
 	GI->RequestLevelChange(FirstLevelName, Context);
+	UQuestSubsystem* Quests = GI->GetSubsystem<UQuestSubsystem>();
+	Quests->StartQuest(FName("QD_FirstQuest"));
 }
 
 void UMainMenuWidget::HandleContinueConfirmed()

@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "ActorComponents/UnitStatsComponent.h"
 #include "Data/ActorSaveData.h"
+#include "Data/QuestData.h"
 #include "GameFramework/SaveGame.h"
 #include "Data/PartyData.h"
 #include "Data/ProgressionData.h"
@@ -189,6 +190,12 @@ public:
 	
 	UPROPERTY(SaveGame)
 	TMap<FName, FLevelSaveData> SavedActorsByLevel;
+	
+	UPROPERTY(SaveGame)
+	TMap<FGuid, int32> NPCAffinityMap;
+
+	UPROPERTY(SaveGame)
+	TMap<FName, FQuestRuntimeState> QuestRuntimeStates;
 	
 	// Display name shown in the Load Game list (e.g. "Floor 3 — Encounter 2")
 	UPROPERTY(SaveGame)

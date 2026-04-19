@@ -13,6 +13,9 @@
 #include "Kismet/GameplayStatics.h"
 #include "Party/PartyManagerSubsystem.h"
 #include "Widgets/LoadingScreenWidget.h"
+#include "World/FlagsSubsystem.h"
+#include "World/NPCAffinitySubsystem.h"
+#include "World/QuestSubsystem.h"
 #include "World/WorldManagerSubsystem.h"
 
 
@@ -439,6 +442,13 @@ void UMyGameInstance::CommitSave() const
 	ActiveSave->PartyData = PartyData;
 	ActiveSave->ProgressionData = ProgressionData;
 	ActiveSave->GlobalFlags = GlobalFlags;
+	
+	if (UFlagsSubsystem* FlagsSys = GetSubsystem<UFlagsSubsystem>())
+		FlagsSys->FlushToGameInstance();
+	if (UNPCAffinitySubsystem* AffinitySys = GetSubsystem<UNPCAffinitySubsystem>())
+		AffinitySys->FlushToGameInstance();
+	if (UQuestSubsystem* QuestSys = GetSubsystem<UQuestSubsystem>())
+		QuestSys->FlushToGameInstance();
 }
 
 bool UMyGameInstance::LoadSaveSlot(const FString& SlotName)

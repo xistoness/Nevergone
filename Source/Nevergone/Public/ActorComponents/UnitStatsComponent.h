@@ -6,6 +6,7 @@
 #include "Components/ActorComponent.h"
 #include "Interfaces/SaveParticipant.h"
 #include "Types/BattleTypes.h"
+#include "Types/UnitAttributeTypes.h"
 #include "UnitStatsComponent.generated.h"
 
 class UUnitDefinition;
@@ -22,29 +23,47 @@ struct FUnitAttributes
     GENERATED_BODY()
 
     UPROPERTY(SaveGame, EditDefaultsOnly, BlueprintReadOnly)
-    int32 Constitution = 0;
+    int32 Constitution = 1;
 
     UPROPERTY(SaveGame, EditDefaultsOnly, BlueprintReadOnly)
-    int32 Strength = 0;
+    int32 Strength = 1;
 
     UPROPERTY(SaveGame, EditDefaultsOnly, BlueprintReadOnly)
-    int32 Dexterity = 0;
+    int32 Dexterity = 1;
 
     UPROPERTY(SaveGame, EditDefaultsOnly, BlueprintReadOnly)
-    int32 Knowledge = 0;
+    int32 Knowledge = 1;
 
     UPROPERTY(SaveGame, EditDefaultsOnly, BlueprintReadOnly)
-    int32 Focus = 0;
+    int32 Focus = 1;
 
     UPROPERTY(SaveGame, EditDefaultsOnly, BlueprintReadOnly)
-    int32 Technique = 0;
+    int32 Technique = 1;
 
     UPROPERTY(SaveGame, EditDefaultsOnly, BlueprintReadOnly)
-    int32 Evasiveness = 0;
+    int32 Evasiveness = 1;
 
     UPROPERTY(SaveGame, EditDefaultsOnly, BlueprintReadOnly)
-    int32 Speed = 0;
+    int32 Speed = 1;
 };
+
+// GetAttributeValue — defined here (after FUnitAttributes) so the body can
+// reference struct fields. EUnitAttribute is declared in UnitAttributeTypes.h.
+inline int32 GetAttributeValue(const FUnitAttributes& Attrs, EUnitAttribute Attr)
+{
+    switch (Attr)
+    {
+    case EUnitAttribute::Constitution:  return Attrs.Constitution;
+    case EUnitAttribute::Strength:      return Attrs.Strength;
+    case EUnitAttribute::Dexterity:     return Attrs.Dexterity;
+    case EUnitAttribute::Knowledge:     return Attrs.Knowledge;
+    case EUnitAttribute::Focus:         return Attrs.Focus;
+    case EUnitAttribute::Technique:     return Attrs.Technique;
+    case EUnitAttribute::Evasiveness:   return Attrs.Evasiveness;
+    case EUnitAttribute::Speed:         return Attrs.Speed;
+    default:                            return 0;
+    }
+}
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class NEVERGONE_API UUnitStatsComponent : public UActorComponent, public ISaveParticipant
