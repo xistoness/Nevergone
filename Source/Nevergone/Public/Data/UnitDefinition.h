@@ -18,6 +18,12 @@ public:
     // --- Identity ---
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
     FText DisplayName;
+    
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+    TObjectPtr<UTexture2D> DisplayPortrait;
+    
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+    FText ClassName;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
     int32 MaxLevel = 30;

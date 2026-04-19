@@ -10,52 +10,65 @@
 
 class UFloorEncounterData;
 
+DECLARE_MULTICAST_DELEGATE(FOnPartyRosterChanged);
+
 UCLASS()
 class NEVERGONE_API UPartyManagerSubsystem : public UGameInstanceSubsystem
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 public:
-	/* --- Party state --- */
-	const FPartyData& GetPartyData() const;
-	
-	// --- Party mutation (temporary / debug / future save integration) ---
-	void AddPartyMember(const FPartyMemberData& NewMember);
-	void ClearParty();
+    /* --- Party state --- */
+    const FPartyData& GetPartyData() const;
 
-	/* --- Battle integration --- */
-	void BuildBattleParty(
-		const UFloorEncounterData* EncounterData,
-		TArray<FGeneratedPlayerData>& OutPlayerParty
-	) const;
-	
-	// Called by GameContextManager after combat ends, before actors are destroyed.
-	// Reads PersistentHP from each ally's UnitStatsComponent and updates PartyData.
-	// AliveActorsBySourceIndex maps each alive ally's SourceIndex to its actor.
-	// GeneratedParty[i] entered this combat as SourceIndex=i; members absent
-	// from the map died during combat and are written back with HP=0.
-	void WriteBackBattleResults(const TMap<int32, ACharacterBase*>& AliveActorsBySourceIndex,
-								 const TArray<FGeneratedPlayerData>& GeneratedParty);
-	
-	// Called once after GameInstance loads a save slot, and after every level load.
-	// Pulls the authoritative PartyData from GameInstance into this subsystem.
-	void SyncFromGameInstance();
+    // Returns only members flagged as active (battle party, max 4).
+    TArray<FPartyMemberData*> GetActiveMembers();
 
-	// Called after WriteBackBattleResults to push updated data back to GameInstance
-	// so CommitSave picks it up correctly.
-	void FlushToGameInstance();
+    // Returns all members NOT flagged as active (bench/roster).
+    TArray<FPartyMemberData*> GetBenchMembers();
+
+    // Returns the number of currently active party members.
+    int32 GetActiveMemberCount() const;
+
+    /* --- Party mutation --- */
+    void AddPartyMember(const FPartyMemberData& NewMember);
+    void ClearParty();
+
+    // Sets a member's active flag by CharacterID.
+    // Enforces MaxPartySize — returns false if the party is already full
+    // and the member is not already active.
+    bool SetMemberActive(const FGuid& CharacterID, bool bActive);
+
+    // Swaps the active state between two members by CharacterID.
+    // Used by the Party Manager UI when replacing an active slot with a bench member.
+    bool SwapActiveMembers(const FGuid& IncomingID, const FGuid& OutgoingID);
+
+    /* --- Battle integration --- */
+    void BuildBattleParty(
+        const UFloorEncounterData* EncounterData,
+        TArray<FGeneratedPlayerData>& OutPlayerParty
+    ) const;
+
+    void WriteBackBattleResults(const TMap<int32, ACharacterBase*>& AliveActorsBySourceIndex,
+                                const TArray<FGeneratedPlayerData>& GeneratedParty);
+
+    void SyncFromGameInstance();
+    void FlushToGameInstance();
+
+    // Fired whenever the active/bench composition changes.
+    // UI widgets bind to this to refresh without polling.
+    FOnPartyRosterChanged OnRosterChanged;
 
 protected:
-	/* --- Internal helpers --- */
-	void AddBasePartyMembers(
-		TArray<FGeneratedPlayerData>& OutParty
-	) const;
-
-	void AddEncounterGuests(
-		const UFloorEncounterData* EncounterData,
-		TArray<FGeneratedPlayerData>& OutParty
-	) const;
+    void AddBasePartyMembers(TArray<FGeneratedPlayerData>& OutParty) const;
+    void AddEncounterGuests(const UFloorEncounterData* EncounterData,
+                            TArray<FGeneratedPlayerData>& OutParty) const;
 
 private:
-	UPROPERTY()
-	FPartyData PartyData;
+    UPROPERTY()
+    FPartyData PartyData;
+
+    // Resolves MaxHP from the CharacterClass CDO using the UnitDefinition formula,
+    // and fills CurrentHP to MaxHP if the member has never been in combat.
+    // Called by AddPartyMember to guarantee HP fields are never zero.
+    void ResolveInitialHP(FPartyMemberData& InOutMember) const;;
 };
