@@ -46,6 +46,13 @@ public:
 	
 	UFUNCTION(BlueprintCallable)
 	void RequestSaveGame();
+	
+	// Saves to a specific slot by index.
+	// If the slot is empty, creates a new save there.
+	// Updates ActiveSlotName so subsequent saves go to the same slot.
+	UFUNCTION(BlueprintCallable, Category = "Save")
+	void RequestSaveToSlot(int32 SlotIndex);
+	
 	void CommitSave() const;
 	
 	// Loads the save from disk and applies it to the current world
@@ -118,6 +125,13 @@ public:
 	
 	UMySaveGame* GetActiveSave() const;
 	
+	// Public variant used by GameContextManager (which has its own World reference)
+	FName GetSanitizedLevelNameForWorld(UWorld* InWorld) const;
+	
+	// Setters called by subsystem FlushToGameInstance()
+	void SetNPCAffinityMap(const TMap<FGuid, int32>& InMap) { NPCAffinityMap = InMap; }
+	void SetQuestRuntimeStates(const TMap<FName, FQuestRuntimeState>& InStates) { QuestRuntimeStates = InStates; }
+	
 	// Event Broadcasting
 	//OnRestoreParty.Broadcast(PartyData);
 	//OnRestoreProgress.Broadcast(ProgressionData);
@@ -129,6 +143,17 @@ public:
 	FOnSaveLoaded OnSaveLoaded;
 	FOnPartyChanged OnPartyChanged;
 	FOnSaveRequested OnSaveRequested;
+	
+	UPROPERTY()
+	TMap<FName, bool> GlobalFlags;
+	
+	// Intermediate runtime caches — mirrors of what subsystems manage.
+	// CommitSave copies these into ActiveSave atomically.
+	UPROPERTY()
+	TMap<FGuid, int32> NPCAffinityMap;
+
+	UPROPERTY()
+	TMap<FName, FQuestRuntimeState> QuestRuntimeStates;
 	
 	
 	// Debugging
@@ -201,9 +226,6 @@ private:
 	FProgressionData ProgressionData;
 	
 	UPROPERTY()
-	TMap<FName, bool> GlobalFlags;
-	
-	UPROPERTY()
 	UGameContextManager* GameContextManager;
 	
 	bool bDidInitialWorldRestore = false;
@@ -214,6 +236,20 @@ private:
 	
 	int32 FindNextAvailableSlot() const;
 	
+	// Builds the save display name from the current level and party leader.
+	// Format: "LevelName - LeaderName - Lv. X"
+	FString BuildSaveDisplayName() const;
+	
+	// Returns all slot indices that have a save file on disk.
+	// Scans sequentially until MaxScanIndex consecutive misses.
+	TArray<int32> FindOccupiedSlotIndices() const;
+
+	// Returns the next slot index that does not exist on disk.
+	int32 AllocateNewSlotIndex() const;
+	
+	FName GetSanitizedLevelName() const;
+
+	static constexpr int32 MaxSlotScanGap = 10; // stop scanning after 10 consecutive misses
 	
 	// LEVEL TRANSITION // 
 	

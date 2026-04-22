@@ -240,13 +240,11 @@ void UQuestSubsystem::SyncFromGameInstance()
     UMyGameInstance* GI = Cast<UMyGameInstance>(GetGameInstance());
     if (!GI) { return; }
 
-    if (const UMySaveGame* Save = GI->GetActiveSave())
-    {
-        QuestRuntimeStates = Save->QuestRuntimeStates;
-        UE_LOG(LogTemp, Log,
-            TEXT("[QuestSubsystem] SyncFromGameInstance: loaded %d quest runtime states."),
-            QuestRuntimeStates.Num());
-    }
+    QuestRuntimeStates = GI->QuestRuntimeStates;
+
+    UE_LOG(LogTemp, Log,
+        TEXT("[QuestSubsystem] SyncFromGameInstance: loaded %d quest runtime states."),
+        QuestRuntimeStates.Num());
 }
 
 void UQuestSubsystem::FlushToGameInstance()
@@ -254,13 +252,19 @@ void UQuestSubsystem::FlushToGameInstance()
     UMyGameInstance* GI = Cast<UMyGameInstance>(GetGameInstance());
     if (!GI) { return; }
 
-    if (UMySaveGame* Save = GI->GetActiveSave())
-    {
-        Save->QuestRuntimeStates = QuestRuntimeStates;
-        UE_LOG(LogTemp, Log,
-            TEXT("[QuestSubsystem] FlushToGameInstance: flushed %d quest runtime states."),
-            QuestRuntimeStates.Num());
-    }
+    GI->SetQuestRuntimeStates(QuestRuntimeStates);
+
+    UE_LOG(LogTemp, Log,
+        TEXT("[QuestSubsystem] FlushToGameInstance: flushed %d quest runtime states."),
+        QuestRuntimeStates.Num());
+}
+
+void UQuestSubsystem::Reset()
+{
+    QuestRuntimeStates.Empty();
+    FlushToGameInstance();
+
+    UE_LOG(LogTemp, Log, TEXT("[QuestSubsystem] Reset: all quest runtime states cleared."));
 }
 
 // ---------------------------------------------------------------------------

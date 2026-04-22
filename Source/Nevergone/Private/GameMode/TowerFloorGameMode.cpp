@@ -88,6 +88,14 @@ void ATowerFloorGameMode::TeardownFloor()
 	// Cleanup level-wide systems
 }
 
+APawn* ATowerFloorGameMode::SpawnDefaultPawnFor_Implementation(AController* NewPlayer, AActor* StartSpot)
+{
+	// Returning nullptr prevents AGameModeBase::SpawnDefaultPawnFor from
+	// spawning anything. GameContextManager is responsible for spawning
+	// and possessing the exploration pawn.
+	return nullptr;
+}
+
 void ATowerFloorGameMode::HandleGameContextChanged(EGameContextState NewState)
 {
 	UAudioSubsystem* Audio = nullptr;
@@ -100,77 +108,82 @@ void ATowerFloorGameMode::HandleGameContextChanged(EGameContextState NewState)
 	switch (NewState)
 	{
 	case EGameContextState::Exploration:
-		{
-			if (!ExplorationControllerClass)
-			{
-				return;
-			}
+	{
+	    if (!ExplorationControllerClass) { return; }
 
-			if (!ActivePlayerController)
-			{
-				ActivePlayerController = UGameplayStatics::GetPlayerController(this, 0);
-			}
+	    if (!ActivePlayerController)
+	    {
+	        ActivePlayerController = UGameplayStatics::GetPlayerController(this, 0);
+	    }
 
-			APlayerController* OldPC = ActivePlayerController;
-			APlayerController* NewPC = nullptr;
+	    APlayerController* OldPC = ActivePlayerController;
+	    APlayerController* NewPC = nullptr;
 
-			if (OldPC && OldPC->IsA(ExplorationControllerClass))
-			{
-				NewPC = OldPC;
-			}
-			else
-			{
-				NewPC = GetWorld()->SpawnActor<APlayerController>(ExplorationControllerClass);
-				if (!NewPC)
-				{
-					return;
-				}
+	    if (OldPC && OldPC->IsA(ExplorationControllerClass))
+	    {
+	        NewPC = OldPC;
+	    }
+	    else
+	    {
+	        NewPC = GetWorld()->SpawnActor<APlayerController>(ExplorationControllerClass);
+	        if (!NewPC) { return; }
 
-				SwapPlayerControllers(OldPC, NewPC);
-				ActivePlayerController = NewPC;
+	        SwapPlayerControllers(OldPC, NewPC);
+	        ActivePlayerController = NewPC;
+	        OldPC->Destroy();
+	    }
 
-				// Destroy the old controller so its widgets (ActionHotbar, BattleHUD)
-				// are removed from the viewport. SwapPlayerControllers does NOT
-				// destroy the old controller — it must be done explicitly here.
-				OldPC->Destroy();
-			}
-			
-			if (Audio)
-			{
-				Audio->PlayMusic(ExplorationMusic, EMusicState::Exploration);
-			}
+	    if (Audio)
+	    {
+	        Audio->PlayMusic(ExplorationMusic, EMusicState::Exploration);
+	    }
 
-			if (GI)
-			{
-				if (UGameContextManager* ContextManager = GI->GetSubsystem<UGameContextManager>())
-				{
-					ACharacterBase* ExplorationCharacter = ContextManager->GetSavedExplorationCharacter();
-					if (ExplorationCharacter)
-					{
-						UE_LOG(LogTemp, Warning,
-							TEXT("[TowerFloorGameMode]: Possessing saved exploration character: %s"),
-							*GetNameSafe(ExplorationCharacter));
+	    if (UGameContextManager* ContextManager = GI->GetSubsystem<UGameContextManager>())
+	    {
+	        // Destroy any pawn the controller currently has before spawning ours.
+	        // On initial load this is null (GetDefaultPawnClassFor returns nullptr),
+	        // post-combat it's the leftover DefaultPawn from before we overrode it.
+	        if (APawn* OldPawn = NewPC->GetPawn())
+	        {
+	            NewPC->UnPossess();
+	            OldPawn->Destroy();
+	        }
 
-						NewPC->Possess(ExplorationCharacter);
+	        // GetSavedExplorationCharacter() is non-null only when returning from
+	        // combat — that actor was saved by RequestBattlePreparation and is
+	        // already in the world at the correct position.
+	        ACharacterBase* ExplorationCharacter = ContextManager->GetSavedExplorationCharacter();
 
-						if (NewPC->GetPawn() == ExplorationCharacter)
-						{
-							UE_LOG(LogTemp, Warning, TEXT("[TowerFloorGameMode]: Exploration character possessed successfully."));
-							ContextManager->ClearBattleSession();
-						}
-						else
-						{
-							UE_LOG(LogTemp, Error, TEXT("[TowerFloorGameMode]: Failed to possess saved exploration character."));
-						}
-					}
-					else
-					{
-						UE_LOG(LogTemp, Error, TEXT("[TowerFloorGameMode]: Saved exploration character is null."));
-					}
-				}
-			}
-			break;
-		}
+	        if (!ExplorationCharacter)
+	        {
+	            // Initial load or Continue — spawn from the leader's ExplorationPawnClass.
+	            // GameContextManager::HandleSaveLoaded has already populated
+	            // ExplorationCharacterClass and ExplorationCharacterTransform from the save.
+	            ExplorationCharacter = ContextManager->SpawnExplorationActorFromClass(
+	                ContextManager->ResolveExplorationPawnClass(ExplorationCharacterClass));
+	        }
+
+	        if (ExplorationCharacter)
+	        {
+	            NewPC->Possess(ExplorationCharacter);
+
+	            if (NewPC->GetPawn() == ExplorationCharacter)
+	            {
+	                UE_LOG(LogTemp, Warning,
+	                    TEXT("[TowerFloorGameMode] Exploration character possessed: %s"),
+	                    *GetNameSafe(ExplorationCharacter));
+
+	                ContextManager->ClearBattleSession();
+	            }
+	            else
+	            {
+	                UE_LOG(LogTemp, Error,
+	                    TEXT("[TowerFloorGameMode] Failed to possess exploration character."));
+	            }
+	        }
+	    }
+	    break;
+	}
 
 	case EGameContextState::BattlePreparation:
 		{

@@ -27,6 +27,8 @@ public:
 	// Single public entry point used after level load
 	UFUNCTION(BlueprintCallable, Category="Save")
 	void RestoreWorldState();
+	
+	FName GetSanitizedLevelKey() const;
 
 private:
 
@@ -39,7 +41,7 @@ private:
 	void SpawnMissingActors();
 	void ResolveActorConflicts();
 	void CallPostRestore();
-
+	
 	// Utilities
 	void ClearCachedData();
 	

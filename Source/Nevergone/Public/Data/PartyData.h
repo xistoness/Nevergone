@@ -12,13 +12,22 @@ struct FPartyMemberData
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FGuid CharacterID;
-    
+
+	// Battle unit BP (APlayerUnitBase subclass) — used by the combat system
+	// and to resolve display name / stats via CDO.
 	UPROPERTY()
 	TSubclassOf<ACharacter> CharacterClass;
 
+	// Exploration pawn BP (ACharacterBase subclass) — the actor spawned in
+	// the world when this member is the party leader.
+	// Leave null to fall back to TowerFloorGameMode::ExplorationCharacterClass
+	// (prototype default).
+	UPROPERTY()
+	TSubclassOf<ACharacter> ExplorationPawnClass;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int32 Level;
-    
+	int32 Level = 1;
+
 	UPROPERTY()
 	float CurrentHP = 0.f;
 
@@ -26,10 +35,8 @@ struct FPartyMemberData
 	float MaxHP = 0.f;
 
 	UPROPERTY()
-	bool bIsAlive;
+	bool bIsAlive = true;
 
-	// Whether this member is in the active battle party (max 4).
-	// Members not active remain in the roster but do not participate in combat.
 	UPROPERTY()
 	bool bIsActivePartyMember = false;
 
@@ -47,7 +54,13 @@ struct FPartyData
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FPartyMemberData> Members;
-    
+
 	UPROPERTY()
 	int32 MaxPartySize = 4;
+
+	// CharacterID of the current party leader.
+	// The leader is the exploration pawn and the first member in combat.
+	// Kept in sync with Members[0] by SetPartyLeader().
+	UPROPERTY()
+	FGuid LeaderID;
 };

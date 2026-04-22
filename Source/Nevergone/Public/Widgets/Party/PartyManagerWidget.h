@@ -115,6 +115,15 @@ private:
     // 2D cursor: col 0 = active panel, col 1 = bench panel.
     int32 CursorCol = 0;
     int32 CursorRow = 0;
+    
+    // State machine for the two-step active-member confirm flow.
+    // None       = no selection in progress
+    // Selected   = first confirm on an active member; waiting for second input
+    enum class EActiveConfirmState : uint8 { None, Selected };
+    EActiveConfirmState ActiveConfirmState = EActiveConfirmState::None;
+
+    // CharacterID of the active member highlighted in step 1.
+    FGuid PendingActiveID;
 
     // CharacterID of the bench member chosen in step 1 of a swap.
     // Invalid GUID means no swap is pending.
