@@ -114,11 +114,9 @@ struct FBattleUnitState
         // State.Charmed      — unit is under enemy control; blocked for its original team's turn
         //                      (TurnManager skips it; the enemy AI picks it up on enemy turn)
         static const FGameplayTag StunnedTag       = FGameplayTag::RequestGameplayTag(TEXT("State.Stunned"));
-        static const FGameplayTag IncapacitatedTag = FGameplayTag::RequestGameplayTag(TEXT("Status.Incapacitated"));
         static const FGameplayTag CharmedTag       = FGameplayTag::RequestGameplayTag(TEXT("State.Charmed"));
 
         return !ASC->HasMatchingGameplayTag(StunnedTag)
-            && !ASC->HasMatchingGameplayTag(IncapacitatedTag)
             && !ASC->HasMatchingGameplayTag(CharmedTag);
     }
 };

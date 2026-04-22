@@ -33,6 +33,10 @@ public:
 	// Called by UMainMenuWidget when this panel is hidden
 	UFUNCTION(BlueprintImplementableEvent, Category = "Menu")
 	void OnPanelDeactivated();
+	
+	// Call from Blueprint when the panel's primary action should execute
+	UFUNCTION(BlueprintCallable, Category = "Menu")
+	void ConfirmPanel();
 
 	// Delegates — subscribed by UMainMenuWidget
 	FOnPanelConfirmed OnPanelConfirmed;
@@ -40,9 +44,7 @@ public:
 
 protected:
 
-	// Call from Blueprint when the panel's primary action should execute
-	UFUNCTION(BlueprintCallable, Category = "Menu")
-	void ConfirmPanel();
+
 
 	// Call from Blueprint to request navigation to another panel by ID
 	// (e.g. "Quit" panel Cancel button navigating back to "Home")

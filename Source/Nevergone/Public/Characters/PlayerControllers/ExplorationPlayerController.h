@@ -7,6 +7,7 @@
 #include "NevergonePlayerController.h"
 #include "ExplorationPlayerController.generated.h"
 
+class UPauseMenuComponent;
 class UQuestSubsystem;
 class UQuestLogWidget;
 class UDialogueWidget;
@@ -22,6 +23,7 @@ enum class EExplorationInputMode : uint8
     Dialogue,
     QuestLog,
     PartyManager,
+    PauseMenu,
 };
 
 UCLASS()
@@ -30,6 +32,9 @@ class NEVERGONE_API AExplorationPlayerController : public ANevergonePlayerContro
     GENERATED_BODY()
 
 public:
+
+    AExplorationPlayerController();
+
     virtual void SetupInputComponent() override;
 
     void ApplyExplorationInputMode();
@@ -55,7 +60,10 @@ public:
     UPROPERTY(EditDefaultsOnly, Category = "Input|UI")
     UInputAction* PartyManagerInput;
 
-    // --- Unified UI navigation (shared by Dialogue, QuestLog, PartyManager) ---
+    UPROPERTY(EditDefaultsOnly, Category = "Input|UI")
+    UInputAction* PauseInput;
+
+    // --- Unified UI navigation ---
     UPROPERTY(EditDefaultsOnly, Category = "Input|UI|Navigation")
     UInputAction* UIConfirmInput;
 
@@ -68,7 +76,6 @@ public:
     UPROPERTY(EditDefaultsOnly, Category = "Input|UI|Navigation")
     UInputAction* UIDownInput;
 
-    // NEW — horizontal panel switching (PartyManager only; ignored by other modes)
     UPROPERTY(EditDefaultsOnly, Category = "Input|UI|Navigation")
     UInputAction* UILeftInput;
 
@@ -98,8 +105,14 @@ protected:
     UPROPERTY()
     UPartyManagerWidget* PartyManagerWidget = nullptr;
 
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Pause")
+    UPauseMenuComponent* PauseMenuComponent;
+
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Input")
     EExplorationInputMode CurrentInputMode = EExplorationInputMode::Gameplay;
+
+    // The mode active before the pause menu opened — restored on close.
+    EExplorationInputMode PrePauseInputMode = EExplorationInputMode::Gameplay;
 
     virtual void BeginPlay() override;
     virtual void OnPossess(APawn* InPawn) override;
@@ -108,7 +121,6 @@ protected:
 
 private:
 
-    // --- Input handlers ---
     void HandleInteract();
     void HandleQuestLog();
     void HandlePartyManager();
@@ -119,12 +131,13 @@ private:
     void HandleUILeft();
     void HandleUIRight();
 
-    // --- Widget creation ---
+    void HandlePauseOpened();
+    void HandlePauseClosed();
+
     void CreateDialogueWidget();
     void CreateQuestLogWidget();
     void CreatePartyManagerWidget();
 
-    // --- Subsystem binding ---
     void BindDialogueSubsystem();
     void BindQuestSubsystem();
     void HandleDialogueStarted();

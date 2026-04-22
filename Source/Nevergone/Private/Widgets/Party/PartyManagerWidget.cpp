@@ -45,7 +45,7 @@ void UPartyManagerWidget::RefreshPartyManager()
     if (!MemberEntryWidgetClass)
     {
         UE_LOG(LogTemp, Error,
-            TEXT("[PartyManagerWidget] MemberEntryWidgetClass not set — cannot build entries."));
+            TEXT("[PartyManagerWidget] MemberEntryWidgetClass not set."));
         return;
     }
 
@@ -53,40 +53,46 @@ void UPartyManagerWidget::RefreshPartyManager()
     AllEntries.Reset();
     ActiveEntryCount = 0;
 
-    // Invalidate any pending swap on full rebuild to avoid stale GUIDs
+    // Reset all pending state on full rebuild
     PendingSwapIncomingID.Invalidate();
+    PendingActiveID.Invalidate();
+    ActiveConfirmState = EActiveConfirmState::None;
     BP_SetSwapPendingState(false, FText::GetEmpty());
 
-    const FPartyData& Data = PartySubsystem->GetPartyData();
+    const FPartyData& Data         = PartySubsystem->GetPartyData();
+    const FGuid       LeaderID     = Data.LeaderID;
 
-    // --- Col 0: active members ---
+    // Col 0: active members
     for (const FPartyMemberData& Member : Data.Members)
     {
         if (!Member.bIsActivePartyMember) { continue; }
 
-        UPartyMemberEntryWidget* Entry = CreateWidget<UPartyMemberEntryWidget>(this, MemberEntryWidgetClass);
+        UPartyMemberEntryWidget* Entry =
+            CreateWidget<UPartyMemberEntryWidget>(this, MemberEntryWidgetClass);
         if (!Entry) { continue; }
 
         Entry->SetMemberData(Member);
+        Entry->SetLeader(Member.CharacterID == LeaderID);
         BP_AddActiveEntry(Entry);
         AllEntries.Add(Entry);
         ++ActiveEntryCount;
     }
 
-    // --- Col 1: bench members ---
+    // Col 1: bench members
     for (const FPartyMemberData& Member : Data.Members)
     {
         if (Member.bIsActivePartyMember) { continue; }
 
-        UPartyMemberEntryWidget* Entry = CreateWidget<UPartyMemberEntryWidget>(this, MemberEntryWidgetClass);
+        UPartyMemberEntryWidget* Entry =
+            CreateWidget<UPartyMemberEntryWidget>(this, MemberEntryWidgetClass);
         if (!Entry) { continue; }
 
         Entry->SetMemberData(Member);
+        Entry->SetLeader(false);
         BP_AddBenchEntry(Entry);
         AllEntries.Add(Entry);
     }
 
-    // Restore cursor to (0,0) after every rebuild
     CursorCol = 0;
     CursorRow = 0;
     ClampCursor();
@@ -171,7 +177,9 @@ void UPartyManagerWidget::ConfirmSelection()
     const FGuid SelectedID = Selected->GetCharacterID();
     const bool  bIsActive  = (CursorCol == 0);
 
-    // --- Step 2: swap pending — user is choosing who to replace ---
+    // -----------------------------------------------------------------------
+    // SWAP PENDING: step 2 — user is choosing which active member to replace
+    // -----------------------------------------------------------------------
     if (PendingSwapIncomingID.IsValid())
     {
         if (bIsActive)
@@ -181,47 +189,99 @@ void UPartyManagerWidget::ConfirmSelection()
                 *PendingSwapIncomingID.ToString(), *SelectedID.ToString());
 
             PartySubsystem->SwapActiveMembers(PendingSwapIncomingID, SelectedID);
-            // RefreshPartyManager fires automatically via OnRosterChanged
+            // RefreshPartyManager fires via OnRosterChanged; state is reset there.
         }
         else
         {
-            // Confirmed on bench again — update the swap candidate
+            // Confirmed on bench again — update the candidate
             PendingSwapIncomingID = SelectedID;
             BP_SetSwapPendingState(true, FText::GetEmpty());
 
             UE_LOG(LogTemp, Log,
-                TEXT("[PartyManagerWidget] Swap candidate updated to ID=%s"), *SelectedID.ToString());
+                TEXT("[PartyManagerWidget] Swap candidate updated to ID=%s"),
+                *SelectedID.ToString());
         }
         return;
     }
 
-    // --- Step 1: no swap pending ---
-    if (!bIsActive)
+    // -----------------------------------------------------------------------
+    // ACTIVE MEMBER SELECTED (step 1): user confirmed an active member
+    // -----------------------------------------------------------------------
+    if (ActiveConfirmState == EActiveConfirmState::Selected)
     {
-        // If there is a free slot in the active party, fill it directly —
-        // no need to ask the player who to replace.
+        if (bIsActive)
+        {
+            if (SelectedID == PendingActiveID)
+            {
+                // Second confirm on the same active member → make them leader
+                UE_LOG(LogTemp, Log,
+                    TEXT("[PartyManagerWidget] SetPartyLeader: ID=%s"),
+                    *SelectedID.ToString());
+
+                PartySubsystem->SetPartyLeader(SelectedID);
+                // OnRosterChanged fires RefreshPartyManager which resets state
+            }
+            else
+            {
+                // Different active member confirmed — update selection
+                PendingActiveID = SelectedID;
+                UpdateSelectionVisual();
+
+                UE_LOG(LogTemp, Log,
+                    TEXT("[PartyManagerWidget] Active selection updated to ID=%s"),
+                    *SelectedID.ToString());
+            }
+        }
+        else
+        {
+            // Confirmed on bench while an active member is selected →
+            // treat bench member as incoming, selected active as outgoing
+            UE_LOG(LogTemp, Log,
+                TEXT("[PartyManagerWidget] Swap from active-select: outgoing=%s incoming=%s"),
+                *PendingActiveID.ToString(), *SelectedID.ToString());
+
+            PartySubsystem->SwapActiveMembers(SelectedID, PendingActiveID);
+            // OnRosterChanged fires RefreshPartyManager which resets state
+        }
+        return;
+    }
+
+    // -----------------------------------------------------------------------
+    // NO PENDING STATE: first input
+    // -----------------------------------------------------------------------
+    if (bIsActive)
+    {
+        // First confirm on an active member — enter selection state
+        ActiveConfirmState = EActiveConfirmState::Selected;
+        PendingActiveID    = SelectedID;
+        UpdateSelectionVisual();
+
+        UE_LOG(LogTemp, Log,
+            TEXT("[PartyManagerWidget] Active member selected (step 1): ID=%s"),
+            *SelectedID.ToString());
+    }
+    else
+    {
+        // Confirmed on bench with no state — auto-activate or begin swap
         const bool bHasOpenSlot = (PartySubsystem->GetActiveMemberCount() < 4);
         if (bHasOpenSlot)
         {
             UE_LOG(LogTemp, Log,
-                TEXT("[PartyManagerWidget] Open slot available — auto-activating bench member ID=%s"),
+                TEXT("[PartyManagerWidget] Open slot — auto-activating bench ID=%s"),
                 *SelectedID.ToString());
 
             PartySubsystem->SetMemberActive(SelectedID, true);
-            // RefreshPartyManager fires automatically via OnRosterChanged
         }
         else
         {
-            // Party is full — begin two-step swap flow
             PendingSwapIncomingID = SelectedID;
             BP_SetSwapPendingState(true, FText::GetEmpty());
 
             UE_LOG(LogTemp, Log,
-                TEXT("[PartyManagerWidget] Party full — swap initiated: bench member ID=%s"),
+                TEXT("[PartyManagerWidget] Party full — swap initiated: bench ID=%s"),
                 *SelectedID.ToString());
         }
     }
-    // Confirming an active member with no pending swap is a no-op for now
 }
 
 bool UPartyManagerWidget::CancelSelection()
@@ -230,12 +290,20 @@ bool UPartyManagerWidget::CancelSelection()
     {
         PendingSwapIncomingID.Invalidate();
         BP_SetSwapPendingState(false, FText::GetEmpty());
-
         UE_LOG(LogTemp, Log, TEXT("[PartyManagerWidget] Pending swap cancelled."));
         return true;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("[PartyManagerWidget] CancelSelection: no pending swap — close signal."));
+    if (ActiveConfirmState == EActiveConfirmState::Selected)
+    {
+        ActiveConfirmState = EActiveConfirmState::None;
+        PendingActiveID.Invalidate();
+        UpdateSelectionVisual();
+        UE_LOG(LogTemp, Log, TEXT("[PartyManagerWidget] Active selection cancelled."));
+        return true;
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("[PartyManagerWidget] CancelSelection: no pending state — close signal."));
     return false;
 }
 

@@ -54,7 +54,7 @@ struct NEVERGONE_API FPlannedSpawn
     GENERATED_BODY()
 
     TSubclassOf<AActor> ActorClass;
-    FTransform PlannedTransform;
+    FTransform PlannedTransform = FTransform::Identity;
 };
 
 class NEVERGONE_API BattleTypes
@@ -156,22 +156,22 @@ struct FActionContext
     bool bIsTileBlocked = false;
 
     UPROPERTY()
-    FIntPoint SourceGridCoord;
+    FIntPoint SourceGridCoord = FIntPoint::ZeroValue;
 
     UPROPERTY()
-    FIntPoint HoveredGridCoord;
+    FIntPoint HoveredGridCoord = FIntPoint::ZeroValue;
 
     UPROPERTY()
-    FIntPoint MovementTargetGridCoord;
+    FIntPoint MovementTargetGridCoord = FIntPoint::ZeroValue;
 
     UPROPERTY()
-    FVector SourceWorldPosition;
+    FVector SourceWorldPosition = FVector::ZeroVector;
 
     UPROPERTY()
-    FVector HoveredWorldPosition;
+    FVector HoveredWorldPosition = FVector::ZeroVector;
 
     UPROPERTY()
-    FVector MovementTargetWorldPosition;
+    FVector MovementTargetWorldPosition = FVector::ZeroVector;
 
     UPROPERTY()
     FGridTraversalParams TraversalParams;
@@ -180,10 +180,10 @@ struct FActionContext
     AActor* LockedTargetActor = nullptr;
 
     UPROPERTY()
-    FIntPoint LockedTargetGridCoord;
+    FIntPoint LockedTargetGridCoord = FIntPoint::ZeroValue;
 
     UPROPERTY()
-    FIntPoint SelectedApproachGridCoord;
+    FIntPoint SelectedApproachGridCoord = FIntPoint::ZeroValue;
 
     UPROPERTY()
     bool bHasLockedTarget = false;
@@ -227,10 +227,10 @@ struct FActionResult
     bool bRequiresMovement = false;
 
     UPROPERTY()
-    FIntPoint MovementTargetGridCoord;
+    FIntPoint MovementTargetGridCoord = FIntPoint::ZeroValue;
 
     UPROPERTY()
-    FVector MovementTargetWorldPosition;
+    FVector MovementTargetWorldPosition = FVector::ZeroVector;
 
     UPROPERTY()
     TArray<FVector> PathPoints;
@@ -257,7 +257,7 @@ struct FGameplayAbilityTargetData_Tile : public FGameplayAbilityTargetData
     GENERATED_BODY()
 
     UPROPERTY()
-    FIntPoint TileCoord;
+    FIntPoint TileCoord = FIntPoint::ZeroValue;
 
     UPROPERTY()
     TWeakObjectPtr<AActor> TargetActor;
@@ -284,10 +284,10 @@ public:
     TSubclassOf<ACharacterBase> ExplorationCharacterClass;
 
     UPROPERTY()
-    ACharacterBase* ExplorationCharacter;
+    ACharacterBase* ExplorationCharacter = nullptr;
 
     UPROPERTY()
-    FTransform ExplorationCharacterTransform;
+    FTransform ExplorationCharacterTransform = FTransform::Identity;
 
     UPROPERTY()
     EBattleUnitTeam WinningTeam = EBattleUnitTeam::None;
@@ -338,5 +338,4 @@ public:
         GeneratedParty.Reset();
         EncounterSource  = nullptr;
     }   
-    
 };

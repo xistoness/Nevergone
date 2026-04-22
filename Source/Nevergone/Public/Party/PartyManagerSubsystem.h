@@ -54,6 +54,19 @@ public:
     void SyncFromGameInstance();
     void FlushToGameInstance();
 
+    // Returns the current party leader data, or nullptr if the party is empty.
+    const FPartyMemberData* GetPartyLeader() const;
+
+    // Sets the member with the given ID as party leader.
+    // Moves them to index 0 in Members and updates FPartyData::LeaderID.
+    // Fires OnRosterChanged and OnLeaderChanged.
+    // Returns false if the ID is not found or is not an active member.
+    bool SetPartyLeader(const FGuid& NewLeaderID);
+
+    // Fired when the leader changes — GameContextManager binds to this
+    // to swap the exploration pawn immediately.
+    FOnPartyRosterChanged OnLeaderChanged;    
+    
     // Fired whenever the active/bench composition changes.
     // UI widgets bind to this to refresh without polling.
     FOnPartyRosterChanged OnRosterChanged;
