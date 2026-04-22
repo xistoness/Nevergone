@@ -43,6 +43,9 @@ public:
     // --- Persistence ---
     void SyncFromGameInstance();
     void FlushToGameInstance();
+    
+    // Clears all affinity entries from memory and flushes the empty state to GameInstance.
+    void Reset();
 
 private:
 

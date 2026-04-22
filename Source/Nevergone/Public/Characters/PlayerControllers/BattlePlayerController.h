@@ -7,6 +7,7 @@
 #include "InputActionValue.h"
 #include "BattlePlayerController.generated.h"
 
+class UPauseMenuComponent;
 class ABattleCameraPawn;
 class UCombatManager;
 class UBattleInputManager;
@@ -22,6 +23,9 @@ class NEVERGONE_API ABattlePlayerController : public ANevergonePlayerController
 	GENERATED_BODY()
 
 public:
+	
+	ABattlePlayerController();
+	
 	// Called when battle starts
 	void EnterBattleMode(UCombatManager* InCombatManager);
 	
@@ -78,6 +82,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Battle|Input|Actions")
 	UInputAction* CameraRotateAction;
 	
+	UPROPERTY(EditDefaultsOnly, Category = "Battle|Input")
+	UInputAction* PauseInput;
+	
 	/* ---------- Input Preview ---------- */
 	
 	bool bHasValidPreview;
@@ -94,6 +101,10 @@ protected:
 	AActor* PreviewBlockedActor;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Preview")
 	AActor* PreviewUIActor;
+	
+	/* ---------- Pause Menu ---------- */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Pause")
+	UPauseMenuComponent* PauseMenuComponent;
 
 	/* ---------- Input handlers ---------- */
 
@@ -162,4 +173,5 @@ private:
 	/** Live battle HUD instance. */
 	UPROPERTY()
 	TObjectPtr<UBattleHUDWidget> BattleHUD;
+	
 };

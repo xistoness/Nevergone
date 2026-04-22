@@ -3,7 +3,7 @@
 
 #include "GameInstance/GameContextManager.h"
 
-#include "EngineUtils.h"
+#include "ActorComponents/UnitStatsComponent.h"
 #include "Characters/CharacterBase.h"
 #include "GameMode/TowerFloorGameMode.h"
 #include "GameMode/CombatManager.h"
@@ -21,9 +21,11 @@
 #include "Types/LevelTypes.h"
 
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameMode/BattleResultsContext.h"
 #include "Kismet/GameplayStatics.h"
+#include "World/WorldManagerSubsystem.h"
 
 
 void UGameContextManager::RequestInitialState(EGameContextState InitialState)
@@ -170,11 +172,10 @@ void UGameContextManager::RequestBattlePreparation(
 			ActiveBattlePrepContext = nullptr;
 			ActiveBattleSession.ResetCombatResults();
 
-			// CurrentState is still Exploration here (EnterState(BattlePreparation)
-			// has not been called yet). ReturnToExploration() would silently no-op
-			// because EnterState guards against re-entering the current state.
-			// ForceReenterExploration() bypasses that guard and broadcasts directly.
-			ForceReenterExploration();
+			//Force return to exploration 
+			//This needs to happen because state is already Exploration
+			//Without forcing, CanEnterState blocks this return
+			ReturnToExploration(true);
 			return;
 		}
 	}
@@ -256,26 +257,81 @@ void UGameContextManager::EnterBattleResults()
 	EnterState(EGameContextState::BattleResults);
 }
 
-void UGameContextManager::ReturnToExploration()
+void UGameContextManager::ReturnToExploration(bool bForce)
 {
-	if (!CanEnterState(EGameContextState::Exploration))
+	// bForce is used when CurrentState is already Exploration but we still need
+	// to re-broadcast — e.g. when battle preparation aborts before EnterState
+	// was ever called, so the state never actually changed.
+	if (!bForce && !CanEnterState(EGameContextState::Exploration))
 	{
-		UE_LOG(LogTemp, Error, TEXT("[GameContextManager]: Cannot return to exploration."));
+		UE_LOG(LogTemp, Error, TEXT("[GameContextManager] ReturnToExploration: cannot enter Exploration state."));
 		return;
 	}
 
+	ACharacterBase* NewCharacter = SpawnExplorationActor();
+	if (!IsValid(NewCharacter)) { return; }
+
+	ActiveBattleSession.ExplorationCharacter = NewCharacter;
+	ActiveResultsContext = nullptr;
+
+	if (bForce)
+	{
+		// Bypass EnterState's same-state guard — update and broadcast directly.
+		CurrentState = EGameContextState::Exploration;
+		UE_LOG(LogTemp, Warning, TEXT("[GameContextManager] ReturnToExploration (forced): broadcasting Exploration state."));
+		OnGameContextChanged.Broadcast(EGameContextState::Exploration);
+	}
+	else
+	{
+		EnterState(EGameContextState::Exploration);
+	}
+}
+
+void UGameContextManager::SyncExplorationActorHP(ACharacterBase* ExplorationActor)
+{
+	if (!IsValid(ExplorationActor)) { return; }
+
+	UUnitStatsComponent* Stats = ExplorationActor->GetUnitStats();
+	if (!Stats) { return; }
+
+	UGameInstance* GI = GetGameInstance();
+	if (!GI) { return; }
+
+	UPartyManagerSubsystem* PartyMgr = GI->GetSubsystem<UPartyManagerSubsystem>();
+	if (!PartyMgr) { return; }
+
+	// The exploration character represents the player's lead unit — conventionally
+	// the first active member. Match by CharacterClass since the exploration actor
+	// is not associated with a CharacterID directly.
+	const TSubclassOf<ACharacter> ActorClass = ExplorationActor->GetClass();
+
+	const FPartyData& Data = PartyMgr->GetPartyData();
+	for (const FPartyMemberData& Member : Data.Members)
+	{
+		if (Member.CharacterClass != ActorClass) { continue; }
+
+		// Apply the post-battle HP from FPartyMemberData to the freshly spawned actor.
+		// This keeps the exploration actor's UnitStatsComponent in sync with the
+		// authoritative party data so world saves serialize the correct value.
+		const int32 SyncedHP = FMath::RoundToInt(Member.CurrentHP);
+		Stats->SetCurrentHP(SyncedHP);
+
+		UE_LOG(LogTemp, Log,
+			TEXT("[GameContextManager] SyncExplorationActorHP: %s -> PersistentHP set to %d"),
+			*GetNameSafe(ExplorationActor), SyncedHP);
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("[GameContextManager] SyncExplorationActorHP: no matching FPartyMemberData for class %s"),
+		*GetNameSafe(ActorClass));
+}
+
+ACharacterBase* UGameContextManager::SpawnExplorationActor()
+{
 	UWorld* World = GetWorld();
-	if (!World) { return; }
+	if (!World) { return nullptr; }
 
-	ATowerFloorGameMode* GM = GetActiveFloorGameMode();
-	if (!GM) { return; }
-
-	APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0);
-	if (!PC) { return; }
-
-	// Resolve the spawn transform. If the saved transform is at the world origin
-	// (old save without the field, or a restore where it was never populated),
-	// fall back to the EncounterVolume's location so the pawn lands somewhere valid.
 	FTransform SpawnTransform = ActiveBattleSession.ExplorationCharacterTransform;
 	if (SpawnTransform.GetTranslation().IsNearlyZero())
 	{
@@ -283,77 +339,32 @@ void UGameContextManager::ReturnToExploration()
 		{
 			SpawnTransform = ActiveBattleSession.EncounterSource->GetActorTransform();
 			UE_LOG(LogTemp, Warning,
-				TEXT("[GameContextManager] ReturnToExploration: saved transform is zero — using EncounterVolume position as fallback."));
+				TEXT("[GameContextManager] SpawnExplorationActor: transform zero — using EncounterVolume fallback."));
 		}
 	}
+	
+	UE_LOG(LogTemp, Log,
+	TEXT("[GameContextManager] SpawnExplorationActorFromClass: SpawnTransform = %s"),
+	*SpawnTransform.GetTranslation().ToString());
 
-	// Spawn the exploration character before entering Exploration state so
-	// TowerFloorGameMode::HandleGameContextChanged can possess it immediately.
-	// AdjustIfPossibleButAlwaysSpawn prevents residual combat-actor physics
-	// from silently blocking the spawn and leaving the player without a pawn.
-	FActorSpawnParameters ExploreSpawnParams;
-	ExploreSpawnParams.SpawnCollisionHandlingOverride =
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride =
 		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
 	ACharacterBase* NewCharacter = World->SpawnActor<ACharacterBase>(
 		ActiveBattleSession.ExplorationCharacterClass,
 		SpawnTransform,
-		ExploreSpawnParams);
+		SpawnParams);
 
 	if (!IsValid(NewCharacter))
 	{
 		UE_LOG(LogTemp, Error,
-			TEXT("[GameContextManager]: Failed to respawn exploration character."));
-		return;
+			TEXT("[GameContextManager] SpawnExplorationActor: spawn failed."));
+		return nullptr;
 	}
 
-	ActiveBattleSession.ExplorationCharacter = NewCharacter;
-	ActiveResultsContext = nullptr;
-
-	EnterState(EGameContextState::Exploration);
-}
-
-void UGameContextManager::ForceReenterExploration()
-{
-	UWorld* World = GetWorld();
-	if (!World) { return; }
-
-	// Apply the same zero-transform fallback as ReturnToExploration.
-	FTransform ForceSpawnTransform = ActiveBattleSession.ExplorationCharacterTransform;
-	if (ForceSpawnTransform.GetTranslation().IsNearlyZero())
-	{
-		if (ActiveBattleSession.EncounterSource.IsValid())
-		{
-			ForceSpawnTransform = ActiveBattleSession.EncounterSource->GetActorTransform();
-			UE_LOG(LogTemp, Warning,
-				TEXT("[GameContextManager] ForceReenterExploration: saved transform is zero — using EncounterVolume position as fallback."));
-		}
-	}
-
-	FActorSpawnParameters ForceSpawnParams;
-	ForceSpawnParams.SpawnCollisionHandlingOverride =
-		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-	ACharacterBase* NewCharacter = World->SpawnActor<ACharacterBase>(
-		ActiveBattleSession.ExplorationCharacterClass,
-		ForceSpawnTransform,
-		ForceSpawnParams);
-
-	if (!IsValid(NewCharacter))
-	{
-		UE_LOG(LogTemp, Error,
-			TEXT("[GameContextManager] ForceReenterExploration: failed to spawn exploration character."));
-		return;
-	}
-
-	ActiveBattleSession.ExplorationCharacter = NewCharacter;
-	ActiveResultsContext = nullptr;
-
-	// Update CurrentState unconditionally so listeners see the correct value.
-	CurrentState = EGameContextState::Exploration;
-
-	// Broadcast directly — bypasses EnterState's same-state early-return,
-	// which would silently drop the event when CurrentState is already Exploration.
-	UE_LOG(LogTemp, Warning, TEXT("[GameContextManager] ForceReenterExploration: broadcasting Exploration state."));
-	OnGameContextChanged.Broadcast(EGameContextState::Exploration);
+	SyncExplorationActorHP(NewCharacter);
+	return NewCharacter;
 }
 
 bool UGameContextManager::CanEnterState(EGameContextState TargetState) const
@@ -522,6 +533,61 @@ FRotator UGameContextManager::GetSavedExplorationControlRotation() const
 	return ActiveBattleSession.ExplorationControlRotation;
 }
 
+ACharacterBase* UGameContextManager::SpawnExplorationActorFromClass(
+	TSubclassOf<ACharacterBase> CharacterClass)
+{
+	UWorld* World = GetWorld();
+	if (!World || !CharacterClass) { return nullptr; }
+
+	FTransform SpawnTransform = ActiveBattleSession.ExplorationCharacterTransform;
+
+	// If transform is zero (new game — no save data yet), find the PlayerStart.
+	// FTransform default-constructs to identity with translation (0,0,0), so
+	// IsNearlyZero() on the translation is a reliable "not set" check.
+	if (SpawnTransform.GetTranslation().IsNearlyZero())
+	{
+		if (AGameModeBase* GM = World->GetAuthGameMode())
+		{
+			if (AActor* StartSpot = GM->ChoosePlayerStart(nullptr))
+			{
+				SpawnTransform = StartSpot->GetActorTransform();
+
+				UE_LOG(LogTemp, Log,
+					TEXT("[GameContextManager] SpawnExplorationActorFromClass: "
+						 "no saved transform — using PlayerStart '%s'."),
+					*GetNameSafe(StartSpot));
+			}
+		}
+	}
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride =
+		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+	ACharacterBase* NewCharacter = World->SpawnActor<ACharacterBase>(
+		CharacterClass, SpawnTransform, SpawnParams);
+
+	if (IsValid(NewCharacter))
+	{
+		ActiveBattleSession.ExplorationCharacter      = NewCharacter;
+		ActiveBattleSession.ExplorationCharacterClass = CharacterClass;
+
+		SyncExplorationActorHP(NewCharacter);
+
+		UE_LOG(LogTemp, Log,
+			TEXT("[GameContextManager] SpawnExplorationActorFromClass: spawned %s."),
+			*GetNameSafe(NewCharacter));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error,
+			TEXT("[GameContextManager] SpawnExplorationActorFromClass: spawn failed for class %s."),
+			*GetNameSafe(CharacterClass));
+	}
+
+	return NewCharacter;
+}
+
 void UGameContextManager::DestroyExplorationCharacter(ACharacterBase* Character)
 {
 	if (!Character)
@@ -540,6 +606,84 @@ void UGameContextManager::DestroyExplorationCharacter(ACharacterBase* Character)
 
 	Character->Destroy();
 }
+
+TSubclassOf<ACharacterBase> UGameContextManager::ResolveExplorationPawnClass(
+    TSubclassOf<ACharacterBase> FallbackClass) const
+{
+    UGameInstance* GI = GetGameInstance();
+    if (!GI) { return FallbackClass; }
+
+    UPartyManagerSubsystem* PartyMgr = GI->GetSubsystem<UPartyManagerSubsystem>();
+    if (!PartyMgr) { return FallbackClass; }
+
+    const FPartyMemberData* Leader = PartyMgr->GetPartyLeader();
+    if (!Leader) { return FallbackClass; }
+
+    // Use the leader's dedicated exploration pawn if assigned,
+    // otherwise fall back to the GameMode's prototype class.
+    if (Leader->ExplorationPawnClass)
+    {
+        return TSubclassOf<ACharacterBase>(Leader->ExplorationPawnClass);
+    }
+
+    return FallbackClass;
+}
+
+void UGameContextManager::HandleLeaderChanged()
+{
+    // Only relevant during exploration — during combat the pawn is a battle unit
+    if (CurrentState != EGameContextState::Exploration) { return; }
+
+    ACharacterBase* OldPawn = ActiveBattleSession.ExplorationCharacter;
+    if (!IsValid(OldPawn)) { return; }
+
+    // Save the current position so the new leader spawns in the same spot
+    ActiveBattleSession.ExplorationCharacterTransform = OldPawn->GetActorTransform();
+
+    // Find the controller that currently possesses the old pawn
+    APlayerController* PC = OldPawn->GetController<APlayerController>();
+
+    // Destroy old pawn
+    ActiveBattleSession.ExplorationCharacter = nullptr;
+    if (PC) { PC->UnPossess(); }
+    OldPawn->Destroy();
+
+    // Resolve the new leader's pawn class
+    UGameInstance* GI = GetGameInstance();
+    if (!GI) { return; }
+
+    ATowerFloorGameMode* GM = GetActiveFloorGameMode();
+    TSubclassOf<ACharacterBase> FallbackClass =
+        GM ? GM->GetExplorationCharacterClass() : nullptr;
+
+    TSubclassOf<ACharacterBase> NewPawnClass = ResolveExplorationPawnClass(FallbackClass);
+    if (!NewPawnClass)
+    {
+        UE_LOG(LogTemp, Error,
+            TEXT("[GameContextManager] HandleLeaderChanged: no pawn class available."));
+        return;
+    }
+
+    ACharacterBase* NewPawn = SpawnExplorationActorFromClass(NewPawnClass);
+
+    if (NewPawn && PC)
+    {
+        PC->Possess(NewPawn);
+
+        UE_LOG(LogTemp, Log,
+            TEXT("[GameContextManager] HandleLeaderChanged: new leader pawn possessed: %s"),
+            *GetNameSafe(NewPawn));
+    }
+}
+
+void UGameContextManager::InitializeSubsystem()
+{
+	if (UPartyManagerSubsystem* PartyMgr = GetGameInstance()->GetSubsystem<UPartyManagerSubsystem>())
+	{
+		PartyMgr->OnLeaderChanged.AddUObject(this, &UGameContextManager::HandleLeaderChanged);
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Mid-combat save restore
 // ---------------------------------------------------------------------------
@@ -550,23 +694,71 @@ void UGameContextManager::HandleSaveLoaded()
     if (!MyGI) { return; }
 
     UMySaveGame* Save = MyGI->GetActiveSave();
-    if (!Save || !Save->bSavedMidCombat) { return; }
+    if (!Save) { return; }
 
-    // This is called by WorldManagerSubsystem::HandleWorldInitializedActors
-    // after RestoreWorldState() completes, so the world and all actors
-    // (including EncounterVolume) are guaranteed to be ready.
-    UWorld* World = GetWorld();
-    if (!World)
+    // --- Mid-combat restore path ---
+    if (Save->bSavedMidCombat)
     {
-        UE_LOG(LogTemp, Error,
-            TEXT("[GameContextManager] HandleSaveLoaded: World is null — cannot restore combat"));
+        UWorld* World = GetWorld();
+        if (!World)
+        {
+            UE_LOG(LogTemp, Error,
+                TEXT("[GameContextManager] HandleSaveLoaded: World is null — cannot restore combat"));
+            return;
+        }
+
+        UE_LOG(LogTemp, Warning,
+            TEXT("[GameContextManager] HandleSaveLoaded: mid-combat save detected — restoring battle"));
+
+        RequestBattleCombatRestore(Save->SavedCombatSession);
         return;
     }
 
-    UE_LOG(LogTemp, Warning,
-        TEXT("[GameContextManager] HandleSaveLoaded: mid-combat save detected — restoring battle"));
+    // --- Normal exploration load path ---
+    // Read the player's saved transform from the actor save data and store it
+    // in ActiveBattleSession so SpawnExplorationActor uses it instead of
+    // spawning at PlayerStart. This must happen before RequestInitialState
+    // (called by TowerFloorGameMode::BeginPlay) triggers pawn spawn.
+    UWorld* World = GetWorld();
+    if (!World) { return; }
 
-    RequestBattleCombatRestore(Save->SavedCombatSession);
+    ATowerFloorGameMode* GM = GetActiveFloorGameMode();
+    if (!GM) { return; }
+
+    // Resolve the exploration character class from the GameMode
+    if (GM->GetExplorationCharacterClass())
+    {
+        ActiveBattleSession.ExplorationCharacterClass = GM->GetExplorationCharacterClass();
+    }
+
+    // Find the player's saved transform by searching SavedActorsByLevel for
+    // an entry whose class matches ExplorationCharacterClass
+    if (ActiveBattleSession.ExplorationCharacterClass)
+    {
+    	if (UWorldManagerSubsystem* WorldMgr = World->GetSubsystem<UWorldManagerSubsystem>())
+    	{
+    		const FName LevelKey = WorldMgr->GetSanitizedLevelKey();
+    		const TArray<FActorSaveData>& SavedActors = MyGI->GetSavedActorsForLevel(LevelKey);
+
+    		for (const FActorSaveData& Data : SavedActors)
+    		{
+    			if (Data.ActorClass.IsNull()) { continue; }
+
+    			UClass* SavedClass = Data.ActorClass.LoadSynchronous();
+    			if (SavedClass && SavedClass->IsChildOf(ActiveBattleSession.ExplorationCharacterClass))
+    			{
+    				ActiveBattleSession.ExplorationCharacterTransform = Data.Transform;
+
+    				UE_LOG(LogTemp, Log,
+						TEXT("[GameContextManager] HandleSaveLoaded: restored player transform from save data."));
+    				UE_LOG(LogTemp, Log,
+						TEXT("[GameContextManager] HandleSaveLoaded: searching level key '%s', found %d saved actors."),
+						*LevelKey.ToString(), SavedActors.Num());
+    				break;
+    			}
+    		}
+    	}
+    }
 }
 
 void UGameContextManager::RequestBattleCombatRestore(const FSavedCombatSession& SavedSession)

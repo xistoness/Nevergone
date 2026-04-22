@@ -39,6 +39,11 @@ public:
 	FGuid GetCharacterID() const { return CharacterID; }
 
 	bool IsSelected() const { return bSelected; }
+	
+	// Shows or hides the leader crown icon on this card.
+	void SetLeader(bool bInIsLeader);
+
+	bool IsLeader() const { return bIsLeader; }
 
 protected:
 
@@ -58,8 +63,13 @@ protected:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Party Manager")
 	void BP_SetSelected(bool bInSelected);
 
+	// BP_SetLeader: show/hide the leader icon. Implement in WBP_PartyMemberEntry.
+	UFUNCTION(BlueprintImplementableEvent, Category = "Party Manager")
+	void BP_SetLeader(bool bInIsLeader);
+	
 private:
 
 	FGuid CharacterID;
 	bool bSelected = false;
+	bool bIsLeader = false;
 };

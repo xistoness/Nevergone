@@ -57,13 +57,11 @@ void UNPCAffinitySubsystem::SyncFromGameInstance()
     UMyGameInstance* GI = Cast<UMyGameInstance>(GetGameInstance());
     if (!GI) { return; }
 
-    if (const UMySaveGame* Save = GI->GetActiveSave())
-    {
-        AffinityMap = Save->NPCAffinityMap;
-        UE_LOG(LogTemp, Log,
-            TEXT("[NPCAffinitySubsystem] SyncFromGameInstance: loaded %d entries."),
-            AffinityMap.Num());
-    }
+    AffinityMap = GI->NPCAffinityMap;
+
+    UE_LOG(LogTemp, Log,
+        TEXT("[NPCAffinitySubsystem] SyncFromGameInstance: loaded %d entries."),
+        AffinityMap.Num());
 }
 
 void UNPCAffinitySubsystem::FlushToGameInstance()
@@ -71,11 +69,20 @@ void UNPCAffinitySubsystem::FlushToGameInstance()
     UMyGameInstance* GI = Cast<UMyGameInstance>(GetGameInstance());
     if (!GI) { return; }
 
-    if (UMySaveGame* Save = GI->GetActiveSave())
-    {
-        Save->NPCAffinityMap = AffinityMap;
-        UE_LOG(LogTemp, Log,
-            TEXT("[NPCAffinitySubsystem] FlushToGameInstance: flushed %d entries."),
-            AffinityMap.Num());
-    }
+    // Write through GI so CommitSave controls when data lands in ActiveSave.
+    // Writing directly to ActiveSave bypasses slot isolation and can corrupt
+    // a different slot when called during new game creation.
+    GI->SetNPCAffinityMap(AffinityMap);
+
+    UE_LOG(LogTemp, Log,
+        TEXT("[NPCAffinitySubsystem] FlushToGameInstance: flushed %d entries."),
+        AffinityMap.Num());
+}
+
+void UNPCAffinitySubsystem::Reset()
+{
+    AffinityMap.Empty();
+    FlushToGameInstance();
+
+    UE_LOG(LogTemp, Log, TEXT("[NPCAffinitySubsystem] Reset: all affinity entries cleared."));
 }

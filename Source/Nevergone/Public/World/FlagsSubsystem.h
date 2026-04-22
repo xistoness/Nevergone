@@ -46,6 +46,10 @@ public:
 	// Pushes cached flags back to MyGameInstance so CommitSave() picks them up.
 	// Call before RequestSaveGame().
 	void FlushToGameInstance();
+	
+	// Clears all flags from memory and flushes the empty state to GameInstance.
+	// Call before RequestNewGame() to ensure a fresh save has no leftover flags.
+	void Reset();
 
 private:
 

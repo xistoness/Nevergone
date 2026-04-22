@@ -75,53 +75,53 @@ struct FSavedCooldown
 USTRUCT()
 struct FSavedCombatUnitState
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
-	// Links this record to the actor in the world via its SaveableComponent guid.
-	UPROPERTY(SaveGame)
-	FGuid ActorGuid;
+    // Links this record to the actor in the world via its SaveableComponent guid.
+    UPROPERTY(SaveGame)
+    FGuid ActorGuid;
 
-	UPROPERTY(SaveGame)
-	TSoftClassPtr<ACharacterBase> ActorClass;
+    UPROPERTY(SaveGame)
+    TSoftClassPtr<ACharacterBase> ActorClass;
 
-	UPROPERTY(SaveGame)
-	EBattleUnitTeam Team = EBattleUnitTeam::Ally;
+    UPROPERTY(SaveGame)
+    EBattleUnitTeam Team = EBattleUnitTeam::Ally;
 
-	// Index inside the team's original spawn order.
-	// This lets restore match saved data back to BattlePrepContext.PlayerPlannedSpawns
-	// / EnemyPlannedSpawns deterministically, even if some units died.
-	UPROPERTY(SaveGame)
-	int32 SourceIndex = INDEX_NONE;
+    // Index inside the team's original spawn order.
+    // This lets restore match saved data back to BattlePrepContext.PlayerPlannedSpawns
+    // / EnemyPlannedSpawns deterministically, even if some units died.
+    UPROPERTY(SaveGame)
+    int32 SourceIndex = INDEX_NONE;
 
-	UPROPERTY(SaveGame)
-	int32 CurrentHP = 0;
+    UPROPERTY(SaveGame)
+    int32 CurrentHP = 0;
 
-	UPROPERTY(SaveGame)
-	int32 CurrentActionPoints = 0;
+    UPROPERTY(SaveGame)
+    int32 CurrentActionPoints = 0;
 
-	// Explicit dead flag so restore logic does not have to infer from HP alone.
-	UPROPERTY(SaveGame)
-	bool bWasDead = false;
+    // Explicit dead flag so restore logic does not have to infer from HP alone.
+    UPROPERTY(SaveGame)
+    bool bWasDead = false;
 
-	// Tactical position at save time.
-	// This is the authoritative combat position and should be preferred over world space.
-	UPROPERTY(SaveGame)
-	bool bHasSavedGridCoord = false;
+    // Tactical position at save time.
+    // This is the authoritative combat position and should be preferred over world space.
+    UPROPERTY(SaveGame)
+    bool bHasSavedGridCoord = false;
 
-	UPROPERTY(SaveGame)
-	FIntPoint SavedGridCoord = FIntPoint::ZeroValue;
+    UPROPERTY(SaveGame)
+    FIntPoint SavedGridCoord = FIntPoint::ZeroValue;
 
-	// Temporary attribute bonuses active at save time.
-	// Already reflected in the stat values above — restored here so
-	// RecalculateBattleStats() produces the same derived stats.
-	UPROPERTY(SaveGame)
-	FUnitAttributes TemporaryAttributeBonuses;
+    // Temporary attribute bonuses active at save time.
+    // Already reflected in the stat values above — restored here so
+    // RecalculateBattleStats() produces the same derived stats.
+    UPROPERTY(SaveGame)
+    FUnitAttributes TemporaryAttributeBonuses;
 
-	UPROPERTY(SaveGame)
-	TArray<FSavedActiveStatusEffect> ActiveStatusEffects;
+    UPROPERTY(SaveGame)
+    TArray<FSavedActiveStatusEffect> ActiveStatusEffects;
 
-	UPROPERTY(SaveGame)
-	TArray<FSavedCooldown> Cooldowns;
+    UPROPERTY(SaveGame)
+    TArray<FSavedCooldown> Cooldowns;
 };
 
 // Top-level container written to MySaveGame when saving mid-combat.
@@ -146,10 +146,10 @@ struct FSavedCombatSession
     TSoftClassPtr<class ACharacterBase> ExplorationCharacterClass;
 
     UPROPERTY(SaveGame)
-    FTransform ExplorationCharacterTransform;
+    FTransform ExplorationCharacterTransform = FTransform::Identity;
 
     UPROPERTY(SaveGame)
-    FRotator ExplorationControlRotation;
+    FRotator ExplorationControlRotation = FRotator::ZeroRotator;
 
     UPROPERTY(SaveGame)
     float ExplorationArmLength = 400.f;
@@ -172,46 +172,46 @@ struct FSavedCombatSession
 UCLASS()
 class NEVERGONE_API UMySaveGame : public USaveGame
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
 public:
-	
-	UPROPERTY(SaveGame)
-	FString SaveSlotName;
-	
-	UPROPERTY(SaveGame)
-	FPartyData PartyData;
+    
+    UPROPERTY(SaveGame)
+    FString SaveSlotName;
+    
+    UPROPERTY(SaveGame)
+    FPartyData PartyData;
 
-	UPROPERTY(SaveGame)
-	FProgressionData ProgressionData;
-	
-	UPROPERTY(SaveGame)
-	TMap<FName, bool> GlobalFlags;
-	
-	UPROPERTY(SaveGame)
-	TMap<FName, FLevelSaveData> SavedActorsByLevel;
-	
-	UPROPERTY(SaveGame)
-	TMap<FGuid, int32> NPCAffinityMap;
+    UPROPERTY(SaveGame)
+    FProgressionData ProgressionData;
+    
+    UPROPERTY(SaveGame)
+    TMap<FName, bool> GlobalFlags;
+    
+    UPROPERTY(SaveGame)
+    TMap<FName, FLevelSaveData> SavedActorsByLevel;
+    
+    UPROPERTY(SaveGame)
+    TMap<FGuid, int32> NPCAffinityMap;
 
-	UPROPERTY(SaveGame)
-	TMap<FName, FQuestRuntimeState> QuestRuntimeStates;
-	
-	// Display name shown in the Load Game list (e.g. "Floor 3 — Encounter 2")
-	UPROPERTY(SaveGame)
-	FString SaveDisplayName;
+    UPROPERTY(SaveGame)
+    TMap<FName, FQuestRuntimeState> QuestRuntimeStates;
+    
+    // Display name shown in the Load Game list (e.g. "Floor 3 — Encounter 2")
+    UPROPERTY(SaveGame)
+    FString SaveDisplayName;
  
-	// Total playtime in seconds — increment this in your game loop
-	UPROPERTY(SaveGame)
-	float PlaytimeSeconds = 0.f;
+    // Total playtime in seconds — increment this in your game loop
+    UPROPERTY(SaveGame)
+    float PlaytimeSeconds = 0.f;
  
-	// UTC timestamp of when this save was last written
-	UPROPERTY(SaveGame)
-	FDateTime LastSavedAt;
+    // UTC timestamp of when this save was last written
+    UPROPERTY(SaveGame)
+    FDateTime LastSavedAt;
  
-	// Which level the player was on when this was saved
-	UPROPERTY(SaveGame)
-	FName SavedLevelName = NAME_None;
+    // Which level the player was on when this was saved
+    UPROPERTY(SaveGame)
+    FName SavedLevelName = NAME_None;
 
     // ---------------------------------------------------------------------------
     // Mid-combat save state
