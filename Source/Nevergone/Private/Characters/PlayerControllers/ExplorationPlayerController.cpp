@@ -4,6 +4,7 @@
 
 #include "EnhancedInputComponent.h"
 #include "ActorComponents/ExplorationModeComponent.h"
+#include "ActorComponents/PauseMenuComponent.h"
 #include "Characters/CharacterBase.h"
 #include "GameInstance/GameContextManager.h"
 #include "Interfaces/ExplorationInputReceiver.h"
@@ -14,6 +15,11 @@
 #include "World/DialogueSubsystem.h"
 #include "World/QuestSubsystem.h"
 
+AExplorationPlayerController::AExplorationPlayerController()
+{
+    PauseMenuComponent = CreateDefaultSubobject<UPauseMenuComponent>(TEXT("PauseMenuComponent"));
+}
+
 void AExplorationPlayerController::SetupInputComponent()
 {
     Super::SetupInputComponent();
@@ -22,49 +28,37 @@ void AExplorationPlayerController::SetupInputComponent()
     if (!EIC) { return; }
 
     if (LookInput)
-    {
         EIC->BindAction(LookInput, ETriggerEvent::Triggered, this, &AExplorationPlayerController::OnLook);
-    }
-    if (InteractionInput)
-    {
-        EIC->BindAction(InteractionInput, ETriggerEvent::Triggered, this, &AExplorationPlayerController::HandleInteract);
-    }
-    if (QuestLogInput)
-    {
-        EIC->BindAction(QuestLogInput, ETriggerEvent::Triggered, this, &AExplorationPlayerController::HandleQuestLog);
-    }
-    if (PartyManagerInput)
-    {
-        EIC->BindAction(PartyManagerInput, ETriggerEvent::Triggered, this, &AExplorationPlayerController::HandlePartyManager);
-    }
 
-    // Unified UI navigation — routed to the active overlay at runtime
+    if (InteractionInput)
+        EIC->BindAction(InteractionInput, ETriggerEvent::Triggered, this, &AExplorationPlayerController::HandleInteract);
+
+    if (QuestLogInput)
+        EIC->BindAction(QuestLogInput, ETriggerEvent::Triggered, this, &AExplorationPlayerController::HandleQuestLog);
+
+    if (PartyManagerInput)
+        EIC->BindAction(PartyManagerInput, ETriggerEvent::Triggered, this, &AExplorationPlayerController::HandlePartyManager);
+
     if (UIConfirmInput)
-    {
         EIC->BindAction(UIConfirmInput, ETriggerEvent::Triggered, this, &AExplorationPlayerController::HandleUIConfirm);
-    }
+
     if (UICancelInput)
-    {
         EIC->BindAction(UICancelInput, ETriggerEvent::Triggered, this, &AExplorationPlayerController::HandleUICancel);
-    }
+
     if (UIUpInput)
-    {
         EIC->BindAction(UIUpInput, ETriggerEvent::Triggered, this, &AExplorationPlayerController::HandleUIUp);
-    }
+
     if (UIDownInput)
-    {
         EIC->BindAction(UIDownInput, ETriggerEvent::Triggered, this, &AExplorationPlayerController::HandleUIDown);
-    }
+
     if (UILeftInput)
-    {
-        EIC->BindAction(UILeftInput, ETriggerEvent::Triggered, this,
-            &AExplorationPlayerController::HandleUILeft);
-    }
+        EIC->BindAction(UILeftInput, ETriggerEvent::Triggered, this, &AExplorationPlayerController::HandleUILeft);
+
     if (UIRightInput)
-    {
-        EIC->BindAction(UIRightInput, ETriggerEvent::Triggered, this,
-            &AExplorationPlayerController::HandleUIRight);
-    }
+        EIC->BindAction(UIRightInput, ETriggerEvent::Triggered, this, &AExplorationPlayerController::HandleUIRight);
+
+    if (PauseInput)
+        PauseMenuComponent->BindPauseInput(EIC, PauseInput);
 }
 
 // ---------------------------------------------------------------------------
@@ -78,9 +72,9 @@ void AExplorationPlayerController::ApplyExplorationInputMode()
     SetIgnoreMoveInput(false);
     SetIgnoreLookInput(false);
 
-    bShowMouseCursor        = false;
-    bEnableClickEvents      = false;
-    bEnableMouseOverEvents  = false;
+    bShowMouseCursor       = false;
+    bEnableClickEvents     = false;
+    bEnableMouseOverEvents = false;
 
     FInputModeGameOnly InputMode;
     SetInputMode(InputMode);
@@ -95,9 +89,9 @@ void AExplorationPlayerController::ApplyDialogueInputMode()
     SetIgnoreMoveInput(true);
     SetIgnoreLookInput(true);
 
-    bShowMouseCursor        = true;
-    bEnableClickEvents      = true;
-    bEnableMouseOverEvents  = true;
+    bShowMouseCursor       = true;
+    bEnableClickEvents     = true;
+    bEnableMouseOverEvents = true;
 
     FInputModeGameAndUI InputMode;
     InputMode.SetHideCursorDuringCapture(false);
@@ -107,9 +101,6 @@ void AExplorationPlayerController::ApplyDialogueInputMode()
     UE_LOG(LogTemp, Log, TEXT("[ExplorationPlayerController] Input mode -> Dialogue"));
 }
 
-// Shared setup for QuestLog and PartyManager — both are UI overlays with
-// identical input mode requirements. The TargetMode param is stored so that
-// HandleUIConfirm/Cancel/Next/Previous know which widget to route to.
 void AExplorationPlayerController::ApplyUIOverlayInputMode(EExplorationInputMode TargetMode)
 {
     CurrentInputMode = TargetMode;
@@ -117,9 +108,9 @@ void AExplorationPlayerController::ApplyUIOverlayInputMode(EExplorationInputMode
     SetIgnoreMoveInput(true);
     SetIgnoreLookInput(true);
 
-    bShowMouseCursor        = true;
-    bEnableClickEvents      = true;
-    bEnableMouseOverEvents  = true;
+    bShowMouseCursor       = true;
+    bEnableClickEvents     = true;
+    bEnableMouseOverEvents = true;
 
     FInputModeGameAndUI InputMode;
     InputMode.SetHideCursorDuringCapture(false);
@@ -130,14 +121,46 @@ void AExplorationPlayerController::ApplyUIOverlayInputMode(EExplorationInputMode
         TEXT("[ExplorationPlayerController] Input mode -> UIOverlay (%d)"), (int32)TargetMode);
 }
 
-void AExplorationPlayerController::EnterDialogueInputMode()
+void AExplorationPlayerController::EnterDialogueInputMode()  { ApplyDialogueInputMode();    }
+void AExplorationPlayerController::ExitDialogueInputMode()   { ApplyExplorationInputMode(); }
+
+// ---------------------------------------------------------------------------
+// Pause callbacks — fired by PauseMenuComponent delegates
+// ---------------------------------------------------------------------------
+
+void AExplorationPlayerController::HandlePauseOpened()
 {
-    ApplyDialogueInputMode();
+    // Save the current mode so we can restore it exactly on close.
+    // This matters when pausing mid-dialogue or mid-overlay.
+    PrePauseInputMode = CurrentInputMode;
+    ApplyUIOverlayInputMode(EExplorationInputMode::PauseMenu);
+
+    UE_LOG(LogTemp, Log,
+        TEXT("[ExplorationPlayerController] Pause opened — saved pre-pause mode: %d"),
+        (int32)PrePauseInputMode);
 }
 
-void AExplorationPlayerController::ExitDialogueInputMode()
+void AExplorationPlayerController::HandlePauseClosed()
 {
-    ApplyExplorationInputMode();
+    // Restore the mode that was active before pause.
+    // Use the specific Apply* method for each mode to guarantee correct state.
+    switch (PrePauseInputMode)
+    {
+    case EExplorationInputMode::Dialogue:
+        ApplyDialogueInputMode();
+        break;
+    case EExplorationInputMode::QuestLog:
+    case EExplorationInputMode::PartyManager:
+        ApplyUIOverlayInputMode(PrePauseInputMode);
+        break;
+    default:
+        ApplyExplorationInputMode();
+        break;
+    }
+
+    UE_LOG(LogTemp, Log,
+        TEXT("[ExplorationPlayerController] Pause closed — restored mode: %d"),
+        (int32)PrePauseInputMode);
 }
 
 // ---------------------------------------------------------------------------
@@ -155,29 +178,25 @@ void AExplorationPlayerController::OnLook(const FInputActionValue& Value)
 
 void AExplorationPlayerController::HandleInteract()
 {
-    
     switch (CurrentInputMode)
     {
     case EExplorationInputMode::Dialogue:
-        HandleUIConfirm();
-        break;
-        
     case EExplorationInputMode::PartyManager:
-        HandleUIConfirm();
-        break;
-        
     case EExplorationInputMode::QuestLog:
         HandleUIConfirm();
         break;
-        
-    case EExplorationInputMode::Gameplay:
-        APawn* MyPawn = GetPawn();
-        if (!MyPawn) { return; }
 
-        if (IExplorationInputReceiver* Actions = MyPawn->FindComponentByClass<UExplorationModeComponent>())
+    case EExplorationInputMode::Gameplay:
+        if (APawn* MyPawn = GetPawn())
         {
-            Actions->Input_Interact();
+            if (IExplorationInputReceiver* Actions = MyPawn->FindComponentByClass<UExplorationModeComponent>())
+            {
+                Actions->Input_Interact();
+            }
         }
+        break;
+
+    default:
         break;
     }
 }
@@ -188,9 +207,9 @@ void AExplorationPlayerController::HandleInteract()
 
 void AExplorationPlayerController::HandleQuestLog()
 {
-    if (CurrentInputMode == EExplorationInputMode::Dialogue)
+    if (CurrentInputMode == EExplorationInputMode::Dialogue ||
+        CurrentInputMode == EExplorationInputMode::PauseMenu)
     {
-        UE_LOG(LogTemp, Log, TEXT("[ExplorationPlayerController] HandleQuestLog: ignored — dialogue active."));
         return;
     }
 
@@ -202,14 +221,12 @@ void AExplorationPlayerController::HandleQuestLog()
 
     if (CurrentInputMode == EExplorationInputMode::QuestLog)
     {
-        // Toggle off
         QuestLogWidget->SetVisibility(ESlateVisibility::Hidden);
         ApplyExplorationInputMode();
         UE_LOG(LogTemp, Log, TEXT("[ExplorationPlayerController] QuestLog closed."));
     }
     else
     {
-        // Close party manager if open
         if (CurrentInputMode == EExplorationInputMode::PartyManager && PartyManagerWidget)
         {
             PartyManagerWidget->SetVisibility(ESlateVisibility::Hidden);
@@ -224,9 +241,9 @@ void AExplorationPlayerController::HandleQuestLog()
 
 void AExplorationPlayerController::HandlePartyManager()
 {
-    if (CurrentInputMode == EExplorationInputMode::Dialogue)
+    if (CurrentInputMode == EExplorationInputMode::Dialogue ||
+        CurrentInputMode == EExplorationInputMode::PauseMenu)
     {
-        UE_LOG(LogTemp, Log, TEXT("[ExplorationPlayerController] HandlePartyManager: ignored — dialogue active."));
         return;
     }
 
@@ -238,14 +255,12 @@ void AExplorationPlayerController::HandlePartyManager()
 
     if (CurrentInputMode == EExplorationInputMode::PartyManager)
     {
-        // Toggle off
         PartyManagerWidget->SetVisibility(ESlateVisibility::Hidden);
         ApplyExplorationInputMode();
         UE_LOG(LogTemp, Log, TEXT("[ExplorationPlayerController] PartyManager closed."));
     }
     else
     {
-        // Close quest log if open
         if (CurrentInputMode == EExplorationInputMode::QuestLog && QuestLogWidget)
         {
             QuestLogWidget->SetVisibility(ESlateVisibility::Hidden);
@@ -259,7 +274,7 @@ void AExplorationPlayerController::HandlePartyManager()
 }
 
 // ---------------------------------------------------------------------------
-// Unified UI navigation — routed by CurrentInputMode
+// Unified UI navigation
 // ---------------------------------------------------------------------------
 
 void AExplorationPlayerController::HandleUIConfirm()
@@ -269,15 +284,15 @@ void AExplorationPlayerController::HandleUIConfirm()
     case EExplorationInputMode::Dialogue:
         if (DialogueWidget) { DialogueWidget->ConfirmCurrentChoice(); }
         break;
-
     case EExplorationInputMode::QuestLog:
         if (QuestLogWidget) { QuestLogWidget->ConfirmSelection(); }
         break;
-
     case EExplorationInputMode::PartyManager:
         if (PartyManagerWidget) { PartyManagerWidget->ConfirmSelection(); }
         break;
-
+    case EExplorationInputMode::PauseMenu:
+        PauseMenuComponent->ConfirmSelection();
+        break;
     default:
         break;
     }
@@ -312,6 +327,12 @@ void AExplorationPlayerController::HandleUICancel()
         }
         break;
 
+    case EExplorationInputMode::PauseMenu:
+        // CancelSelection on the component either navigates back to Resume
+        // or closes the menu — both cases handled internally.
+        PauseMenuComponent->CancelSelection();
+        break;
+
     default:
         break;
     }
@@ -324,15 +345,15 @@ void AExplorationPlayerController::HandleUIUp()
     case EExplorationInputMode::Dialogue:
         if (DialogueWidget) { DialogueWidget->SelectPreviousChoice(); }
         break;
-
     case EExplorationInputMode::QuestLog:
         if (QuestLogWidget) { QuestLogWidget->NavigateUp(); }
         break;
-
     case EExplorationInputMode::PartyManager:
         if (PartyManagerWidget) { PartyManagerWidget->NavigateUp(); }
         break;
-
+    case EExplorationInputMode::PauseMenu:
+        PauseMenuComponent->NavigateUp();
+        break;
     default:
         break;
     }
@@ -345,15 +366,15 @@ void AExplorationPlayerController::HandleUIDown()
     case EExplorationInputMode::Dialogue:
         if (DialogueWidget) { DialogueWidget->SelectNextChoice(); }
         break;
-
     case EExplorationInputMode::QuestLog:
         if (QuestLogWidget) { QuestLogWidget->NavigateDown(); }
         break;
-
     case EExplorationInputMode::PartyManager:
         if (PartyManagerWidget) { PartyManagerWidget->NavigateDown(); }
         break;
-
+    case EExplorationInputMode::PauseMenu:
+        PauseMenuComponent->NavigateDown();
+        break;
     default:
         break;
     }
@@ -361,7 +382,6 @@ void AExplorationPlayerController::HandleUIDown()
 
 void AExplorationPlayerController::HandleUILeft()
 {
-    // Only PartyManager uses horizontal navigation — other modes ignore it
     if (CurrentInputMode == EExplorationInputMode::PartyManager)
     {
         if (PartyManagerWidget) { PartyManagerWidget->NavigateLeft(); }
@@ -382,8 +402,7 @@ void AExplorationPlayerController::HandleUIRight()
 
 void AExplorationPlayerController::CreateDialogueWidget()
 {
-    if (!IsValid(DialogueWidgetClass)) { return; }
-    if (DialogueWidget) { return; }
+    if (!IsValid(DialogueWidgetClass) || DialogueWidget) { return; }
 
     DialogueWidget = CreateWidget<UDialogueWidget>(this, DialogueWidgetClass);
     if (!DialogueWidget)
@@ -399,8 +418,7 @@ void AExplorationPlayerController::CreateDialogueWidget()
 
 void AExplorationPlayerController::CreateQuestLogWidget()
 {
-    if (!IsValid(QuestLogWidgetClass)) { return; }
-    if (QuestLogWidget) { return; }
+    if (!IsValid(QuestLogWidgetClass) || QuestLogWidget) { return; }
 
     QuestLogWidget = CreateWidget<UQuestLogWidget>(this, QuestLogWidgetClass);
     if (!QuestLogWidget)
@@ -416,8 +434,7 @@ void AExplorationPlayerController::CreateQuestLogWidget()
 
 void AExplorationPlayerController::CreatePartyManagerWidget()
 {
-    if (!IsValid(PartyManagerWidgetClass)) { return; }
-    if (PartyManagerWidget) { return; }
+    if (!IsValid(PartyManagerWidgetClass) || PartyManagerWidget) { return; }
 
     PartyManagerWidget = CreateWidget<UPartyManagerWidget>(this, PartyManagerWidgetClass);
     if (!PartyManagerWidget)
@@ -438,9 +455,13 @@ void AExplorationPlayerController::CreatePartyManagerWidget()
 void AExplorationPlayerController::BeginPlay()
 {
     Super::BeginPlay();
-    
+
     BindDialogueSubsystem();
     BindQuestSubsystem();
+
+    // Subscribe to pause delegates so this controller manages CurrentInputMode.
+    PauseMenuComponent->OnPauseOpened.AddUObject(this, &AExplorationPlayerController::HandlePauseOpened);
+    PauseMenuComponent->OnPauseClosed.AddUObject(this, &AExplorationPlayerController::HandlePauseClosed);
 }
 
 void AExplorationPlayerController::OnPossess(APawn* InPawn)
@@ -466,13 +487,10 @@ void AExplorationPlayerController::OnPossess(APawn* InPawn)
         }
     }
 
-    // Create widgets here — OnPossess fires after SwapPlayerControllers has
-    // transferred the LocalPlayer, so GetLocalPlayer() is valid at this point.
-    // The guards inside each Create* method prevent double-creation if
-    // OnPossess is called again (e.g. re-possessing the same pawn).
     CreateDialogueWidget();
     CreateQuestLogWidget();
     CreatePartyManagerWidget();
+    PauseMenuComponent->CreatePauseWidget();
 
     if (DialogueSubsystem && DialogueSubsystem->IsDialogueActive())
     {
@@ -520,7 +538,6 @@ void AExplorationPlayerController::BindDialogueSubsystem()
 
     DialogueSubsystem->OnDialogueStarted.RemoveAll(this);
     DialogueSubsystem->OnDialogueEnded.RemoveAll(this);
-
     DialogueSubsystem->OnDialogueStarted.AddUObject(this, &AExplorationPlayerController::HandleDialogueStarted);
     DialogueSubsystem->OnDialogueEnded.AddUObject(this, &AExplorationPlayerController::HandleDialogueEnded);
 }
@@ -540,12 +557,5 @@ void AExplorationPlayerController::BindQuestSubsystem()
     UE_LOG(LogTemp, Log, TEXT("[ExplorationPlayerController] QuestSubsystem bound."));
 }
 
-void AExplorationPlayerController::HandleDialogueStarted()
-{
-    EnterDialogueInputMode();
-}
-
-void AExplorationPlayerController::HandleDialogueEnded()
-{
-    ExitDialogueInputMode();
-}
+void AExplorationPlayerController::HandleDialogueStarted() { EnterDialogueInputMode(); }
+void AExplorationPlayerController::HandleDialogueEnded()   { ExitDialogueInputMode();  }

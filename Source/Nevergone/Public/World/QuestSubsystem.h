@@ -88,6 +88,9 @@ public:
 
     void SyncFromGameInstance();
     void FlushToGameInstance();
+    
+    // Clears all quest runtime states from memory and flushes the empty state to GameInstance.
+    void Reset();
 
 private:
 

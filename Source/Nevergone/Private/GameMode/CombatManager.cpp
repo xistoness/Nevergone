@@ -210,12 +210,17 @@ void UCombatManager::SpawnAllies(UBattlePreparationContext& BattlePrepContext, U
 		const FGeneratedPlayerData& PlayerData = BattlePrepContext.PlayerParty[i];
 		if (UUnitStatsComponent* Stats = Character->GetUnitStats())
 		{
+			// Apply the member's persistent level before any HP or stat calculation.
+			// BattleState::Initialize calls GetMaxHP() which depends on Stats->Level,
+			// so this must happen before InitializeForBattle and before BattleState runs.
+			Stats->Level = PlayerData.Level;
+
 			if (PlayerData.PersistentHP > 0)
 			{
 				Stats->SetCurrentHP(PlayerData.PersistentHP);
 				UE_LOG(LogTemp, Log,
-					TEXT("[CombatManager] Restored PersistentHP=%d for %s"),
-					PlayerData.PersistentHP, *GetNameSafe(Character));
+					TEXT("[CombatManager] Restored PersistentHP=%d for %s (Lv%d)"),
+					PlayerData.PersistentHP, *GetNameSafe(Character), Stats->Level);
 			}
 			Stats->InitializeForBattle();
 		}
@@ -237,75 +242,87 @@ void UCombatManager::SpawnAllies(UBattlePreparationContext& BattlePrepContext, U
 
 void UCombatManager::SpawnEnemies(UBattlePreparationContext& BattlePrepContext, UGridManager* Grid)
 {
-	for (int32 i = 0; i < BattlePrepContext.EnemyPlannedSpawns.Num(); ++i)
-	{
-		const FPlannedSpawn& Spawn = BattlePrepContext.EnemyPlannedSpawns[i];
+    for (int32 i = 0; i < BattlePrepContext.EnemyPlannedSpawns.Num(); ++i)
+    {
+        const FPlannedSpawn& Spawn = BattlePrepContext.EnemyPlannedSpawns[i];
 
-		FIntPoint SpawnCoord;
-		if (!Grid->FindClosestValidTileToWorld(Spawn.PlannedTransform.GetLocation(), SpawnCoord, true))
-		{
-			UE_LOG(
-				LogTemp,
-				Warning,
-				TEXT("[CombatManager]: Failed to find valid enemy spawn tile for index %d"),
-				i
-			);
-			continue;
-		}
+        FIntPoint SpawnCoord;
+        if (!Grid->FindClosestValidTileToWorld(Spawn.PlannedTransform.GetLocation(), SpawnCoord, true))
+        {
+            UE_LOG(LogTemp, Warning,
+                TEXT("[CombatManager]: Failed to find valid enemy spawn tile for index %d"), i);
+            continue;
+        }
 
-		FTransform FinalSpawnTransform = Spawn.PlannedTransform;
-		FinalSpawnTransform.SetLocation(
-			GetSpawnLocationForClass(Spawn.ActorClass, Grid->GetTileCenterWorld(SpawnCoord)));
+        FTransform FinalSpawnTransform = Spawn.PlannedTransform;
+        FinalSpawnTransform.SetLocation(
+            GetSpawnLocationForClass(Spawn.ActorClass, Grid->GetTileCenterWorld(SpawnCoord)));
 
-		FActorSpawnParameters EnemySpawnParams;
-		EnemySpawnParams.SpawnCollisionHandlingOverride =
-			ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+        FActorSpawnParameters EnemySpawnParams;
+        EnemySpawnParams.SpawnCollisionHandlingOverride =
+            ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-		AActor* SpawnedEnemy = GetWorld()->SpawnActor<AActor>(
-			Spawn.ActorClass,
-			FinalSpawnTransform,
-			EnemySpawnParams
-		);
+        AActor* SpawnedEnemy = GetWorld()->SpawnActor<AActor>(
+            Spawn.ActorClass,
+            FinalSpawnTransform,
+            EnemySpawnParams
+        );
 
-		ACharacterBase* Character = Cast<ACharacterBase>(SpawnedEnemy);
-		if (!Character)
-		{
-			UE_LOG(LogTemp, Error,
-				TEXT("[CombatManager] SpawnEnemies: SpawnActor returned null for index %d (class: %s)"),
-				i, *GetNameSafe(Spawn.ActorClass));
-			continue;
-		}
+        ACharacterBase* Character = Cast<ACharacterBase>(SpawnedEnemy);
+        if (!Character)
+        {
+            UE_LOG(LogTemp, Error,
+                TEXT("[CombatManager] SpawnEnemies: SpawnActor returned null for index %d (class: %s)"),
+                i, *GetNameSafe(Spawn.ActorClass));
+            continue;
+        }
 
-		Grid->UpdateActorPosition(Character, SpawnCoord);
+        Grid->UpdateActorPosition(Character, SpawnCoord);
+        BindToCombatUnitActionEvents(Character);
+        SpawnedEnemies.Add(Character);
 
-		BindToCombatUnitActionEvents(Character);
-		SpawnedEnemies.Add(Character);
+        // Inject the event bus so this unit's abilities can route through it
+        if (UBattleModeComponent* BattleComp = Character->GetBattleModeComponent())
+        {
+            BattleComp->SetCombatEventBus(EventBus);
+        }
 
-		// Inject the event bus so this unit's abilities can route through it
-		if (UBattleModeComponent* BattleComp = Character->GetBattleModeComponent())
-		{
-			BattleComp->SetCombatEventBus(EventBus);
-		}
+        // Apply level from EnemyParty data before BattleState reads GetMaxHP().
+        // EnemyPlannedSpawns[i] corresponds to EnemyParty[i] — same index, same unit.
+        // Without this, GetMaxHP() uses the CDO's default level, ignoring the
+        // level set in the encounter data.
+        if (UUnitStatsComponent* Stats = Character->GetUnitStats())
+        {
+            if (BattlePrepContext.EnemyParty.IsValidIndex(i))
+            {
+                Stats->Level = BattlePrepContext.EnemyParty[i].Level;
 
-		FSpawnedBattleUnit Entry;
-		Entry.UnitActor = Character;
-		Entry.SourceIndex = i;
-		Entry.Team = EBattleUnitTeam::Enemy;
-		
-		RegisterStableSourceIndex(Character, EBattleUnitTeam::Enemy, i);
-		
-		InitializeSpawnedUnitForBattle(Character, EBattleUnitTeam::Enemy, Grid);
+                UE_LOG(LogTemp, Log,
+                    TEXT("[CombatManager] SpawnEnemies: %s spawned at Lv%d"),
+                    *GetNameSafe(Character), Stats->Level);
+            }
 
-		BattlePrepContext.SpawnedUnits.Add(Entry);
-		
-		const FVector TileCenter = Grid->GridToWorld(SpawnCoord);
+            Stats->InitializeForBattle();
+        }
 
-		UE_LOG(LogTemp, Warning, TEXT("TileCenter: %s"), *TileCenter.ToString());
-		UE_LOG(LogTemp, Warning, TEXT("ActorLocation: %s"), *Character->GetActorLocation().ToString());
+        FSpawnedBattleUnit Entry;
+        Entry.UnitActor   = Character;
+        Entry.SourceIndex = i;
+        Entry.Team        = EBattleUnitTeam::Enemy;
 
-		DrawDebugSphere(GetWorld(), TileCenter, 20.f, 12, FColor::Yellow, false, 10.f);
-		DrawDebugSphere(GetWorld(), Character->GetActorLocation(), 20.f, 12, FColor::Blue, false, 10.f);
-	}
+        RegisterStableSourceIndex(Character, EBattleUnitTeam::Enemy, i);
+        InitializeSpawnedUnitForBattle(Character, EBattleUnitTeam::Enemy, Grid);
+
+        BattlePrepContext.SpawnedUnits.Add(Entry);
+
+        const FVector TileCenter = Grid->GridToWorld(SpawnCoord);
+
+        UE_LOG(LogTemp, Warning, TEXT("TileCenter: %s"), *TileCenter.ToString());
+        UE_LOG(LogTemp, Warning, TEXT("ActorLocation: %s"), *Character->GetActorLocation().ToString());
+
+        DrawDebugSphere(GetWorld(), TileCenter, 20.f, 12, FColor::Yellow, false, 10.f);
+        DrawDebugSphere(GetWorld(), Character->GetActorLocation(), 20.f, 12, FColor::Blue, false, 10.f);
+    }
 }
 
 void UCombatManager::StartCombat(UBattlePreparationContext& BattlePrepContext)

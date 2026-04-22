@@ -4,6 +4,7 @@
 
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "ActorComponents/PauseMenuComponent.h"
 #include "Characters/CharacterBase.h"
 #include "GameMode/CombatManager.h"
 #include "GameMode/Combat/BattleInputManager.h"
@@ -50,6 +51,11 @@ void ABattlePlayerController::SpawnPreviewActors()
 	}
 }
 
+ABattlePlayerController::ABattlePlayerController()
+{
+	PauseMenuComponent = CreateDefaultSubobject<UPauseMenuComponent>(TEXT("PauseMenuComponent"));
+}
+
 void ABattlePlayerController::EnterBattleMode(UCombatManager* InCombatManager)
 {
 	UE_LOG(LogTemp, Log, TEXT("[BattlePlayerController] Asked to EnterBattleMode"));
@@ -94,16 +100,15 @@ void ABattlePlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();
 
-	UEnhancedInputComponent* EnhancedInput =
-		Cast<UEnhancedInputComponent>(InputComponent);
+	UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(InputComponent);
 
-	if (!EnhancedInput)
+	if (!EIC)
 	{
 		return;
 	}
 
 #define BIND(Action, Event, Func) \
-	if (Action) { EnhancedInput->BindAction(Action, Event, this, Func); }
+	if (Action) { EIC->BindAction(Action, Event, this, Func); }
 
 	BIND(ConfirmAction,        ETriggerEvent::Triggered, &ABattlePlayerController::HandleConfirm);
 	BIND(CancelAction,         ETriggerEvent::Triggered, &ABattlePlayerController::HandleCancel);
@@ -117,6 +122,11 @@ void ABattlePlayerController::SetupInputComponent()
 	BIND(CameraRotateAction,   ETriggerEvent::Triggered, &ABattlePlayerController::HandleCameraRotate);
 
 #undef BIND
+	
+	if (PauseInput && PauseMenuComponent)
+	{
+		PauseMenuComponent->BindPauseInput(EIC, PauseInput);
+	}
 }
 
 void ABattlePlayerController::OnPossess(APawn* InPawn)
@@ -396,6 +406,7 @@ void ABattlePlayerController::CreateAndInitializeHUD()
 		return;
 	}
 
+	PauseMenuComponent->CreatePauseWidget();
 	BattleHUD = CreateWidget<UBattleHUDWidget>(this, BattleHUDClass);
 	if (!BattleHUD)
 	{

@@ -35,6 +35,8 @@ public:
 
 	/** Combat configuration */
 	EFloorCombatPolicy GetCombatPolicy() const { return CombatPolicy; }
+	
+	TSubclassOf<ACharacterBase> GetExplorationCharacterClass() const { return ExplorationCharacterClass; }
 
 protected:
 	/** Defines how combat behaves on this floor */
@@ -59,6 +61,9 @@ protected:
 	
 	UPROPERTY()
 	APlayerController* ActivePlayerController;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Controllers")
+	TSubclassOf<ACharacterBase> ExplorationCharacterClass;
 	
 	//Debug
 	UPROPERTY(EditDefaultsOnly, Category="Debug|Party")
@@ -94,9 +99,12 @@ protected:
 	/** Called once before the level is unloaded */
 	virtual void TeardownFloor();
 	
+	// Override to prevent the engine from auto-spawning a DefaultPawn.
+	// The exploration pawn is always managed by GameContextManager.
+	virtual APawn* SpawnDefaultPawnFor_Implementation(AController* NewPlayer,
+		AActor* StartSpot) override;
+	
 	void HandleGameContextChanged(EGameContextState NewState);
-
-	void SwitchPlayerController(TSubclassOf<APlayerController> NewControllerClass);
 	
 	void SwitchToExplorationController();
 	void SwitchToBattlePreparationController();

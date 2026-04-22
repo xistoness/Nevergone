@@ -42,3 +42,9 @@ void UPartyMemberEntryWidget::SetSelected(bool bInSelected)
     bSelected = bInSelected;
     BP_SetSelected(bInSelected);
 }
+
+void UPartyMemberEntryWidget::SetLeader(bool bInIsLeader)
+{
+    bIsLeader = bInIsLeader;
+    BP_SetLeader(bInIsLeader);
+}

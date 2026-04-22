@@ -35,7 +35,7 @@ public:
 	void RequestTransition();
 	void RequestAbortBattle();
 	void EnterBattleResults();
-	void ReturnToExploration();
+	void ReturnToExploration(bool bForce = false);
 
     /**
      * Called when a save slot is loaded. If the save was written mid-combat,
@@ -56,9 +56,18 @@ public:
 	EGameContextState GetCurrentState() const { return CurrentState; }
 	FRotator GetSavedExplorationControlRotation() const;
 	
+	ACharacterBase* SpawnExplorationActorFromClass(TSubclassOf<ACharacterBase> CharacterClass);
+
+	
 	void ClearBattleSession();
 	void DestroyExplorationCharacter(ACharacterBase* Character);
+	TSubclassOf<ACharacterBase> ResolveExplorationPawnClass(TSubclassOf<ACharacterBase> FallbackClass) const;
 	
+	// Called by PartyManagerSubsystem::OnLeaderChanged during exploration —
+	// destroys the current pawn and spawns the new leader's pawn at same position.
+	void HandleLeaderChanged();
+	void InitializeSubsystem();
+
 	FOnGameContextChanged OnGameContextChanged;
 
 private:
@@ -76,19 +85,13 @@ private:
      * is restored correctly.
      */
     void RequestBattleCombatRestore(const FSavedCombatSession& SavedSession);
-
-	/**
-	 * Spawns the saved exploration character and broadcasts
-	 * OnGameContextChanged(Exploration) unconditionally — bypassing the
-	 * CurrentState == NewState early-return in EnterState.
-	 *
-	 * Use this when aborting battle prep while CurrentState is already
-	 * Exploration (e.g. the no-spawn-zone guard). In that case EnterState
-	 * would silently no-op, leaving the ExplorationPlayerController without
-	 * a possessed pawn.
-	 */
-	void ForceReenterExploration();
 	
+	void SyncExplorationActorHP(ACharacterBase* ExplorationActor);
+	
+	// Spawns a fresh exploration actor from the saved session data.
+	// Used by ReturnToExploration after combat ends.
+	ACharacterBase* SpawnExplorationActor();
+
 	UFUNCTION()
 	void HandleCombatFinished(EBattleUnitTeam WinningTeam);
 

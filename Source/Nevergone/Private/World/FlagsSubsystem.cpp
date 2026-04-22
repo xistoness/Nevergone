@@ -61,12 +61,21 @@ void UFlagsSubsystem::FlushToGameInstance()
     UMyGameInstance* GI = Cast<UMyGameInstance>(GetGameInstance());
     if (!GI) { return; }
 
-    // Write each flag through MyGameInstance's public setter so the runtime
-    // cache and ActiveSave stay consistent.
+    // Clear first so removed flags don't persist in the GI map
+    GI->GlobalFlags.Empty();
+
     for (const TPair<FName, bool>& Pair : Flags)
     {
         GI->SetGlobalFlag(Pair.Key, Pair.Value);
     }
 
     UE_LOG(LogTemp, Log, TEXT("[FlagsSubsystem] FlushToGameInstance: flushed %d flags."), Flags.Num());
+}
+
+void UFlagsSubsystem::Reset()
+{
+    Flags.Empty();
+    FlushToGameInstance();
+
+    UE_LOG(LogTemp, Log, TEXT("[FlagsSubsystem] Reset: all flags cleared."));
 }

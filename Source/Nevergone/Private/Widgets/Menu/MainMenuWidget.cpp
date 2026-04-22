@@ -127,14 +127,19 @@ void UMainMenuWidget::HandleNewGameConfirmed()
 void UMainMenuWidget::HandleContinueConfirmed()
 {
 	UMyGameInstance* GI = GetGI();
-	if (!GI) return;
+	if (!GI) { return; }
 
-	// Save is already loaded by the panel before ConfirmPanel was called.
-	// Just transition to the saved level.
+	// Load the most recent save slot before transitioning.
+	// Previously this assumed the panel had already loaded the save,
+	// but Panel_Continue does not do that — the GI has no ActiveSave at this point.
+	GI->RequestContinue();
+
+	// RequestContinue loads the save into memory. Now read the saved level.
 	const FName SavedLevel = GI->GetActiveSavedLevelName();
 	if (SavedLevel.IsNone())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[MainMenuWidget] HandleContinueConfirmed: no saved level — going to first level"));
+		UE_LOG(LogTemp, Warning,
+			TEXT("[MainMenuWidget] HandleContinueConfirmed: no saved level after load — going to first level."));
 		if (!FirstLevelName.IsNone())
 		{
 			FLevelTransitionContext Context;
@@ -143,13 +148,10 @@ void UMainMenuWidget::HandleContinueConfirmed()
 		}
 		return;
 	}
-	
-	if (GI)
+
+	if (UAudioSubsystem* Audio = GI->GetSubsystem<UAudioSubsystem>())
 	{
-		if (UAudioSubsystem* Audio = GI->GetSubsystem<UAudioSubsystem>())
-		{
-			Audio->PlayUISoundEvent(EUISoundEvent::ButtonConfirm);
-		}
+		Audio->PlayUISoundEvent(EUISoundEvent::ButtonConfirm);
 	}
 
 	FLevelTransitionContext Context;
