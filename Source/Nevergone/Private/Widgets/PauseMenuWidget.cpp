@@ -179,25 +179,6 @@ void UPauseMenuWidget::HandleSaveConfirmed()
     UMyGameInstance* GI = GetGI();
     if (!GI) { return; }
 
-    if (SelectedSlotIndex != INDEX_NONE)
-    {
-        // Player explicitly selected a slot — save there
-        GI->RequestSaveToSlot(SelectedSlotIndex);
-
-        UE_LOG(LogTemp, Log,
-            TEXT("[PauseMenuWidget] Game saved to slot %d."), SelectedSlotIndex);
-    }
-    else
-    {
-        // No slot selected — save to the active slot (or next available if none)
-        GI->RequestSaveGame();
-
-        UE_LOG(LogTemp, Log, TEXT("[PauseMenuWidget] Game saved to active slot."));
-    }
-
-    // Reset selection after saving so next open starts fresh
-    SelectedSlotIndex = INDEX_NONE;
-
     if (UAudioSubsystem* Audio = GI->GetSubsystem<UAudioSubsystem>())
     {
         Audio->PlayUISoundEvent(EUISoundEvent::ButtonConfirm);
@@ -208,7 +189,26 @@ void UPauseMenuWidget::HandleSaveConfirmed()
 
 void UPauseMenuWidget::HandleLoadConfirmed()
 {
-    UE_LOG(LogTemp, Log, TEXT("[PauseMenuWidget] Load confirmed by panel."));
+    UMyGameInstance* GI = GetGI();
+    if (!GI) { return; }
+
+    // Request load/continue loads the save into memory. Now read the saved level.
+    const FName SavedLevel = GI->GetActiveSavedLevelName();
+    if (SavedLevel.IsNone())
+    {
+        UE_LOG(LogTemp, Warning,
+            TEXT("[MainMenuWidget] HandleLoadConfirmed: no saved level after load — going to first level."));
+        return;
+    }
+
+    if (UAudioSubsystem* Audio = GI->GetSubsystem<UAudioSubsystem>())
+    {
+        Audio->PlayUISoundEvent(EUISoundEvent::ButtonConfirm);
+    }
+
+    FLevelTransitionContext Context;
+    Context.ToLevel = SavedLevel;
+    GI->RequestLevelChange(SavedLevel, Context);
 }
 
 void UPauseMenuWidget::HandleSettingsConfirmed()
