@@ -126,20 +126,20 @@ void UMainMenuWidget::HandleNewGameConfirmed()
 
 void UMainMenuWidget::HandleContinueConfirmed()
 {
+	HandleLoadConfirmed();
+}
+
+void UMainMenuWidget::HandleLoadConfirmed()
+{
 	UMyGameInstance* GI = GetGI();
 	if (!GI) { return; }
 
-	// Load the most recent save slot before transitioning.
-	// Previously this assumed the panel had already loaded the save,
-	// but Panel_Continue does not do that — the GI has no ActiveSave at this point.
-	GI->RequestContinue();
-
-	// RequestContinue loads the save into memory. Now read the saved level.
+	// Request load/continue loads the save into memory. Now read the saved level.
 	const FName SavedLevel = GI->GetActiveSavedLevelName();
 	if (SavedLevel.IsNone())
 	{
 		UE_LOG(LogTemp, Warning,
-			TEXT("[MainMenuWidget] HandleContinueConfirmed: no saved level after load — going to first level."));
+			TEXT("[MainMenuWidget] HandleLoadConfirmed: no saved level after load — going to first level."));
 		if (!FirstLevelName.IsNone())
 		{
 			FLevelTransitionContext Context;
@@ -157,11 +157,6 @@ void UMainMenuWidget::HandleContinueConfirmed()
 	FLevelTransitionContext Context;
 	Context.ToLevel = SavedLevel;
 	GI->RequestLevelChange(SavedLevel, Context);
-}
-
-void UMainMenuWidget::HandleLoadConfirmed()
-{
-	HandleContinueConfirmed();
 }
 
 void UMainMenuWidget::HandleSettingsConfirmed()

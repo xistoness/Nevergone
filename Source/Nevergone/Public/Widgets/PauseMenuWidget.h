@@ -93,6 +93,12 @@ protected:
     // INDEX_NONE means no slot selected — save will use FindNextAvailableSlot.
     UPROPERTY(BlueprintReadWrite, Category = "Pause")
     int32 SelectedSlotIndex = INDEX_NONE;
+    
+    UFUNCTION(BlueprintCallable, Category = "Pause")
+    void SetSelectedSlotIndex(int32 InSlotIndex) { SelectedSlotIndex = InSlotIndex; }
+
+    UFUNCTION(BlueprintPure, Category = "Pause")
+    int32 GetSelectedSlotIndex() const { return SelectedSlotIndex; }
 
     // Called on cursor movement — highlight the sidebar button at Index.
     UFUNCTION(BlueprintImplementableEvent, Category = "Pause")
