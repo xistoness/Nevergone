@@ -6,6 +6,7 @@
 #include "GameplayTagContainer.h"
 #include "Types/BattleTypes.h"
 #include "Types/CharacterTypes.h"
+#include "Types/ItemTypes.h"
 #include "Engine/DataAsset.h"
 #include "UnitDefinition.generated.h"
 
@@ -20,10 +21,30 @@ public:
     FText DisplayName;
     
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-    TObjectPtr<UTexture2D> DisplayPortrait;
+    FText ClassName;
     
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-    FText ClassName;
+    TObjectPtr<UTexture2D> DisplayPortrait;
+
+    // Canonical class enum — single source of truth shared with the equipment
+    // restriction system. ClassName is now derived from this via GetClassName().
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+    EUnitClass UnitClass = EUnitClass::None;
+
+    // Returns a display-friendly class name derived from EUnitClass.
+    // Handles compound names (e.g. TorturedSavage → "Tortured Savage").
+    // No need to manually maintain a separate FText field.
+    FText GetClassName() const
+    {
+        switch (UnitClass)
+        {
+        case EUnitClass::Planewalker:    return FText::FromString(TEXT("Planewalker"));
+        case EUnitClass::Defiled:        return FText::FromString(TEXT("Defiled"));
+        case EUnitClass::TorturedSavage: return FText::FromString(TEXT("Tortured Savage"));
+        case EUnitClass::Towerborn:      return FText::FromString(TEXT("Towerborn"));
+        default:                         return FText::FromString(TEXT("Unknown"));
+        }
+    }
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
     int32 MaxLevel = 30;

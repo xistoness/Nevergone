@@ -35,7 +35,11 @@ ACharacterBase::ACharacterBase()
     // world actor save/restore pass. Setting this false prevents
     // CollectWorldSaveData from capturing them as world actors and
     // SpawnMissingActors from re-spawning them on load (which caused duplicates).
-    SaveableComponent->bPersistAcrossLoads = false;
+	// bPersistAcrossLoads = true: the pawn is managed entirely by GameContextManager
+	// and must not be touched by WorldManagerSubsystem's discrepancy check.
+	// The SaveableComponent exists only to persist camera state (BoomTargetArm)
+	// across sessions via PartyMemberData — not to control actor lifetime.
+	SaveableComponent->bPersistAcrossLoads = true;
 	ExplorationMode = CreateDefaultSubobject<UExplorationModeComponent>(TEXT("ExplorationMode"));
 	BattleMode      = CreateDefaultSubobject<UBattleModeComponent>(TEXT("BattleMode"));
 	AbilitySystemComponent = CreateDefaultSubobject<UMyAbilitySystemComponent>(TEXT("AbilitySystem"));

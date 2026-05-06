@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
 #include "Abilities/GameplayAbilityTargetTypes.h"
+#include "ItemTypes.h"
 #include "LevelTypes.h"
 #include "BattleTypes.generated.h"
 
@@ -21,6 +22,10 @@ struct NEVERGONE_API FGeneratedPlayerData
     int32 Level = 1;
     int32 PersistentHP = 0;
     FGuid CharacterID;
+
+    // Equipment carried into battle — StatModifiers on each item are applied
+    // to TemporaryAttributeBonuses in UUnitStatsComponent::InitializeForBattle.
+    FEquipmentLoadout EquipmentLoadout;
 };
 
 UENUM()
@@ -100,6 +105,10 @@ struct FSpawnedBattleUnit
 
     UPROPERTY()
     EBattleUnitTeam Team = EBattleUnitTeam::Ally;
+
+    // Equipment carried by this unit — only populated for ally units.
+    // BattleState::Initialize reads this to apply stat modifiers.
+    FEquipmentLoadout EquipmentLoadout;
 };
 
 USTRUCT(BlueprintType)

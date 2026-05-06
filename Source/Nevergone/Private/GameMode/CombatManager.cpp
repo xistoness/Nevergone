@@ -8,6 +8,7 @@
 #include "ActorComponents/UnitStatsComponent.h"
 #include "Audio/AudioSubsystem.h"
 #include "Characters/Abilities/BattleMovementAbility.h"
+#include "Data/ItemDefinition.h"
 #include "Engine/Texture2D.h"
 #include "GameInstance/MyGameInstance.h"
 #include "GameInstance/GameContextManager.h"
@@ -210,20 +211,23 @@ void UCombatManager::SpawnAllies(UBattlePreparationContext& BattlePrepContext, U
 		const FGeneratedPlayerData& PlayerData = BattlePrepContext.PlayerParty[i];
 		if (UUnitStatsComponent* Stats = Character->GetUnitStats())
 		{
-			// Apply the member's persistent level before any HP or stat calculation.
-			// BattleState::Initialize calls GetMaxHP() which depends on Stats->Level,
-			// so this must happen before InitializeForBattle and before BattleState runs.
+			// Level must be set before InitializeForBattle — GetMaxHP() depends on it.
 			Stats->Level = PlayerData.Level;
 
 			if (PlayerData.PersistentHP > 0)
 			{
 				Stats->SetCurrentHP(PlayerData.PersistentHP);
 				UE_LOG(LogTemp, Log,
-					TEXT("[CombatManager] Restored PersistentHP=%d for %s (Lv%d)"),
+					TEXT("[CombatManager] SpawnAllies: restored PersistentHP=%d for %s (Lv%d)"),
 					PlayerData.PersistentHP, *GetNameSafe(Character), Stats->Level);
 			}
+
 			Stats->InitializeForBattle();
 		}
+
+		// Pass the equipment loadout through to BattleState::Initialize, which applies
+		// both attribute bonuses (pre-formula) and derived flat bonuses (post-formula).
+		Entry.EquipmentLoadout = PlayerData.EquipmentLoadout;
 
 		InitializeSpawnedUnitForBattle(Character, EBattleUnitTeam::Ally, Grid);
 
@@ -608,10 +612,10 @@ void UCombatManager::StartCombatFromSave(
 				continue;
 			}
 
-			// Reassign the saved GUID immediately so restore matches correctly.
+			// Reassign the saved identifier immediately so restore matches correctly.
 			if (USaveableComponent* SaveComp = Character->FindComponentByClass<USaveableComponent>())
 			{
-				SaveComp->SetActorGuid(SavedUnit->ActorGuid);
+				SaveComp->SetSaveIdentifier(SavedUnit->ActorIdentifier);
 			}
 
 			BindToCombatUnitActionEvents(Character);
@@ -1193,7 +1197,7 @@ void UCombatManager::EndEnemyTurn()
                 //    respawn the player pawn after combat ends on a restore path.
                 //    On a normal flow, FBattleSessionData holds this in memory;
                 //    on a restore, that struct is empty so we must save it explicitly.
-                if (UGameContextManager* CTX = MyGI->GetGameContextManager())
+                if (UGameContextManager* CTX = MyGI->GetSubsystem<UGameContextManager>())
                 {
                     Save->SavedCombatSession.ExplorationCharacterClass     = CTX->GetExplorationCharacterClass();
                     Save->SavedCombatSession.ExplorationCharacterTransform = CTX->GetSavedExplorationTransform();
@@ -1525,7 +1529,13 @@ void UCombatManager::RestoreInputAfterAction(ACharacterBase* ActingUnit)
 
         if (ActingUnit && BattleState && !BattleState->CanUnitAct(ActingUnit))
         {
-            SelectNextControllableUnit();
+            // Only auto-advance if the acting unit is still the selected one.
+            // If the selection already changed (e.g. HandleUnitOutOfAP fired before
+            // the delay elapsed), advancing again would skip an extra unit.
+            if (ActingUnit == CurrentSelectedUnit)
+            {
+                SelectNextControllableUnit();
+            }
         }
         else if (ActingUnit && BattleState && BattleState->CanUnitAct(ActingUnit))
         {
@@ -1653,7 +1663,7 @@ void UCombatManager::CollectCombatSaveData(FSavedCombatSession& OutSession) cons
 		if (USaveableComponent* SaveComp =
 			ActiveEncounterVolume->FindComponentByClass<USaveableComponent>())
 		{
-			OutSession.EncounterVolumeGuid = SaveComp->GetOrCreateGuid();
+			OutSession.EncounterVolumeId = SaveComp->GetSaveIdentifier();
 		}
 	}
 
@@ -1692,7 +1702,7 @@ void UCombatManager::CollectCombatSaveData(FSavedCombatSession& OutSession) cons
 			}
 
 			FSavedCombatUnitState UnitData;
-			UnitData.ActorGuid                 = SaveComp->GetOrCreateGuid();
+			UnitData.ActorIdentifier             = SaveComp->GetSaveIdentifier();
 			UnitData.ActorClass                = TSoftClassPtr<ACharacterBase>(Unit->GetClass());
 			UnitData.Team                      = State ? State->Team : Team;
 			UnitData.SourceIndex               = StableSourceIndex;
@@ -1736,7 +1746,7 @@ void UCombatManager::CollectCombatSaveData(FSavedCombatSession& OutSession) cons
 						if (USaveableComponent* CasterSave =
 							Caster->FindComponentByClass<USaveableComponent>())
 						{
-							SavedEffect.CasterGuid = CasterSave->GetOrCreateGuid();
+							SavedEffect.CasterIdentifier = CasterSave->GetSaveIdentifier();
 						}
 					}
 
@@ -1761,12 +1771,12 @@ void UCombatManager::CollectCombatSaveData(FSavedCombatSession& OutSession) cons
 
 void UCombatManager::RestoreCombatFromSave(const FSavedCombatSession& SavedSession)
 {
-	TMap<FGuid, const FSavedCombatUnitState*> ByGuid;
+	TMap<FName, const FSavedCombatUnitState*> ByGuid;
 	for (const FSavedCombatUnitState& Entry : SavedSession.UnitStates)
 	{
-		if (Entry.ActorGuid.IsValid())
+		if (!Entry.ActorIdentifier.IsNone())
 		{
-			ByGuid.Add(Entry.ActorGuid, &Entry);
+			ByGuid.Add(Entry.ActorIdentifier, &Entry);
 		}
 	}
 
@@ -1782,7 +1792,7 @@ void UCombatManager::RestoreCombatFromSave(const FSavedCombatSession& SavedSessi
 
 			if (!SaveComp || !Stats || !BM) { continue; }
 
-			const FSavedCombatUnitState* Saved = ByGuid.FindRef(SaveComp->GetOrCreateGuid());
+			const FSavedCombatUnitState* Saved = ByGuid.FindRef(SaveComp->GetSaveIdentifier());
 			if (!Saved) { continue; }
 
 			Stats->TemporaryAttributeBonuses = Saved->TemporaryAttributeBonuses;

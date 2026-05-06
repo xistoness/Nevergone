@@ -18,4 +18,10 @@ namespace SaveKeys
 
 	// Test / debug actors
 	static const FName TestInteract(TEXT("TestInteract"));
+
+	// Container actors (chests, barrels) — items + bHasBeenLooted flag.
+	static const FName Container(TEXT("Container"));
+
+	// Door actors — bIsUnlocked flag (Open is transient and never persisted).
+	static const FName Door(TEXT("Door"));
 }

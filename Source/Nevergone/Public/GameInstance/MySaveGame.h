@@ -9,6 +9,8 @@
 #include "GameFramework/SaveGame.h"
 #include "Data/PartyData.h"
 #include "Data/ProgressionData.h"
+#include "Data/ItemDefinition.h"
+#include "Types/ItemTypes.h"
 #include "Types/BattleTypes.h"
 #include "MySaveGame.generated.h"
 
@@ -28,9 +30,10 @@ struct FSavedActiveStatusEffect
     UPROPERTY(SaveGame)
     FSoftObjectPath DefinitionPath;
 
-    // Guid of the caster actor. May be invalid if the caster died before the save.
+    // Save identifier of the caster actor (actor FName for placed, GUID string for spawned).
+    // May be None if the caster died before the save.
     UPROPERTY(SaveGame)
-    FGuid CasterGuid;
+    FName CasterIdentifier;
 
     UPROPERTY(SaveGame)
     EBattleUnitTeam CasterTeam = EBattleUnitTeam::Ally;
@@ -77,9 +80,9 @@ struct FSavedCombatUnitState
 {
     GENERATED_BODY()
 
-    // Links this record to the actor in the world via its SaveableComponent guid.
+    // Links this record to the actor in the world via its SaveableComponent identifier.
     UPROPERTY(SaveGame)
-    FGuid ActorGuid;
+    FName ActorIdentifier;
 
     UPROPERTY(SaveGame)
     TSoftClassPtr<ACharacterBase> ActorClass;
@@ -130,10 +133,10 @@ struct FSavedCombatSession
 {
     GENERATED_BODY()
 
-    // Guid of the AFloorEncounterVolume that started this combat.
+    // Save identifier of the AFloorEncounterVolume that started this combat.
     // Used to re-locate the volume actor on restore so the grid can be rebuilt.
     UPROPERTY(SaveGame)
-    FGuid EncounterVolumeGuid;
+    FName EncounterVolumeId;
 
     UPROPERTY(SaveGame)
     TArray<FSavedCombatUnitState> UnitStates;
@@ -156,7 +159,7 @@ struct FSavedCombatSession
 
     void Reset()
     {
-        EncounterVolumeGuid.Invalidate();
+        EncounterVolumeId = NAME_None;
         UnitStates.Reset();
         ExplorationCharacterClass.Reset();
         ExplorationCharacterTransform = FTransform::Identity;
@@ -184,6 +187,21 @@ public:
 
     UPROPERTY(SaveGame)
     FProgressionData ProgressionData;
+
+    // ---------------------------------------------------------------------------
+    // Shared Inventory
+    // ---------------------------------------------------------------------------
+
+    // All items currently carried by the party. Up to 30 slots.
+    // Items equipped by a character are NOT in this array — they live in
+    // FPartyMemberData::EquipmentLoadout and are removed from inventory on equip.
+    UPROPERTY(SaveGame)
+    TArray<FInventoryEntry> SharedInventory;
+
+    // Player preferred sort order — up to 4 stacked layers.
+    // Applied in index order; ties in layer N fall through to layer N+1.
+    UPROPERTY(SaveGame)
+    TArray<FInventorySortLayer> InventorySortLayers;
     
     UPROPERTY(SaveGame)
     TMap<FName, bool> GlobalFlags;

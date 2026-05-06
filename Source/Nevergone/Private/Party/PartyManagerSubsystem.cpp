@@ -67,6 +67,8 @@ void UPartyManagerSubsystem::AddPartyMember(const FPartyMemberData& NewMember)
     FPartyMemberData& Added = PartyData.Members.Add_GetRef(NewMember);
 
     ResolveInitialHP(Added);
+    ResolveDisplayName(Added);
+    ResolveDisplayName(Added);
 
     // Auto-activate if there is room in the active party
     if (GetActiveMemberCount() < PartyData.MaxPartySize)
@@ -100,6 +102,33 @@ void UPartyManagerSubsystem::AddPartyMember(const FPartyMemberData& NewMember)
 
     OnRosterChanged.Broadcast();
     FlushToGameInstance();
+}
+
+void UPartyManagerSubsystem::ResolveDisplayName(FPartyMemberData& InOutMember) const
+{
+    // Skip if DisplayName was already set (e.g. loaded from save).
+    if (!InOutMember.DisplayName.IsEmpty()) { return; }
+    if (!InOutMember.CharacterClass) { return; }
+
+    // Read DisplayName and ClassName from the UnitDefinition on the CDO.
+    // Same CDO access pattern as ResolveInitialHP — no actor spawned.
+    APlayerUnitBase* CDO = InOutMember.CharacterClass->GetDefaultObject<APlayerUnitBase>();
+    if (!CDO) { return; }
+
+    UUnitStatsComponent* StatsComp = CDO->GetUnitStats();
+    if (!StatsComp) { return; }
+
+    const UUnitDefinition* Def = StatsComp->GetDefinition();
+    if (!Def) { return; }
+
+    InOutMember.DisplayName = Def->DisplayName;
+    InOutMember.ClassName   = Def->GetClassName();
+    InOutMember.UnitClass   = Def->UnitClass;
+
+    UE_LOG(LogTemp, Log,
+        TEXT("[PartyManagerSubsystem] ResolveDisplayName: '%s' (%s) class=%d."),
+        *InOutMember.DisplayName.ToString(), *InOutMember.ClassName.ToString(),
+        (int32)InOutMember.UnitClass);
 }
 
 void UPartyManagerSubsystem::ResolveInitialHP(FPartyMemberData& InOutMember) const
@@ -244,8 +273,12 @@ bool UPartyManagerSubsystem::SwapActiveMembers(const FGuid& IncomingID, const FG
 void UPartyManagerSubsystem::BuildBattleParty(
     const UFloorEncounterData* EncounterData,
     TArray<FGeneratedPlayerData>& OutPlayerParty
-) const
+)
 {
+    // Re-sync from GameInstance so any equipment changes made via InventorySubsystem
+    // (which writes directly to GI::PartyData) are reflected here before battle starts.
+    SyncFromGameInstance();
+
     OutPlayerParty.Reset();
     AddBasePartyMembers(OutPlayerParty);
 
@@ -329,6 +362,38 @@ void UPartyManagerSubsystem::FlushToGameInstance()
     UE_LOG(LogTemp, Log,
         TEXT("[PartyManagerSubsystem] FlushToGameInstance: pushed %d members (%d active)"),
         PartyData.Members.Num(), GetActiveMemberCount());
+}
+
+// ---------------------------------------------------------------------------
+// Runtime mutation access
+// ---------------------------------------------------------------------------
+
+FPartyMemberData* UPartyManagerSubsystem::FindMemberMutable(const FGuid& CharacterID)
+{
+    if (!CharacterID.IsValid()) { return nullptr; }
+
+    FPartyMemberData* Found = PartyData.Members.FindByPredicate(
+        [&CharacterID](const FPartyMemberData& M) { return M.CharacterID == CharacterID; });
+
+    if (!Found)
+    {
+        UE_LOG(LogTemp, Verbose,
+            TEXT("[PartyManagerSubsystem] FindMemberMutable: no member with ID=%s."),
+            *CharacterID.ToString());
+    }
+    return Found;
+}
+
+void UPartyManagerSubsystem::NotifyMemberMutated()
+{
+    // Push the in-memory cache back to the GameInstance so the next save /
+    // SyncFromGameInstance round-trip reads the updated values, then notify
+    // any subscribed UI to refresh.
+    FlushToGameInstance();
+    OnRosterChanged.Broadcast();
+
+    UE_LOG(LogTemp, Log,
+        TEXT("[PartyManagerSubsystem] NotifyMemberMutated: flushed and broadcast."));
 }
 
 const FPartyMemberData* UPartyManagerSubsystem::GetPartyLeader() const
@@ -421,10 +486,11 @@ void UPartyManagerSubsystem::AddBasePartyMembers(TArray<FGeneratedPlayerData>& O
         if (!Entry.bIsAlive) { continue; }
 
         FGeneratedPlayerData Generated;
-        Generated.PlayerClass  = Entry.CharacterClass;
-        Generated.Level        = Entry.Level;
-        Generated.PersistentHP = Entry.CurrentHP > 0 ? FMath::RoundToInt(Entry.CurrentHP) : 0;
-        Generated.CharacterID  = Entry.CharacterID;
+        Generated.PlayerClass      = Entry.CharacterClass;
+        Generated.Level            = Entry.Level;
+        Generated.PersistentHP     = Entry.CurrentHP > 0 ? FMath::RoundToInt(Entry.CurrentHP) : 0;
+        Generated.CharacterID      = Entry.CharacterID;
+        Generated.EquipmentLoadout = Entry.EquipmentLoadout;
 
         UE_LOG(LogTemp, Log,
             TEXT("[PartyManagerSubsystem] AddBasePartyMembers: %s | HP=%d | ID=%s"),

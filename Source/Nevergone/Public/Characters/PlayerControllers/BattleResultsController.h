@@ -38,7 +38,7 @@ public:
 
 protected:
 
-	virtual void BeginPlay() override;
+	virtual void ReceivedPlayer() override;
 
 	// Widget class — assign the BP subclass in the controller's Blueprint CDO.
 	UPROPERTY(EditDefaultsOnly, Category = "UI")

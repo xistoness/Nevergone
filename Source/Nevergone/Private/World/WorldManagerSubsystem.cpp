@@ -16,7 +16,6 @@ void UWorldManagerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 
-	// Listen for actors initialized event
 	FWorldDelegates::OnWorldInitializedActors.AddUObject(
 		this,
 		&UWorldManagerSubsystem::HandleWorldInitializedActors
@@ -25,19 +24,16 @@ void UWorldManagerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 void UWorldManagerSubsystem::HandleSaveLoaded()
 {
-    // During a mid-combat restore, RestoreWorldState was already called by
-    // HandleWorldInitializedActors. Running it again via OnSaveLoaded would
-    // trigger SpawnMissingActors and re-spawn combat units that were just
-    // destroyed/replaced by the restore. Skip it entirely.
-    if (bDidRestoreMidCombat) { return; }
+	// During a mid-combat restore, RestoreWorldState was already called by
+	// HandleWorldInitializedActors. Running it again would re-spawn combat units.
+	if (bDidRestoreMidCombat) { return; }
 
 	RestoreWorldState();
 }
 
 void UWorldManagerSubsystem::HandlePartyRestored(const FPartyData& PartyData)
 {
-	// TODO	
-	// Party can affect companion spawns, etc
+	// TODO: party changes can affect companion spawns, etc.
 }
 
 void UWorldManagerSubsystem::CollectWorldSaveData()
@@ -81,26 +77,12 @@ void UWorldManagerSubsystem::HandleWorldInitializedActors(const FActorsInitializ
 	GameInstance->OnPartyChanged.RemoveAll(this);
 	GameInstance->OnPartyChanged.AddUObject(this, &UWorldManagerSubsystem::HandlePartyRestored);
 
-	// Restore world state here — GameInstance is guaranteed valid at this point.
-	// This covers both the initial load and every level transition return.
 	RestoreWorldState();
 
-    // After world actors are restored, give GameContextManager a chance to
-    // detect a mid-combat save and reconstruct the battle session.
-    // Guard with bDidRestoreMidCombat so streaming sublevel loads don't
-    // trigger a second restore on the same world.
-    if (!bDidRestoreMidCombat)
-    {
-        bDidRestoreMidCombat = true;
-
-        if (UGameInstance* GI = LoadedWorld->GetGameInstance())
-        {
-            if (UGameContextManager* ContextMgr = GI->GetSubsystem<UGameContextManager>())
-            {
-                ContextMgr->HandleSaveLoaded();
-            }
-        }
-    }
+	// NOTE: GameContextManager::HandleSaveLoaded is NOT called here —
+	// GetAuthGameMode() returns null at this point. It is called from
+	// TowerFloorGameMode::BeginPlay instead.
+	bDidRestoreMidCombat = true;
 
 	GameInstance->OnPostLevelLoad();
 }
@@ -109,10 +91,6 @@ void UWorldManagerSubsystem::Deinitialize()
 {
 	FWorldDelegates::OnWorldInitializedActors.RemoveAll(this);
 
-	// Remove GameInstance bindings before the world is torn down.
-	// AutoSaveBeforeTravel broadcasts OnSaveRequested while transitioning,
-	// which happens after this subsystem is deinitialized. Without this
-	// cleanup the delegate fires into a destroyed object.
 	if (GameInstance)
 	{
 		GameInstance->OnSaveRequested.RemoveAll(this);
@@ -121,29 +99,47 @@ void UWorldManagerSubsystem::Deinitialize()
 		GameInstance = nullptr;
 	}
 
-    // Reset so the next world load can trigger a mid-combat restore if needed.
-    bDidRestoreMidCombat = false;
+	bDidRestoreMidCombat = false;
 
 	ClearCachedData();
 
 	Super::Deinitialize();
 }
 
+// ---------------------------------------------------------------------------
+// RestoreWorldState
+// ---------------------------------------------------------------------------
+
 void UWorldManagerSubsystem::RestoreWorldState()
 {
+	if (!GameInstance) return;
+
+	const FName LevelName = GetSanitizedLevelKey();
+
+	if (!GameInstance->HasLevelBeenVisited(LevelName))
+	{
+		// First visit: snapshot the original level state, register as visited,
+		// and return. Nothing to restore — the level is in its default state.
+		UE_LOG(LogTemp, Log,
+			TEXT("[WorldManagerSubsystem] RestoreWorldState: first visit to '%s' — taking snapshot."),
+			*LevelName.ToString());
+
+		CollectWorldSaveData();
+		GameInstance->MarkLevelVisited(LevelName);
+		CallPostRestore();
+		return;
+	}
+
+	// Subsequent visits: diff saved state against the live world.
 	RestoreSaveableActors();
 	ResolveActorConflicts();
 	SpawnMissingActors();
 	CallPostRestore();
 }
 
-void UWorldManagerSubsystem::ClearCachedData()
-{
-	// TODO 
-	//SaveableActors.Empty();
-	//ActorsRestoredThisLoad.Empty();
-	//PendingSpawnActors.Empty();
-}
+// ---------------------------------------------------------------------------
+// RestoreSaveableActors
+// ---------------------------------------------------------------------------
 
 void UWorldManagerSubsystem::RestoreSaveableActors()
 {
@@ -154,12 +150,16 @@ void UWorldManagerSubsystem::RestoreSaveableActors()
 	const FName LevelName = GetSanitizedLevelKey();
 	const TArray<FActorSaveData>& SavedActors = GameInstance->GetSavedActorsForLevel(LevelName);
 
-	TMap<FGuid, const FActorSaveData*> SavedByGuid;
+	// Build an identifier lookup for O(1) access during iteration.
+	TMap<FName, const FActorSaveData*> SavedByIdentifier;
 	for (const FActorSaveData& Data : SavedActors)
 	{
-		if (Data.ActorGuid.IsValid())
-			SavedByGuid.Add(Data.ActorGuid, &Data);
+		if (!Data.ActorIdentifier.IsNone())
+			SavedByIdentifier.Add(Data.ActorIdentifier, &Data);
 	}
+
+	// Collect actors to destroy after iteration — never mutate the world mid-loop.
+	TArray<AActor*> ActorsToDestroy;
 
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
@@ -167,41 +167,37 @@ void UWorldManagerSubsystem::RestoreSaveableActors()
 		USaveableComponent* SaveComp = Actor->FindComponentByClass<USaveableComponent>();
 		if (!SaveComp) continue;
 
-		const FGuid Guid = SaveComp->GetOrCreateGuid();
-		if (const FActorSaveData* Data = SavedByGuid.FindRef(Guid))
+		const FName Identifier = SaveComp->GetSaveIdentifier();
+
+		if (const FActorSaveData* Data = SavedByIdentifier.FindRef(Identifier))
+		{
+			// Actor exists in both world and save — restore its state.
 			SaveComp->ReadSaveData(*Data);
+		}
+		else if (!SaveComp->bPersistAcrossLoads)
+		{
+			// Actor is level-placed (bPersistAcrossLoads = false) and absent from
+			// the current save. Since placed actors have stable FName identifiers,
+			// absence from the save means it was collected in a previous session.
+			//
+			// Runtime-spawned actors (pawn, dropped items) have bPersistAcrossLoads = true
+			// and are never destroyed here — they are handled by SpawnMissingActors.
+			UE_LOG(LogTemp, Log,
+				TEXT("[WorldManagerSubsystem] RestoreSaveableActors: '%s' (id='%s') was collected — destroying."),
+				*GetNameSafe(Actor), *Identifier.ToString());
+			ActorsToDestroy.Add(Actor);
+		}
 	}
-}
 
-void UWorldManagerSubsystem::ResolveActorConflicts()
-{
-	// TODO	
-	// Duplicates
-	// Exists in saved game but not in the world
-	// Exists in the world but not in the saved game
-}
-
-void UWorldManagerSubsystem::CallPostRestore()
-{
-	UWorld* World = GetWorld();
-	if (!World)
-		return;
-
-	for (TActorIterator<AActor> It(World); It; ++It)
+	for (AActor* Actor : ActorsToDestroy)
 	{
-		AActor* Actor = *It;
-		if (!IsValid(Actor))
-			continue;
-
-		USaveableComponent* SaveComp =
-			Actor->FindComponentByClass<USaveableComponent>();
-
-		if (!SaveComp)
-			continue;
-		
-		SaveComp->OnPostRestore();
+		Actor->Destroy();
 	}
 }
+
+// ---------------------------------------------------------------------------
+// SpawnMissingActors
+// ---------------------------------------------------------------------------
 
 void UWorldManagerSubsystem::SpawnMissingActors()
 {
@@ -212,52 +208,80 @@ void UWorldManagerSubsystem::SpawnMissingActors()
 	const FName CurrentLevel = GetSanitizedLevelKey();
 	const TArray<FActorSaveData>& SavedActors = GameInstance->GetSavedActorsForLevel(CurrentLevel);
 
-    for (const FActorSaveData& Data : SavedActors)
-    {
-        // Only respawn actors that are meant to persist across loads.
-        // Player pawns and other transient actors (bPersistAcrossLoads = false)
-        // are managed by GameMode/GameContextManager — never spawn them here.
-        if (Data.ActorClass.IsNull()) continue;
+	for (const FActorSaveData& Data : SavedActors)
+	{
+		if (Data.ActorClass.IsNull()) continue;
 
-        // Check if the actor already exists in the world
-        bool bExists = false;
-        for (TActorIterator<AActor> It(World); It; ++It)
-        {
-            if (USaveableComponent* SaveComp = It->FindComponentByClass<USaveableComponent>())
-            {
-                if (SaveComp->GetOrCreateGuid() == Data.ActorGuid)
-                {
-                    bExists = true;
-                    break;
-                }
-            }
-        }
+		// Use the bPersistAcrossLoads value recorded at save time — NOT the CDO.
+		if (!Data.bPersistAcrossLoads) continue;
 
-        if (bExists) continue;
+		// Check if the actor already exists in the world.
+		bool bExists = false;
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			if (USaveableComponent* SaveComp = It->FindComponentByClass<USaveableComponent>())
+			{
+				if (SaveComp->GetSaveIdentifier() == Data.ActorIdentifier)
+				{
+					bExists = true;
+					break;
+				}
+			}
+		}
 
-        // Load the class and check bPersistAcrossLoads on the CDO before spawning
-        UClass* ActorClass = Data.ActorClass.LoadSynchronous();
-        if (!ActorClass) continue;
+		if (bExists) continue;
 
-        AActor* CDO = ActorClass->GetDefaultObject<AActor>();
-        if (USaveableComponent* CDOSaveComp = CDO->FindComponentByClass<USaveableComponent>())
-        {
-            if (!CDOSaveComp->bPersistAcrossLoads)
-            {
-                // Transient actor — skip respawn, it will be recreated by GameMode
-                continue;
-            }
-        }
+		UClass* ActorClass = Data.ActorClass.LoadSynchronous();
+		if (!ActorClass) continue;
 
-        AActor* SpawnedActor = World->SpawnActor<AActor>(ActorClass, Data.Transform);
-        if (!SpawnedActor) continue;
+		AActor* SpawnedActor = World->SpawnActor<AActor>(ActorClass, Data.Transform);
+		if (!SpawnedActor) continue;
 
-        if (USaveableComponent* SaveComp = SpawnedActor->FindComponentByClass<USaveableComponent>())
-        {
-            SaveComp->SetActorGuid(Data.ActorGuid);
-            SaveComp->ReadSaveData(Data);
-        }
-    }
+		if (USaveableComponent* SaveComp = SpawnedActor->FindComponentByClass<USaveableComponent>())
+		{
+			// Reclaim the saved identifier so this new instance is recognized
+			// on the next RestoreSaveableActors pass.
+			SaveComp->SetSaveIdentifier(Data.ActorIdentifier);
+			SaveComp->ReadSaveData(Data);
+		}
+
+		UE_LOG(LogTemp, Log,
+			TEXT("[WorldManagerSubsystem] SpawnMissingActors: respawned '%s' (id='%s') at %s."),
+			*GetNameSafe(SpawnedActor),
+			*Data.ActorIdentifier.ToString(),
+			*Data.Transform.GetTranslation().ToString());
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+
+void UWorldManagerSubsystem::ResolveActorConflicts()
+{
+	// TODO: handle duplicate identifiers and other edge cases.
+}
+
+void UWorldManagerSubsystem::CallPostRestore()
+{
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Actor = *It;
+		if (!IsValid(Actor)) continue;
+
+		USaveableComponent* SaveComp = Actor->FindComponentByClass<USaveableComponent>();
+		if (!SaveComp) continue;
+
+		SaveComp->OnPostRestore();
+	}
+}
+
+void UWorldManagerSubsystem::ClearCachedData()
+{
+	// TODO
 }
 
 FName UWorldManagerSubsystem::GetSanitizedLevelKey() const
@@ -267,9 +291,7 @@ FName UWorldManagerSubsystem::GetSanitizedLevelKey() const
 
 	FString PackageName = World->GetOutermost()->GetName();
 
-	// Strip PIE prefixes from the package path so the key is stable
-	// across sessions. GetOutermost()->GetFName() returns paths like
-	// "/Game/.../UEDPIE_0_Level_01" in PIE — we strip to "/Game/.../Level_01".
+	// Strip PIE prefixes so the key is stable across editor sessions.
 	PackageName.ReplaceInline(TEXT("UEDPIE_0_"), TEXT(""));
 	PackageName.ReplaceInline(TEXT("UEDPIE_1_"), TEXT(""));
 	PackageName.ReplaceInline(TEXT("UEDPIE_2_"), TEXT(""));

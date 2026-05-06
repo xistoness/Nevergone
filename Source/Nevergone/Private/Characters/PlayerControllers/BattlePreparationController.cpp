@@ -6,6 +6,7 @@
 #include "GameInstance/GameContextManager.h"
 #include "GameMode/BattlePreparationContext.h"
 #include "Widgets/Combat/BattlePreparationWidget.h"
+#include "Widgets/InventoryWidget.h"
 
 // ---------------------------------------------------------------------------
 // Input setup
@@ -28,6 +29,37 @@ void ABattlePreparationController::SetupInputComponent()
 			EIC->BindAction(CancelInput, ETriggerEvent::Triggered,
 				this, &ABattlePreparationController::OnCancel);
 		}
+
+		if (InventoryInput)
+		{
+			EIC->BindAction(InventoryInput, ETriggerEvent::Triggered,
+				this, &ABattlePreparationController::OnInventory);
+		}
+
+		if (InventoryPrevCharInput)
+		{
+			EIC->BindAction(InventoryPrevCharInput, ETriggerEvent::Triggered,
+				this, &ABattlePreparationController::OnInventoryPrevChar);
+		}
+
+		if (InventoryNextCharInput)
+		{
+			EIC->BindAction(InventoryNextCharInput, ETriggerEvent::Triggered,
+				this, &ABattlePreparationController::OnInventoryNextChar);
+		}
+
+		if (UIUpInput)
+			EIC->BindAction(UIUpInput, ETriggerEvent::Triggered, this, &ABattlePreparationController::OnInventoryNavigateUp);
+		if (UIDownInput)
+			EIC->BindAction(UIDownInput, ETriggerEvent::Triggered, this, &ABattlePreparationController::OnInventoryNavigateDown);
+		if (UILeftInput)
+			EIC->BindAction(UILeftInput, ETriggerEvent::Triggered, this, &ABattlePreparationController::OnInventoryNavigateLeft);
+		if (UIRightInput)
+			EIC->BindAction(UIRightInput, ETriggerEvent::Triggered, this, &ABattlePreparationController::OnInventoryNavigateRight);
+		if (UIConfirmInput)
+			EIC->BindAction(UIConfirmInput, ETriggerEvent::Triggered, this, &ABattlePreparationController::OnInventoryConfirm);
+		if (UICancelInput)
+			EIC->BindAction(UICancelInput, ETriggerEvent::Triggered, this, &ABattlePreparationController::OnInventoryCancel);
 	}
 }
 
@@ -35,13 +67,29 @@ void ABattlePreparationController::SetupInputComponent()
 // Lifecycle
 // ---------------------------------------------------------------------------
 
-void ABattlePreparationController::BeginPlay()
+void ABattlePreparationController::ReceivedPlayer()
 {
-	Super::BeginPlay();
+	Super::ReceivedPlayer();
+
+	// ReceivedPlayer fires after the engine assigns LocalPlayer to this controller.
+	// This is the correct place for SetInputMode and CreateWidget calls, because
+	// SpawnActor triggers BeginPlay BEFORE SwapPlayerControllers runs — meaning
+	// LocalPlayer would be null in BeginPlay, causing SetInputMode to crash/teardown
+	// the PIE session.
+	if (!GetLocalPlayer())
+	{
+		UE_LOG(LogTemp, Error,
+			TEXT("[BattlePreparationController] ReceivedPlayer: LocalPlayer is still null — skipping UI setup."));
+		return;
+	}
 
 	// Show cursor — the preparation screen is fully UI-driven.
 	bShowMouseCursor = true;
 	SetInputMode(FInputModeUIOnly());
+
+	CreateInventoryWidget();
+
+	UE_LOG(LogTemp, Log, TEXT("[BattlePreparationController] ReceivedPlayer: UI setup complete."));
 }
 
 void ABattlePreparationController::OnPossess(APawn* InPawn)
@@ -171,6 +219,105 @@ void ABattlePreparationController::RequestAbortBattle()
 		TEXT("[BattlePreparationController] Requesting abort battle"));
 
 	ContextManager->RequestAbortBattle();
+}
+
+void ABattlePreparationController::CreateInventoryWidget()
+{
+	if (!IsValid(InventoryWidgetClass) || InventoryWidget) { return; }
+
+	InventoryWidget = CreateWidget<UInventoryWidget>(this, InventoryWidgetClass);
+	if (!InventoryWidget)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[BattlePreparationController] CreateInventoryWidget failed."));
+		return;
+	}
+
+	// ZOrder 200 — renders above the preparation widget (default 0) but below
+	// any modal dialogs that might be added later.
+	InventoryWidget->AddToViewport(200);
+	InventoryWidget->SetVisibility(ESlateVisibility::Collapsed);
+	UE_LOG(LogTemp, Log, TEXT("[BattlePreparationController] InventoryWidget created."));
+}
+
+// ---------------------------------------------------------------------------
+// Private — inventory input handlers
+// ---------------------------------------------------------------------------
+
+void ABattlePreparationController::OnInventory(const FInputActionValue& Value)
+{
+	if (!InventoryWidget) return;
+
+	const bool bIsOpen = InventoryWidget->GetVisibility() == ESlateVisibility::Visible;
+
+	if (bIsOpen)
+	{
+		InventoryWidget->CloseInventory();
+		SetInputMode(FInputModeUIOnly());
+		UE_LOG(LogTemp, Log, TEXT("[BattlePreparationController] Inventory closed."));
+	}
+	else
+	{
+		InventoryWidget->OpenInventory();
+		// GameAndUI: cursor stays usable for mouse clicks; keyboard reaches controller for navigation.
+		FInputModeGameAndUI InputMode;
+		InputMode.SetHideCursorDuringCapture(false);
+		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		SetInputMode(InputMode);
+		UE_LOG(LogTemp, Log, TEXT("[BattlePreparationController] Inventory opened."));
+	}
+}
+
+void ABattlePreparationController::OnInventoryPrevChar(const FInputActionValue& Value)
+{
+	if (!InventoryWidget || InventoryWidget->GetVisibility() != ESlateVisibility::Visible) return;
+	InventoryWidget->SelectPreviousCharacter();
+}
+
+void ABattlePreparationController::OnInventoryNextChar(const FInputActionValue& Value)
+{
+	if (!InventoryWidget || InventoryWidget->GetVisibility() != ESlateVisibility::Visible) return;
+	InventoryWidget->SelectNextCharacter();
+}
+
+void ABattlePreparationController::OnInventoryNavigateUp(const FInputActionValue& Value)
+{
+	if (!InventoryWidget || InventoryWidget->GetVisibility() != ESlateVisibility::Visible) return;
+	InventoryWidget->NavigateUp();
+}
+
+void ABattlePreparationController::OnInventoryNavigateDown(const FInputActionValue& Value)
+{
+	if (!InventoryWidget || InventoryWidget->GetVisibility() != ESlateVisibility::Visible) return;
+	InventoryWidget->NavigateDown();
+}
+
+void ABattlePreparationController::OnInventoryNavigateLeft(const FInputActionValue& Value)
+{
+	if (!InventoryWidget || InventoryWidget->GetVisibility() != ESlateVisibility::Visible) return;
+	InventoryWidget->NavigateLeft();
+}
+
+void ABattlePreparationController::OnInventoryNavigateRight(const FInputActionValue& Value)
+{
+	if (!InventoryWidget || InventoryWidget->GetVisibility() != ESlateVisibility::Visible) return;
+	InventoryWidget->NavigateRight();
+}
+
+void ABattlePreparationController::OnInventoryConfirm(const FInputActionValue& Value)
+{
+	if (!InventoryWidget || InventoryWidget->GetVisibility() != ESlateVisibility::Visible) return;
+	InventoryWidget->ConfirmSelection();
+}
+
+void ABattlePreparationController::OnInventoryCancel(const FInputActionValue& Value)
+{
+	if (!InventoryWidget || InventoryWidget->GetVisibility() != ESlateVisibility::Visible) return;
+	if (!InventoryWidget->CancelSelection())
+	{
+		InventoryWidget->CloseInventory();
+		SetInputMode(FInputModeUIOnly());
+		UE_LOG(LogTemp, Log, TEXT("[BattlePreparationController] Inventory closed via Cancel."));
+	}
 }
 
 // ---------------------------------------------------------------------------

@@ -20,6 +20,13 @@ public:
     /* --- Party state --- */
     const FPartyData& GetPartyData() const;
 
+    // Mutable view of the runtime PartyData cache. Use only for mutations
+    // that don't fit the FindMemberMutable / NotifyMemberMutated pattern
+    // (currently: top-level fields like Gold, MaxPartySize). Caller is
+    // responsible for invoking NotifyMemberMutated() afterwards so the
+    // GameInstance copy and subscribed UI stay in sync.
+    FPartyData& GetPartyDataMutable() { return PartyData; }
+
     // Returns only members flagged as active (battle party, max 4).
     TArray<FPartyMemberData*> GetActiveMembers();
 
@@ -46,7 +53,7 @@ public:
     void BuildBattleParty(
         const UFloorEncounterData* EncounterData,
         TArray<FGeneratedPlayerData>& OutPlayerParty
-    ) const;
+    );
 
     void WriteBackBattleResults(const TMap<int32, ACharacterBase*>& AliveActorsBySourceIndex,
                                 const TArray<FGeneratedPlayerData>& GeneratedParty);
@@ -56,6 +63,30 @@ public:
 
     // Returns the current party leader data, or nullptr if the party is empty.
     const FPartyMemberData* GetPartyLeader() const;
+
+    // -----------------------------------------------------------------------
+    // Runtime mutation access (single owner of the in-memory FPartyData cache)
+    // -----------------------------------------------------------------------
+
+    /**
+     * Returns a mutable pointer to the FPartyMemberData with the given ID,
+     * resolved from the subsystem's runtime cache (NOT directly from the
+     * GameInstance copy). Returns nullptr if no member matches.
+     *
+     * Use this from any system that needs to mutate persistent member fields
+     * (HP, alive flag, equipment) at runtime — e.g. UItemUsageSubsystem,
+     * UInventorySubsystem. After mutating, call NotifyMemberMutated() to
+     * propagate the change back to the GameInstance and refresh the UI.
+     */
+    FPartyMemberData* FindMemberMutable(const FGuid& CharacterID);
+
+    /**
+     * Flushes the runtime cache to the GameInstance and broadcasts
+     * OnRosterChanged so any subscribed UI (PartyManagerWidget, HUD, etc.)
+     * refreshes immediately. Call after every mutation made via
+     * FindMemberMutable() or GetActiveMembers() pointers.
+     */
+    void NotifyMemberMutated();
 
     // Sets the member with the given ID as party leader.
     // Moves them to index 0 in Members and updates FPartyData::LeaderID.
@@ -83,5 +114,6 @@ private:
     // Resolves MaxHP from the CharacterClass CDO using the UnitDefinition formula,
     // and fills CurrentHP to MaxHP if the member has never been in combat.
     // Called by AddPartyMember to guarantee HP fields are never zero.
-    void ResolveInitialHP(FPartyMemberData& InOutMember) const;;
+    void ResolveInitialHP(FPartyMemberData& InOutMember) const;
+    void ResolveDisplayName(FPartyMemberData& InOutMember) const;
 };

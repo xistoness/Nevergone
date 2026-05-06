@@ -12,9 +12,10 @@
 #include "Types/LevelTypes.h"
 #include "MyGameInstance.generated.h"
 
+class ACharacterPreviewStudio;
+class UStatusEffectDefinition;
 struct FActorSaveData;
 class UMySaveGame;
-class UGameContextManager;
 class ULoadingScreenWidget;
 
 
@@ -66,8 +67,6 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void ApplyActiveSaveToWorld();
 	
-	UGameContextManager* GetGameContextManager() const;
-	
 	// TODO
 	// Party
 	const FPartyData& GetPartyData() const;
@@ -84,6 +83,14 @@ public:
 	// Saved Actors
 	const TArray<FActorSaveData>& GetSavedActorsForLevel(FName LevelName) const;
 	void SetSavedActorsForLevel(FName LevelName, const TArray<FActorSaveData>& Actors) const;
+
+	// Returns true if this level has already had a first-visit snapshot taken.
+	// Used by RestoreWorldState to skip the restore pipeline on first entry.
+	bool HasLevelBeenVisited(FName LevelName) const;
+
+	// Marks the level as visited so subsequent loads run the full restore pipeline.
+	// Called by WorldManagerSubsystem immediately after the first-visit snapshot.
+	void MarkLevelVisited(FName LevelName) const;
 	
 	// Level Transition
 	void RequestLevelChange(FName TargetLevel, const FLevelTransitionContext& Context);
@@ -94,6 +101,13 @@ public:
 	
 	// Called after the level has successfully loaded
 	void ApplyPersistentStateToWorld(UWorld* World) const;
+
+	// Applies the pending portal entry point to the current pawn.
+	// Called by TowerFloorGameMode after the exploration pawn is successfully
+	// possessed, guaranteeing the pawn exists when teleportation runs.
+	// bHasPendingEntryPoint is cleared on the first call so subsequent loads
+	// are unaffected.
+	void ApplyPendingEntryPoint(UWorld* World);
 	
 	// Total number of save slots available to the player
 	UPROPERTY(EditDefaultsOnly, Category = "Save")
@@ -180,6 +194,32 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Audio|UI")
 	TMap<EUISoundEvent, TObjectPtr<USoundBase>> UISoundMap;
 
+	/** Fallback SFX for a player interacting with a Locked door without the right key. */
+	UPROPERTY(EditDefaultsOnly, Category = "Audio|SFX|Door")
+	TObjectPtr<USoundBase> DefaultDoorLockedSFX;
+
+	/** Fallback SFX played the moment a door becomes unlocked (key consumed). */
+	UPROPERTY(EditDefaultsOnly, Category = "Audio|SFX|Door")
+	TObjectPtr<USoundBase> DefaultDoorUnlockSFX;
+
+	/** Fallback SFX played when a door transitions into the Open state. */
+	UPROPERTY(EditDefaultsOnly, Category = "Audio|SFX|Door")
+	TObjectPtr<USoundBase> DefaultDoorOpenSFX;
+
+	/** Fallback SFX played when a door auto-closes back to the Closed state. */
+	UPROPERTY(EditDefaultsOnly, Category = "Audio|SFX|Door")
+	TObjectPtr<USoundBase> DefaultDoorCloseSFX;
+
+	/** Status effect applied to all active party members when carrying weight exceeds MaxWeight.
+	 *  Assigned here because UGameInstanceSubsystem properties cannot be set via Class Defaults.
+	 *  InventorySubsystem reads this during Initialize() via GetGameInstance<UMyGameInstance>().
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Inventory")
+	TSoftObjectPtr<UStatusEffectDefinition> OverweightStatusDefinition;
+	
+	UPROPERTY(EditAnywhere, Category = "Preview")
+	TSubclassOf<ACharacterPreviewStudio> CharacterPreviewStudio;
+
 protected:
 	
 	virtual void Init() override;
@@ -225,14 +265,11 @@ private:
 	UPROPERTY()
 	FProgressionData ProgressionData;
 	
-	UPROPERTY()
-	UGameContextManager* GameContextManager;
-	
 	bool bDidInitialWorldRestore = false;
 	
+	// True when a level transition has a portal entry point waiting to be applied.
+	// Cleared by ApplyPendingEntryPoint() on first call.
 	bool bHasPendingEntryPoint = false;
-
-	void ApplyPendingEntryPoint(UWorld* World);
 	
 	int32 FindNextAvailableSlot() const;
 	

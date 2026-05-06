@@ -190,6 +190,27 @@ public:
 	UPROPERTY()
 	TMap<EUISoundEvent, TObjectPtr<USoundBase>> UISoundMap;
 
+	// -----------------------------------------------------------------------
+	// Door SFX fallbacks — used by ADoor when the per-actor override is null.
+	// Assigned by UMyGameInstance::Init from its mirror UPROPERTYs.
+	// -----------------------------------------------------------------------
+
+	/** Fallback SFX for interacting with a Locked door without the right key. */
+	UPROPERTY()
+	TObjectPtr<USoundBase> DefaultDoorLockedSFX;
+
+	/** Fallback SFX played the moment a door becomes unlocked. */
+	UPROPERTY()
+	TObjectPtr<USoundBase> DefaultDoorUnlockSFX;
+
+	/** Fallback SFX played when a door transitions into the Open state. */
+	UPROPERTY()
+	TObjectPtr<USoundBase> DefaultDoorOpenSFX;
+
+	/** Fallback SFX played when a door auto-closes back to the Closed state. */
+	UPROPERTY()
+	TObjectPtr<USoundBase> DefaultDoorCloseSFX;
+
 private:
 
 	// -----------------------------------------------------------------------

@@ -6,6 +6,7 @@
 #include "ActorComponents/SaveableComponent.h"
 #include "ActorComponents/UnitStatsComponent.h"
 #include "Characters/CharacterBase.h"
+#include "Data/ItemDefinition.h"
 #include "Data/StatusEffectDefinition.h"
 #include "Data/UnitDefinition.h"
 #include "GameInstance/MySaveGame.h"
@@ -26,11 +27,68 @@ void UBattleState::Initialize(UBattlePreparationContext& BattlePrepContext)
         ACharacterBase* Unit = Spawned.UnitActor.Get();
         UUnitStatsComponent* Stats = Unit->GetUnitStats();
 
-        if (Stats)
+        // Apply equipment attribute bonuses BEFORE RecalculateBattleStats so the
+        // attribute formula incorporates them. TemporaryAttributeBonuses is already
+        // zeroed by InitializeForBattle (called in CombatManager::SpawnAllies).
+        // DO NOT call ResetTemporaryBonuses here — it would wipe the bonuses we apply next.
+        if (Stats && Spawned.Team == EBattleUnitTeam::Ally)
         {
-            Stats->InitializeForBattle();
-            // Clear any leftover temporary bonuses from a previous battle.
-            Stats->ResetTemporaryBonuses();
+            UE_LOG(LogTemp, Warning,
+                TEXT("[BattleState] Equipment check for ally '%s': Weapon=%s Armor=%s Necklace=%s Belt=%s"),
+                *GetNameSafe(Unit),
+                *Spawned.EquipmentLoadout.Weapon.ToString(),
+                *Spawned.EquipmentLoadout.Armor.ToString(),
+                *Spawned.EquipmentLoadout.Necklace.ToString(),
+                *Spawned.EquipmentLoadout.Belt.ToString());
+
+            const TArray<EEquipmentSlot> EquipSlots = {
+                EEquipmentSlot::Weapon,
+                EEquipmentSlot::Armor,
+                EEquipmentSlot::Necklace,
+                EEquipmentSlot::Belt
+            };
+            for (EEquipmentSlot Slot : EquipSlots)
+            {
+                const TSoftObjectPtr<UItemDefinition>& SoftItem = Spawned.EquipmentLoadout.GetSlot(Slot);
+                if (SoftItem.IsNull())
+                {
+                    UE_LOG(LogTemp, Log, TEXT("[BattleState] Slot %d: empty."), (int32)Slot);
+                    continue;
+                }
+
+                UItemDefinition* ItemDef = SoftItem.LoadSynchronous();
+                if (!ItemDef)
+                {
+                    UE_LOG(LogTemp, Error,
+                        TEXT("[BattleState] Slot %d: SoftPtr '%s' is not null but LoadSynchronous returned null — asset missing?"),
+                        (int32)Slot, *SoftItem.ToString());
+                    continue;
+                }
+
+                UE_LOG(LogTemp, Warning,
+                    TEXT("[BattleState] Slot %d: loaded '%s' with %d modifier(s)."),
+                    (int32)Slot, *ItemDef->DisplayName.ToString(), ItemDef->StatModifiers.Num());
+
+                for (const FItemStatModifier& Mod : ItemDef->StatModifiers)
+                {
+                    if (!Mod.bModifiesAttribute) { continue; }
+                    UE_LOG(LogTemp, Warning,
+                        TEXT("[BattleState]   Attribute modifier: target=%d bonus=%d"),
+                        (int32)Mod.AttributeTarget, Mod.FlatBonus);
+                    switch (Mod.AttributeTarget)
+                    {
+                    case EUnitAttribute::Constitution:  Stats->TemporaryAttributeBonuses.Constitution  += Mod.FlatBonus; break;
+                    case EUnitAttribute::Strength:      Stats->TemporaryAttributeBonuses.Strength      += Mod.FlatBonus; break;
+                    case EUnitAttribute::Dexterity:     Stats->TemporaryAttributeBonuses.Dexterity     += Mod.FlatBonus; break;
+                    case EUnitAttribute::Knowledge:     Stats->TemporaryAttributeBonuses.Knowledge     += Mod.FlatBonus; break;
+                    case EUnitAttribute::Focus:         Stats->TemporaryAttributeBonuses.Focus         += Mod.FlatBonus; break;
+                    case EUnitAttribute::Technique:     Stats->TemporaryAttributeBonuses.Technique     += Mod.FlatBonus; break;
+                    case EUnitAttribute::Evasiveness:   Stats->TemporaryAttributeBonuses.Evasiveness   += Mod.FlatBonus; break;
+                    case EUnitAttribute::Speed:         Stats->TemporaryAttributeBonuses.Speed         += Mod.FlatBonus; break;
+                    default: break;
+                    }
+                }
+            }
         }
 
         FBattleUnitState NewState;
@@ -39,13 +97,68 @@ void UBattleState::Initialize(UBattlePreparationContext& BattlePrepContext)
 
         if (Stats)
         {
-            // Populate all derived stats via the shared helper so the logic
-            // lives in one place — both fresh starts and restores use it.
+            // RecalculateBattleStats runs the attribute formulas with the now-populated
+            // TemporaryAttributeBonuses, producing correct baseline derived stats.
             Stats->RecalculateBattleStats(NewState);
             NewState.MaxHP               = Stats->GetMaxHP();
             NewState.CurrentHP           = Stats->GetCurrentHP();
             NewState.CurrentActionPoints = Stats->GetActionPoints();
             NewState.TraversalParams     = Stats->GetTraversalParams();
+
+            UE_LOG(LogTemp, Warning,
+                TEXT("[BattleState] Post-RecalcStats '%s': PhysAtk=%d MaxHP=%d (TempBonuses: STR=%d CON=%d DEX=%d)"),
+                *GetNameSafe(Unit),
+                NewState.PhysicalAttack, NewState.MaxHP,
+                Stats->TemporaryAttributeBonuses.Strength,
+                Stats->TemporaryAttributeBonuses.Constitution,
+                Stats->TemporaryAttributeBonuses.Dexterity);
+        }
+
+        // Apply derived stat flat bonuses AFTER RecalculateBattleStats.
+        // These bypass the formula and add directly to the FBattleUnitState fields.
+        if (Spawned.Team == EBattleUnitTeam::Ally)
+        {
+            const TArray<EEquipmentSlot> EquipSlots = {
+                EEquipmentSlot::Weapon,
+                EEquipmentSlot::Armor,
+                EEquipmentSlot::Necklace,
+                EEquipmentSlot::Belt
+            };
+            for (EEquipmentSlot Slot : EquipSlots)
+            {
+                const TSoftObjectPtr<UItemDefinition>& SoftItem = Spawned.EquipmentLoadout.GetSlot(Slot);
+                if (SoftItem.IsNull()) { continue; }
+
+                UItemDefinition* ItemDef = SoftItem.LoadSynchronous();
+                if (!ItemDef) { continue; }
+
+                for (const FItemStatModifier& Mod : ItemDef->StatModifiers)
+                {
+                    if (Mod.bModifiesAttribute) { continue; }
+                    UE_LOG(LogTemp, Warning,
+                        TEXT("[BattleState]   Derived stat modifier: target=%d bonus=%d"),
+                        (int32)Mod.DerivedStatTarget, Mod.FlatBonus);
+                    switch (Mod.DerivedStatTarget)
+                    {
+                    case EDerivedCombatStat::MaxHP:             NewState.MaxHP             += Mod.FlatBonus; break;
+                    case EDerivedCombatStat::PhysicalAttack:    NewState.PhysicalAttack    += Mod.FlatBonus; break;
+                    case EDerivedCombatStat::RangedAttack:      NewState.RangedAttack      += Mod.FlatBonus; break;
+                    case EDerivedCombatStat::MagicalPower:      NewState.MagicalPower      += Mod.FlatBonus; break;
+                    case EDerivedCombatStat::PhysicalDefense:   NewState.PhysicalDefense   += Mod.FlatBonus; break;
+                    case EDerivedCombatStat::MagicalDefense:    NewState.MagicalDefense    += Mod.FlatBonus; break;
+                    case EDerivedCombatStat::ActionPoints:      NewState.MaxActionPoints   += Mod.FlatBonus; break;
+                    case EDerivedCombatStat::MovementRange:     NewState.MovementRange     += Mod.FlatBonus; break;
+                    case EDerivedCombatStat::HitChanceModifier: NewState.HitChanceModifier += Mod.FlatBonus; break;
+                    case EDerivedCombatStat::EvasionModifier:   NewState.EvasionModifier   += Mod.FlatBonus; break;
+                    case EDerivedCombatStat::CritChance:        NewState.CritChance        += Mod.FlatBonus; break;
+                    default: break;
+                    }
+                }
+
+                UE_LOG(LogTemp, Log,
+                    TEXT("[BattleState] Applied equipment modifiers from '%s' (slot %d) to %s."),
+                    *ItemDef->DisplayName.ToString(), (int32)Slot, *GetNameSafe(Unit));
+            }
         }
 
         // Propagate innate immunity tags from UnitDefinition to the ASC.
@@ -91,12 +204,12 @@ void UBattleState::InitializeFromSave(
 
     // Build a lookup map from SaveableComponent FGuid → FSavedCombatUnitState
     // so we can match spawned actors to their saved data in O(1).
-    TMap<FGuid, const FSavedCombatUnitState*> SavedByGuid;
+    TMap<FName, const FSavedCombatUnitState*> SavedByGuid;
     for (const FSavedCombatUnitState& Saved : SavedSession.UnitStates)
     {
-        if (Saved.ActorGuid.IsValid())
+        if (!Saved.ActorIdentifier.IsNone())
         {
-            SavedByGuid.Add(Saved.ActorGuid, &Saved);
+            SavedByGuid.Add(Saved.ActorIdentifier, &Saved);
         }
     }
 
@@ -122,7 +235,7 @@ void UBattleState::InitializeFromSave(
         const FSavedCombatUnitState* Saved = nullptr;
         if (USaveableComponent* SaveComp = Unit->FindComponentByClass<USaveableComponent>())
         {
-            Saved = SavedByGuid.FindRef(SaveComp->GetOrCreateGuid());
+            Saved = SavedByGuid.FindRef(SaveComp->GetSaveIdentifier());
         }
 
         if (Stats)
