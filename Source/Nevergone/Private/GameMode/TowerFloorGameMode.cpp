@@ -9,7 +9,9 @@
 #include "Characters/PlayerControllers/BattlePreparationController.h"
 #include "Characters/PlayerControllers/BattleResultsController.h"
 #include "GameInstance/GameContextManager.h"
+#include "GameInstance/MyGameInstance.h"
 #include "GameMode/CombatManager.h"
+#include "NevergonePlayerController.h"
 
 #include "Kismet/GameplayStatics.h"
 #include "Party/PartyManagerSubsystem.h"
@@ -23,24 +25,53 @@ void ATowerFloorGameMode::BeginPlay()
 {
 	Super::BeginPlay();
 	SetupFloor();
- 
-	if (UGameInstance* GI = GetGameInstance())
+
+	UMyGameInstance* MyGI = GetGameInstance<UMyGameInstance>();
+	if (!MyGI)
 	{
-		if (UGameContextManager* ContextManager = GI->GetSubsystem<UGameContextManager>())
-		{
-			// Subscribe first, so the initial state transition fires into our handler
-			ContextManager->OnGameContextChanged.AddUObject(
-				this,
-				&ATowerFloorGameMode::HandleGameContextChanged
-			);
- 
-			// Tell the GameContextManager to enter the floor's initial state.
-			// This fires OnGameContextChanged, which HandleGameContextChanged picks up —
-			// music, controller swap, and any other context logic runs from there.
-			ContextManager->RequestInitialState(InitialContextState);
-		}
+		UE_LOG(LogTemp, Error,
+			TEXT("[TowerFloorGameMode] BeginPlay: MyGameInstance is null — aborting setup."));
+		return;
 	}
-	UPartyManagerSubsystem* Party = GetGameInstance()->GetSubsystem<UPartyManagerSubsystem>();
+
+	UGameContextManager* ContextManager = MyGI->GetSubsystem<UGameContextManager>();
+	if (!ContextManager)
+	{
+		UE_LOG(LogTemp, Error,
+			TEXT("[TowerFloorGameMode] BeginPlay: GameContextManager subsystem is null — aborting setup."));
+		return;
+	}
+
+	// ORDERING NOTE:
+	// HandleSaveLoaded MUST run before RequestInitialState so that
+	// ActiveBattleSession.ExplorationCharacterClass and ExplorationCharacterTransform
+	// are populated before SpawnExplorationActorFromClass is called.
+	//
+	// Previously HandleSaveLoaded was triggered from
+	// WorldManagerSubsystem::HandleWorldInitializedActors, which fires BEFORE
+	// BeginPlay — meaning GetAuthGameMode() returned null there and the entire
+	// function was aborting at the "if (!GM) { return; }" guard.
+	// Moving the call here guarantees the GameMode exists when HandleSaveLoaded
+	// reads ExplorationCharacterClass from it.
+	ContextManager->HandleSaveLoaded();
+
+	// Subscribe AFTER HandleSaveLoaded so the initial state transition fires
+	// with fully populated session data.
+	ContextManager->OnGameContextChanged.AddUObject(
+		this,
+		&ATowerFloorGameMode::HandleGameContextChanged
+	);
+	UE_LOG(LogTemp, Warning, TEXT("Bind -> Manager: %p"), ContextManager);
+	UE_LOG(LogTemp, Error,
+		TEXT("[TowerFloorGameMode] BeginPlay: subscribed to OnGameContextChanged. this=%s | IsBound=%d"),
+		*GetNameSafe(this), ContextManager->OnGameContextChanged.IsBound() ? 1 : 0);
+
+	// Tell the GameContextManager to enter the floor's initial state.
+	// This fires OnGameContextChanged, which HandleGameContextChanged picks up —
+	// music, controller swap, pawn spawn, and entry point application run from there.
+	ContextManager->RequestInitialState(InitialContextState);
+
+	UPartyManagerSubsystem* Party = MyGI->GetSubsystem<UPartyManagerSubsystem>();
 	if (Party && Party->GetPartyData().Members.Num() == 0)
 	{
 		// No party loaded from save — populate debug party for testing.
@@ -59,20 +90,22 @@ void ATowerFloorGameMode::BeginPlay()
 		// Push to GameInstance so the save system sees the debug party.
 		Party->FlushToGameInstance();
 	}
-
 }
 
 void ATowerFloorGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	if (UGameInstance* GI = GetGameInstance())
+	UE_LOG(LogTemp, Error, TEXT("GameMode EndPlay called!"));
+	if (UMyGameInstance* MyGI = GetGameInstance<UMyGameInstance>())
 	{
-		if (UGameContextManager* ContextManager =
-			GI->GetSubsystem<UGameContextManager>())
+		if (UGameContextManager* ContextManager = MyGI->GetSubsystem<UGameContextManager>())
 		{
+			UE_LOG(LogTemp, Log,
+				TEXT("[TowerFloorGameMode] EndPlay: unsubscribing from OnGameContextChanged. Reason=%d"),
+				(int32)EndPlayReason);
 			ContextManager->OnGameContextChanged.RemoveAll(this);
 		}
 	}
-	
+
 	TeardownFloor();
 	Super::EndPlay(EndPlayReason);
 }
@@ -80,7 +113,6 @@ void ATowerFloorGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 void ATowerFloorGameMode::SetupFloor()
 {
 	// Spawn or enable level-wide systems
-	// Example: WorldManagerSubsystem initialization
 }
 
 void ATowerFloorGameMode::TeardownFloor()
@@ -98,184 +130,174 @@ APawn* ATowerFloorGameMode::SpawnDefaultPawnFor_Implementation(AController* NewP
 
 void ATowerFloorGameMode::HandleGameContextChanged(EGameContextState NewState)
 {
-	UAudioSubsystem* Audio = nullptr;
-	UGameInstance* GI = GetGameInstance();
-	if (GI)
-	{
-		Audio = GI->GetSubsystem<UAudioSubsystem>();
-	}
+    UMyGameInstance* MyGI = GetGameInstance<UMyGameInstance>();
+    if (!MyGI) { return; }
+
+	UE_LOG(LogTemp, Warning, TEXT("GameMode %p received state %d"), this, (int)NewState);
 	
-	switch (NewState)
-	{
-	case EGameContextState::Exploration:
-	{
-	    if (!ExplorationControllerClass) { return; }
+    UAudioSubsystem* Audio = MyGI->GetSubsystem<UAudioSubsystem>();
+    UGameContextManager* ContextManager = MyGI->GetSubsystem<UGameContextManager>();
 
-	    if (!ActivePlayerController)
-	    {
-	        ActivePlayerController = UGameplayStatics::GetPlayerController(this, 0);
-	    }
+    APlayerController* NewPC = nullptr;
 
-	    APlayerController* OldPC = ActivePlayerController;
-	    APlayerController* NewPC = nullptr;
+    switch (NewState)
+    {
+        case EGameContextState::Exploration:
+        {
+            if (!ExplorationControllerClass)
+            {
+                UE_LOG(LogTemp, Error,
+                    TEXT("[TowerFloorGameMode] Exploration: ExplorationControllerClass is null."));
+                break;
+            }
 
-	    if (OldPC && OldPC->IsA(ExplorationControllerClass))
-	    {
-	        NewPC = OldPC;
-	    }
-	    else
-	    {
-	        NewPC = GetWorld()->SpawnActor<APlayerController>(ExplorationControllerClass);
-	        if (!NewPC) { return; }
+            if (!ActivePlayerController)
+            {
+                ActivePlayerController = UGameplayStatics::GetPlayerController(this, 0);
+            }
 
-	        SwapPlayerControllers(OldPC, NewPC);
-	        ActivePlayerController = NewPC;
-	        OldPC->Destroy();
-	    }
+            APlayerController* OldPC = ActivePlayerController;
 
-	    if (Audio)
-	    {
-	        Audio->PlayMusic(ExplorationMusic, EMusicState::Exploration);
-	    }
+            if (OldPC && OldPC->IsA(ExplorationControllerClass))
+            {
+                NewPC = OldPC;
+            }
+            else
+            {
+                NewPC = GetWorld()->SpawnActor<APlayerController>(ExplorationControllerClass);
+                if (!NewPC)
+                {
+                    UE_LOG(LogTemp, Error,
+                        TEXT("[TowerFloorGameMode] Exploration: failed to spawn controller."));
+                    break;
+                }
 
-	    if (UGameContextManager* ContextManager = GI->GetSubsystem<UGameContextManager>())
-	    {
-	        // Destroy any pawn the controller currently has before spawning ours.
-	        // On initial load this is null (GetDefaultPawnClassFor returns nullptr),
-	        // post-combat it's the leftover DefaultPawn from before we overrode it.
-	        if (APawn* OldPawn = NewPC->GetPawn())
-	        {
-	            NewPC->UnPossess();
-	            OldPawn->Destroy();
-	        }
+                SwapPlayerControllers(OldPC, NewPC);
+                ActivePlayerController = NewPC;
 
-	        // GetSavedExplorationCharacter() is non-null only when returning from
-	        // combat — that actor was saved by RequestBattlePreparation and is
-	        // already in the world at the correct position.
-	        ACharacterBase* ExplorationCharacter = ContextManager->GetSavedExplorationCharacter();
+                if (OldPC && OldPC->IsA<ANevergonePlayerController>())
+                {
+                    OldPC->Destroy();
+                }
+            }
 
-	        if (!ExplorationCharacter)
-	        {
-	            // Initial load or Continue — spawn from the leader's ExplorationPawnClass.
-	            // GameContextManager::HandleSaveLoaded has already populated
-	            // ExplorationCharacterClass and ExplorationCharacterTransform from the save.
-	            ExplorationCharacter = ContextManager->SpawnExplorationActorFromClass(
-	                ContextManager->ResolveExplorationPawnClass(ExplorationCharacterClass));
-	        }
+            // Play exploration music unconditionally — covers both the initial load
+            // and the return from combat (where OldPC may already be the exploration
+            // controller, causing the old code to skip PlayMusic entirely).
+            if (Audio)
+            {
+                Audio->PlayMusic(ExplorationMusic, EMusicState::Exploration);
+            }
 
-	        if (ExplorationCharacter)
-	        {
-	            NewPC->Possess(ExplorationCharacter);
+            if (!ContextManager) { break; }
 
-	            if (NewPC->GetPawn() == ExplorationCharacter)
-	            {
-	                UE_LOG(LogTemp, Warning,
-	                    TEXT("[TowerFloorGameMode] Exploration character possessed: %s"),
-	                    *GetNameSafe(ExplorationCharacter));
+            if (APawn* OldPawn = NewPC->GetPawn())
+            {
+                NewPC->UnPossess();
+                OldPawn->Destroy();
+            }
 
-	                ContextManager->ClearBattleSession();
-	            }
-	            else
-	            {
-	                UE_LOG(LogTemp, Error,
-	                    TEXT("[TowerFloorGameMode] Failed to possess exploration character."));
-	            }
-	        }
-	    }
-	    break;
-	}
+            ACharacterBase* ExplorationCharacter =
+                ContextManager->GetSavedExplorationCharacter();
 
-	case EGameContextState::BattlePreparation:
-		{
-			APlayerController* NewPC = SpawnAndSwapPlayerController(BattlePreparationControllerClass); 
-			if (NewPC)
-			{
-				if (GI)
-				{
-					if (UGameContextManager* ContextManager = GI->GetSubsystem<UGameContextManager>())
-					{
-						if (ABattlePreparationController* PrepPC =
-							Cast<ABattlePreparationController>(NewPC))
-						{
-							PrepPC->SetPreparationContext(
-								ContextManager->GetActivePrepContext());
-						}
-					}
-				}
-			}
-			break;
-		}
+            if (!ExplorationCharacter)
+            {
+                TSubclassOf<ACharacterBase> PawnClass =
+                    ContextManager->ResolveExplorationPawnClass(ExplorationCharacterClass);
 
-	case EGameContextState::Battle:
-		if (Audio)
-		{
-			Audio->PlayMusic(BattleMusic, EMusicState::Battle);
-		}
-		
-		{
-			APlayerController* NewPC = SpawnAndSwapPlayerController(BattleControllerClass);
+                ExplorationCharacter =
+                    ContextManager->SpawnExplorationActorFromClass(PawnClass);
+            }
 
-			// If this is a mid-combat restore, the CombatManager already exists —
-			// call EnterBattleMode on the freshly spawned BattlePlayerController
-			// so it spawns and possesses BattleCameraPawn correctly.
-			// In a normal battle flow, EnterBattleMode is called by StartCombat
-			// before the controller swap — here we need it after.
-			if (NewPC)
-			{
-				if (ABattlePlayerController* BattlePC = Cast<ABattlePlayerController>(NewPC))
-				{
-					if (GI)
-					{
-						if (UGameContextManager* CtxMgr = GI->GetSubsystem<UGameContextManager>())
-						{
-							if (UCombatManager* CM = CtxMgr->GetActiveCombatManager())
-							{
-								// Only call if BattleCameraPawn hasn't been set yet —
-								// avoids double-calling in the normal (non-restore) path
-								// where EnterBattleMode was already called by StartCombat.
-								if (!BattlePC->HasBattleCamera())
-								{
-									BattlePC->EnterBattleMode(CM);
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-		break;
-	
-	case EGameContextState::BattleResults:
-		{
-			if (!BattleResultsControllerClass)
-			{
-				UE_LOG(LogTemp, Error,
-					TEXT("[TowerFloorGameMode] BattleResultsControllerClass not set — assign in BP CDO"));
-				break;
-			}
+            if (ExplorationCharacter)
+            {
+                NewPC->Possess(ExplorationCharacter);
 
-			// Spawn the results controller and hand it the context so it can
-			// build the widget. No pawn is possessed during this state.
-			APlayerController* NewPC = SpawnAndSwapPlayerController(BattleResultsControllerClass);
-			if (!NewPC) { break; }
+                if (NewPC->GetPawn() == ExplorationCharacter)
+                {
+                    ContextManager->ClearBattleSession();
+                    MyGI->ApplyPendingEntryPoint(GetWorld());
+                }
+            }
 
-			if (GI)
-			{
-				if (UGameContextManager* ContextManager = GI->GetSubsystem<UGameContextManager>())
-				{
-					if (ABattleResultsController* ResultsPC =
-						Cast<ABattleResultsController>(NewPC))
-					{
-						ResultsPC->SetResultsContext(ContextManager->GetActiveResultsContext());
-					}
-				}
-			}
-			break;
-		}
-		
-	default:
-		break;
-	}
+            break;
+        }
+
+        case EGameContextState::BattlePreparation:
+        {
+            NewPC = SpawnAndSwapPlayerController(BattlePreparationControllerClass);
+            if (!NewPC)
+            {
+                UE_LOG(LogTemp, Error,
+                    TEXT("[TowerFloorGameMode] BattlePreparation: failed to spawn controller."));
+                break;
+            }
+
+            if (ContextManager)
+            {
+                if (ABattlePreparationController* PrepPC =
+                    Cast<ABattlePreparationController>(NewPC))
+                {
+                    PrepPC->SetPreparationContext(
+                        ContextManager->GetActivePrepContext());
+                }
+            }
+
+            break;
+        }
+
+        case EGameContextState::Battle:
+        {
+            if (Audio)
+            {
+                Audio->PlayMusic(BattleMusic, EMusicState::Battle);
+            }
+
+            NewPC = SpawnAndSwapPlayerController(BattleControllerClass);
+
+            if (NewPC)
+            {
+                if (ABattlePlayerController* BattlePC =
+                    Cast<ABattlePlayerController>(NewPC))
+                {
+                    if (ContextManager)
+                    {
+                        if (UCombatManager* CM =
+                            ContextManager->GetActiveCombatManager())
+                        {
+                            if (!BattlePC->HasBattleCamera())
+                            {
+                                BattlePC->EnterBattleMode(CM);
+                            }
+                        }
+                    }
+                }
+            }
+
+            break;
+        }
+
+        case EGameContextState::BattleResults:
+        {
+            NewPC = SpawnAndSwapPlayerController(BattleResultsControllerClass);
+            if (!NewPC) { break; }
+
+            if (ContextManager)
+            {
+                if (ABattleResultsController* ResultsPC =
+                    Cast<ABattleResultsController>(NewPC))
+                {
+                    ResultsPC->SetResultsContext(
+                        ContextManager->GetActiveResultsContext());
+                }
+            }
+
+            break;
+        }
+
+        default:
+            break;
+    }
 }
 
 APlayerController* ATowerFloorGameMode::SpawnAndSwapPlayerController(
@@ -283,6 +305,10 @@ APlayerController* ATowerFloorGameMode::SpawnAndSwapPlayerController(
 {
 	if (!NewControllerClass)
 	{
+		UE_LOG(LogTemp, Error,
+			TEXT("[TowerFloorGameMode] SpawnAndSwapPlayerController: NewControllerClass is null. "
+			     "Make sure all controller classes are assigned in BP_TowerFloorGameMode CDO "
+			     "(ExplorationControllerClass, BattleControllerClass, BattlePreparationControllerClass, BattleResultsControllerClass)."));
 		return nullptr;
 	}
 
@@ -312,11 +338,21 @@ APlayerController* ATowerFloorGameMode::SpawnAndSwapPlayerController(
 	SwapPlayerControllers(OldPC, NewPC);
 	ActivePlayerController = NewPC;
 
-	// Destroy the old controller so its widgets (ActionHotbar, BattleHUD, etc.)
-	// are removed from the viewport. SwapPlayerControllers transfers the net
-	// connection but does NOT destroy the old controller — leaving it alive
-	// causes its AddToViewport widgets to persist across context transitions.
-	OldPC->Destroy();
+	// Only destroy controllers we created. The engine-created PIE controller must
+	// not be destroyed — doing so invalidates the PIE GameMode in the GC.
+	if (OldPC->IsA<ANevergonePlayerController>())
+	{
+		UE_LOG(LogTemp, Log,
+			TEXT("[TowerFloorGameMode] SpawnAndSwap: destroying OldPC %s (our controller type)."),
+			*GetNameSafe(OldPC));
+		OldPC->Destroy();
+	}
+	else
+	{
+		UE_LOG(LogTemp, Log,
+			TEXT("[TowerFloorGameMode] SpawnAndSwap: skipping Destroy for engine-created OldPC %s."),
+			*GetNameSafe(OldPC));
+	}
 
 	return NewPC;
 }
@@ -324,14 +360,11 @@ APlayerController* ATowerFloorGameMode::SpawnAndSwapPlayerController(
 void ATowerFloorGameMode::SwitchToExplorationController()
 {
 	APlayerController* NewPC = SpawnAndSwapPlayerController(ExplorationControllerClass);
-	if (!NewPC)
-	{
-		return;
-	}
+	if (!NewPC) { return; }
 
-	if (UGameInstance* GI = GetGameInstance())
+	if (UMyGameInstance* MyGI = GetGameInstance<UMyGameInstance>())
 	{
-		if (UGameContextManager* ContextManager = GI->GetSubsystem<UGameContextManager>())
+		if (UGameContextManager* ContextManager = MyGI->GetSubsystem<UGameContextManager>())
 		{
 			ACharacterBase* ExplorationCharacter = ContextManager->GetSavedExplorationCharacter();
 			if (ExplorationCharacter)
@@ -346,10 +379,7 @@ void ATowerFloorGameMode::SwitchToExplorationController()
 void ATowerFloorGameMode::SwitchToBattlePreparationController()
 {
 	APlayerController* NewPC = SpawnAndSwapPlayerController(BattlePreparationControllerClass);
-	if (!NewPC)
-	{
-		return;
-	}
+	if (!NewPC) { return; }
 
 	APawn* ExistingPawn = nullptr;
 	if (APlayerController* OldPC = UGameplayStatics::GetPlayerController(this, 0))
@@ -366,10 +396,7 @@ void ATowerFloorGameMode::SwitchToBattlePreparationController()
 void ATowerFloorGameMode::SwitchToBattleController()
 {
 	APlayerController* NewPC = SpawnAndSwapPlayerController(BattleControllerClass);
-	if (!NewPC)
-	{
-		return;
-	}
+	if (!NewPC) { return; }
 
 	APawn* ExistingPawn = nullptr;
 	if (APlayerController* OldPC = UGameplayStatics::GetPlayerController(this, 0))

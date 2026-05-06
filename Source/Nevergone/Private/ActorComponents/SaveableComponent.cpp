@@ -15,30 +15,78 @@ void USaveableComponent::OnRegister()
 {
 	Super::OnRegister();
 
-	// Generates a GUID the first time this component is registered
-	// (i.e. when the actor is first placed in the level or spawned at runtime).
-	//
-	// For PLACED actors: the generated value is serialized into the level
-	// .uasset because SaveGuid is EditAnywhere. Every subsequent load finds
-	// a valid GUID here and GetOrCreateGuid() becomes a no-op.
-	//
-	// For SPAWNED actors: a new GUID is generated each session, which is
-	// correct — spawned actors are not persistent across level loads.
-	GetOrCreateGuid();
+	// No-op here: the save id is resolved lazily in GetSaveIdentifier().
+	// This avoids generating a runtime id for placed actors that will use
+	// their actor FName instead, and avoids relying on level-asset serialization
+	// of any custom GUID property.
 }
 
-FGuid USaveableComponent::GetOrCreateGuid()
+// ---------------------------------------------------------------------------
+// Placed-actor detection
+//
+// A placed actor is one that exists in the level package — its FName is
+// serialized in the level asset and is stable across sessions. We must
+// detect this reliably to use the FName as the save identifier.
+//
+// Two flags can indicate "placed":
+//   - RF_WasLoaded: set when the actor was deserialized from a package
+//     via LoadPackage. Reliable in shipping builds and OpenLevel transitions.
+//     NOT reliably set in PIE when the world is duplicated rather than loaded.
+//   - bNetStartup (IsNetStartupActor): set when the actor was sorted into
+//     the level's startup actor list. Reliable in PIE for placed actors,
+//     but can be false for World Partition cell-streamed actors.
+//
+// Checking BOTH covers all cases: PIE, packaged builds, World Partition.
+// If either flag is true, the actor is placed and uses its stable FName.
+// ---------------------------------------------------------------------------
+static bool IsPlacedActor(const AActor* Owner)
 {
-	if (!SaveGuid.IsValid())
+	if (!Owner) { return false; }
+	return Owner->HasAnyFlags(RF_WasLoaded) || Owner->IsNetStartupActor();
+}
+
+FName USaveableComponent::GetSaveIdentifier()
+{
+	AActor* Owner = GetOwner();
+	if (!Owner)
 	{
-		SaveGuid = FGuid::NewGuid();
+		return NAME_None;
 	}
-	return SaveGuid;
+
+	if (IsPlacedActor(Owner))
+	{
+		return Owner->GetFName();
+	}
+
+	// RUNTIME-SPAWNED actors: generate (or reuse) a runtime save id.
+	if (RuntimeSaveId.IsNone())
+	{
+		RuntimeSaveId = FName(*FGuid::NewGuid().ToString(EGuidFormats::Digits));
+		UE_LOG(LogTemp, Verbose,
+			TEXT("[SaveableComponent] GetSaveIdentifier: generated runtime id '%s' for spawned actor '%s'."),
+			*RuntimeSaveId.ToString(), *Owner->GetName());
+	}
+	return RuntimeSaveId;
 }
 
-void USaveableComponent::SetActorGuid(const FGuid& NewGuid)
+void USaveableComponent::SetSaveIdentifier(FName NewIdentifier)
 {
-	SaveGuid = NewGuid;
+	AActor* Owner = GetOwner();
+	if (!Owner)
+	{
+		return;
+	}
+
+	if (IsPlacedActor(Owner))
+	{
+		// Placed actors are identified by GetFName() — never overwrite.
+		UE_LOG(LogTemp, Warning,
+			TEXT("[SaveableComponent] SetSaveIdentifier ignored for placed actor '%s' (uses FName)."),
+			*Owner->GetName());
+		return;
+	}
+
+	RuntimeSaveId = NewIdentifier;
 }
 
 void USaveableComponent::WriteSaveData(FActorSaveData& OutData) const
@@ -49,14 +97,25 @@ void USaveableComponent::WriteSaveData(FActorSaveData& OutData) const
 		return;
 	}
 
-	OutData.ActorGuid  = SaveGuid;
-	OutData.ActorClass = Owner->GetClass();
-	OutData.Transform  = Owner->GetActorTransform();
-	OutData.LevelName  = Owner->GetWorld()->GetOutermost()->GetFName();
+	// Resolve the identifier — const_cast because GetSaveIdentifier is non-const
+	// (it lazily initializes RuntimeSaveId), but the operation is idempotent.
+	const FName Identifier = const_cast<USaveableComponent*>(this)->GetSaveIdentifier();
+
+	OutData.ActorIdentifier    = Identifier;
+	OutData.ActorClass         = Owner->GetClass();
+	OutData.Transform          = Owner->GetActorTransform();
+	OutData.LevelName          = Owner->GetWorld()->GetOutermost()->GetFName();
+	OutData.bPersistAcrossLoads = bPersistAcrossLoads;
+
+	UE_LOG(LogTemp, Log,
+		TEXT("[SaveableComponent] WriteSaveData: actor='%s' id='%s' placed=%d bPersistAcrossLoads=%d"),
+		*Owner->GetName(),
+		*Identifier.ToString(),
+		(int32)IsPlacedActor(Owner),
+		(int32)bPersistAcrossLoads);
 
 	// IMPORTANT:
-	// Do NOT reset CustomDataMap here.
-	// Each SaveParticipant owns its own payload key.
+	// Do NOT reset CustomDataMap here. Each SaveParticipant owns its own payload key.
 
 	// Actor-level save
 	if (Owner->GetClass()->ImplementsInterface(USaveParticipant::StaticClass()))
@@ -87,7 +146,19 @@ void USaveableComponent::ReadSaveData(const FActorSaveData& InData)
 		return;
 	}
 
-	SaveGuid = InData.ActorGuid;
+	UE_LOG(LogTemp, Log,
+		TEXT("[SaveableComponent] ReadSaveData: actor='%s' id='%s' placed=%d"),
+		*Owner->GetName(),
+		*InData.ActorIdentifier.ToString(),
+		(int32)IsPlacedActor(Owner));
+
+	// For spawned actors, reclaim the runtime save id from the save data.
+	// For placed actors, this is a no-op (their id is GetFName()).
+	if (!IsPlacedActor(Owner))
+	{
+		RuntimeSaveId = InData.ActorIdentifier;
+	}
+
 	Owner->SetActorTransform(InData.Transform);
 
 	// Actor-level restore

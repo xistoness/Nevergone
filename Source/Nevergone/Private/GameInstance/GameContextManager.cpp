@@ -46,8 +46,18 @@ void UGameContextManager::RequestInitialState(EGameContextState InitialState)
         return;
     }
 
-	UE_LOG(LogTemp, Log, TEXT("[GameContextManager] Entering initial state: %d"), (int32)InitialState);
- 
+	// Reset CurrentState to None before entering the initial state.
+	// GameContextManager persists across level transitions via GameInstance.
+	// Without this reset, EnterState's same-state guard fires when the player
+	// travels between two levels that share the same initial state (e.g. both
+	// start in Exploration), blocking the broadcast and leaving the new level
+	// without a spawned pawn or controller swap.
+	UE_LOG(LogTemp, Log,
+		TEXT("[GameContextManager] RequestInitialState: resetting CurrentState from %d to None before entering %d."),
+		(int32)CurrentState, (int32)InitialState);
+
+	CurrentState = EGameContextState::None;
+
 	// Bypass CanEnterState — at BeginPlay the world is not fully set up yet,
 	// and this is an explicit instruction from the floor's GameMode, not a
 	// runtime request that needs validation.
@@ -400,8 +410,14 @@ void UGameContextManager::EnterState(EGameContextState NewState)
 	ExitState(OldState);
 	CurrentState = NewState;
 
-	UE_LOG(LogTemp, Warning, TEXT("[GameContextManager]: Broadcasting GameContextChanged!"));
+	UE_LOG(LogTemp, Warning, TEXT("Broadcast -> Manager: %p"), this);
+	UE_LOG(LogTemp, Warning, 
+		TEXT("[GameContextManager]: Broadcasting GameContextChanged! State=%d | HasListeners=%d"),
+		(int32)NewState, OnGameContextChanged.IsBound() ? 1 : 0);
 	OnGameContextChanged.Broadcast(NewState);
+	UE_LOG(LogTemp, Log, 
+		TEXT("[GameContextManager]: Broadcast complete for State=%d | HasListeners=%d"),
+		(int32)NewState, OnGameContextChanged.IsBound() ? 1 : 0);
 }
 
 void UGameContextManager::ExitState(EGameContextState OldState)
@@ -676,12 +692,28 @@ void UGameContextManager::HandleLeaderChanged()
     }
 }
 
-void UGameContextManager::InitializeSubsystem()
+void UGameContextManager::Initialize(FSubsystemCollectionBase& Collection)
 {
+	Super::Initialize(Collection);
+
+	// Bind to PartyManagerSubsystem so leader changes trigger exploration pawn swaps.
+	// Subsystems are guaranteed to exist at this point since the collection manages
+	// initialization order — no null check needed here.
 	if (UPartyManagerSubsystem* PartyMgr = GetGameInstance()->GetSubsystem<UPartyManagerSubsystem>())
 	{
 		PartyMgr->OnLeaderChanged.AddUObject(this, &UGameContextManager::HandleLeaderChanged);
+		UE_LOG(LogTemp, Log, TEXT("[GameContextManager] Initialize: bound to PartyManagerSubsystem::OnLeaderChanged."));
 	}
+}
+
+void UGameContextManager::Deinitialize()
+{
+	if (UPartyManagerSubsystem* PartyMgr = GetGameInstance()->GetSubsystem<UPartyManagerSubsystem>())
+	{
+		PartyMgr->OnLeaderChanged.RemoveAll(this);
+	}
+
+	Super::Deinitialize();
 }
 
 // ---------------------------------------------------------------------------
@@ -779,7 +811,7 @@ void UGameContextManager::RequestBattleCombatRestore(const FSavedCombatSession& 
     for (TActorIterator<AFloorEncounterVolume> It(World); It; ++It)
     {
         USaveableComponent* SaveComp = It->FindComponentByClass<USaveableComponent>();
-        if (SaveComp && SaveComp->GetOrCreateGuid() == SavedSession.EncounterVolumeGuid)
+        if (SaveComp && SaveComp->GetSaveIdentifier() == SavedSession.EncounterVolumeId)
         {
             EncounterVolume = *It;
             break;
@@ -790,7 +822,7 @@ void UGameContextManager::RequestBattleCombatRestore(const FSavedCombatSession& 
     {
         UE_LOG(LogTemp, Error,
             TEXT("[GameContextManager] RequestBattleCombatRestore: EncounterVolume with guid %s not found — aborting"),
-            *SavedSession.EncounterVolumeGuid.ToString());
+            *SavedSession.EncounterVolumeId.ToString());
         return;
     }
 

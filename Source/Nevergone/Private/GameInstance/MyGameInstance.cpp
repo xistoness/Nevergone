@@ -2,7 +2,6 @@
 
 
 #include "GameInstance/MyGameInstance.h"
-#include "GameInstance/GameContextManager.h"
 #include "GameInstance/MySaveGame.h"
 #include "GameMode/TowerFloorGameMode.h"
 #include "Data/SaveSlotInfo.h"
@@ -18,6 +17,7 @@
 #include "UObject/UObjectGlobals.h"
 #include "Party/PartyManagerSubsystem.h"
 #include "Widgets/LoadingScreenWidget.h"
+#include "World/CharacterPreviewSubsystem.h"
 #include "World/FlagsSubsystem.h"
 #include "World/NPCAffinitySubsystem.h"
 #include "World/QuestSubsystem.h"
@@ -30,13 +30,16 @@ void UMyGameInstance::Init()
 
 	FCoreUObjectDelegates::PostLoadMapWithWorld.AddUObject(
 		this, &UMyGameInstance::HandlePostLoadMapWithWorld);
+	
+	UE_LOG(LogTemp, Warning,
+		TEXT("[MyGameInstance] Init: this=%s | class=%s | CharacterPreviewStudio=%s"),
+		*GetName(), *GetClass()->GetName(),
+		CharacterPreviewStudio ? *CharacterPreviewStudio->GetName() : TEXT("NULL"));
+
+	GetSubsystem<UCharacterPreviewSubsystem>()->SetStudioClass(CharacterPreviewStudio);
 
 	// Do NOT create or load any save here.
 	// The Main Menu is responsible for calling RequestContinue() or RequestNewGame().
-	// Creating a save in Init() causes a phantom slot to appear before the player
-	// has made any choice.
-	GameContextManager = NewObject<UGameContextManager>(this);
-	GameContextManager->InitializeSubsystem();
 
 	if (UAudioSubsystem* Audio = GetSubsystem<UAudioSubsystem>())
 	{
@@ -45,6 +48,12 @@ void UMyGameInstance::Init()
 		Audio->DefaultHealSFX  = DefaultHealSFX;
 		Audio->MasterSoundMix  = MasterSoundMix;
 		Audio->UISoundMap      = UISoundMap;
+
+		// Door SFX fallbacks — used by ADoor when its per-actor override is null.
+		Audio->DefaultDoorLockedSFX = DefaultDoorLockedSFX;
+		Audio->DefaultDoorUnlockSFX = DefaultDoorUnlockSFX;
+		Audio->DefaultDoorOpenSFX   = DefaultDoorOpenSFX;
+		Audio->DefaultDoorCloseSFX  = DefaultDoorCloseSFX;
 
 		UE_LOG(LogTemp, Log, TEXT("[MyGameInstance] Audio configuration passed to AudioSubsystem."));
 	}
@@ -448,11 +457,6 @@ void UMyGameInstance::ApplyActiveSaveToWorld()
 	OnSaveLoaded.Broadcast();
 }
 
-UGameContextManager* UMyGameInstance::GetGameContextManager() const
-{
-	return GameContextManager;
-}
-
 void UMyGameInstance::ClearActiveSave()
 {
 	ActiveSave         = nullptr;
@@ -587,30 +591,27 @@ void UMyGameInstance::EndLevelTransition(UWorld* LoadedWorld)
 {
 	if (!LoadedWorld)
 	{
-		UE_LOG(LogTemp, Error, TEXT("EndLevelTransition failed: LoadedWorld is null"));
+		UE_LOG(LogTemp, Error, TEXT("[MyGameInstance] EndLevelTransition: LoadedWorld is null"));
 		TransitionState = ELevelTransitionState::Idle;
 		HideLoadingScreen();
 		SetInputLocked(false);
 		return;
 	}
 
-	// 1) Restore world from save (actors, flags, etc.)
-	if (ActiveSave)
-	{
-		if (UWorldManagerSubsystem* WorldMgr = LoadedWorld->GetSubsystem<UWorldManagerSubsystem>())
-		{
-			WorldMgr->RestoreWorldState();
-		}
-	}
+	// WorldManagerSubsystem::HandleWorldInitializedActors is the authoritative restore
+	// path — it runs before BeginPlay and has GameInstance fully wired at that point.
+	// Calling RestoreWorldState again here would run RestoreSaveableActors a second time,
+	// which destroys the exploration pawn that TowerFloorGameMode just spawned between
+	// the two calls (the pawn's GUID is in KnownGuids from the AutoSave, so it matches
+	// the discrepancy check and gets incorrectly identified as a collected item).
 
-	// RestoreWorldState is now handled by WorldManagerSubsystem::HandleWorldInitializedActors,
-	// which is guaranteed to run after GameInstance is set on the subsystem.
-
-	FTimerHandle Tmp;
-	LoadedWorld->GetTimerManager().SetTimerForNextTick([this, LoadedWorld]()
-	{
-		ApplyPendingEntryPoint(LoadedWorld);
-	});
+	// NOTE: ApplyPendingEntryPoint is intentionally NOT called here.
+	// It must run after the exploration pawn is spawned and possessed, which
+	// happens in TowerFloorGameMode::HandleGameContextChanged (Exploration case).
+	// Calling it here via a deferred timer was unreliable because the timer could
+	// fire before TowerFloorGameMode::BeginPlay had a chance to spawn the pawn,
+	// resulting in "No player pawn found" and no teleportation to the portal.
+	UE_LOG(LogTemp, Log, TEXT("[MyGameInstance] EndLevelTransition: world restored. Entry point will be applied after pawn possession."));
 
 	ApplyPersistentStateToWorld(LoadedWorld);
 	HideLoadingScreen();
@@ -749,11 +750,13 @@ void UMyGameInstance::ApplyPendingEntryPoint(UWorld* World)
 
 	if (!World)
 	{
+		UE_LOG(LogTemp, Error, TEXT("[MyGameInstance] ApplyPendingEntryPoint: World is null"));
 		return;
 	}
 
 	if (PendingLevelTransition.EntryPortalID.IsNone())
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[MyGameInstance] ApplyPendingEntryPoint: EntryPortalID is None — skipping teleport"));
 		return;
 	}
 
@@ -777,7 +780,7 @@ void UMyGameInstance::ApplyPendingEntryPoint(UWorld* World)
 
 	if (!EntryPortal)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ApplyPendingEntryPoint: No LevelPortal found with PortalID '%s'"),
+		UE_LOG(LogTemp, Warning, TEXT("[MyGameInstance] ApplyPendingEntryPoint: No LevelPortal found with PortalID '%s'"),
 			*PendingLevelTransition.EntryPortalID.ToString());
 		return;
 	}
@@ -787,15 +790,21 @@ void UMyGameInstance::ApplyPendingEntryPoint(UWorld* World)
 
 	if (!Pawn)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ApplyPendingEntryPoint: No player pawn found"));
+		// This should no longer happen since TowerFloorGameMode calls this after Possess.
+		// If it still fires, the pawn spawn itself failed — check SpawnExplorationActorFromClass logs.
+		UE_LOG(LogTemp, Error, TEXT("[MyGameInstance] ApplyPendingEntryPoint: No player pawn found — pawn spawn may have failed"));
 		return;
 	}
 
 	// Use the portal's entry transform (actor transform + configurable offset)
 	const FTransform TargetTransform = EntryPortal->GetEntryTransform();
 	Pawn->TeleportTo(TargetTransform.GetLocation(), TargetTransform.Rotator());
-
 	PC->SetControlRotation(TargetTransform.Rotator());
+
+	UE_LOG(LogTemp, Log, TEXT("[MyGameInstance] ApplyPendingEntryPoint: teleported '%s' to portal '%s' at %s"),
+		*GetNameSafe(Pawn),
+		*PendingLevelTransition.EntryPortalID.ToString(),
+		*TargetTransform.GetTranslation().ToString());
 }
 
 void UMyGameInstance::OnPreLevelUnload() const
@@ -841,7 +850,15 @@ void UMyGameInstance::SetGlobalFlag(FName Flag, bool bValue)
 void UMyGameInstance::SetSavedActorsForLevel(FName LevelName, const TArray<FActorSaveData>& Actors) const
 {
 	if (!ActiveSave) return;
-	ActiveSave->SavedActorsByLevel.FindOrAdd(LevelName).Actors = Actors;
+
+	// Preserve bHasBeenVisited — only WorldManagerSubsystem::RestoreWorldState sets it,
+	// and only once per level. FindOrAdd preserves it across repeated saves.
+	FLevelSaveData& LevelData = ActiveSave->SavedActorsByLevel.FindOrAdd(LevelName);
+	LevelData.Actors = Actors;
+
+	UE_LOG(LogTemp, Log,
+		TEXT("[MyGameInstance] SetSavedActorsForLevel: level='%s' saved %d actor(s)."),
+		*LevelName.ToString(), Actors.Num());
 }
 
 // Getter Functions
@@ -890,6 +907,20 @@ const TArray<FActorSaveData>& UMyGameInstance::GetSavedActorsForLevel(FName Leve
 	const FLevelSaveData* Found = ActiveSave->SavedActorsByLevel.Find(LevelName);
 	return Found ? Found->Actors : Empty;
 }
+
+bool UMyGameInstance::HasLevelBeenVisited(FName LevelName) const
+{
+	if (!ActiveSave) return false;
+	const FLevelSaveData* Found = ActiveSave->SavedActorsByLevel.Find(LevelName);
+	return Found ? Found->bHasBeenVisited : false;
+}
+
+void UMyGameInstance::MarkLevelVisited(FName LevelName) const
+{
+	if (!ActiveSave) return;
+	ActiveSave->SavedActorsByLevel.FindOrAdd(LevelName).bHasBeenVisited = true;
+}
+
 
 
 

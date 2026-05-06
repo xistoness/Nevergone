@@ -49,6 +49,13 @@ AFloorEncounterVolume::AFloorEncounterVolume()
 	IndicatorMesh->SetGenerateOverlapEvents(false);
 
 	SaveableComponent = CreateDefaultSubobject<USaveableComponent>(TEXT("SaveableComponent"));
+
+	// Level-placed actor: state is saved while alive (bEncounterResolved, bIsInBattle)
+	// but the actor itself is NEVER respawned by SpawnMissingActors — it lives in
+	// the level package and is loaded by the engine. Setting this to false prevents
+	// duplicate instances from being spawned by the save system if the world-actor
+	// matching ever fails.
+	SaveableComponent->bPersistAcrossLoads = false;
 }
 
 void AFloorEncounterVolume::BeginPlay()
@@ -101,7 +108,9 @@ FVector AFloorEncounterVolume::GetBattleBoxExtent() const
 
 void AFloorEncounterVolume::WriteSaveData_Implementation(FActorSaveData& OutData) const
 {
-	UE_LOG(LogTemp, Warning, TEXT("[FloorEncounterVolume] Writing save — bEncounterResolved: %d"), bEncounterResolved);
+	UE_LOG(LogTemp, Log,
+		TEXT("[FloorEncounterVolume] '%s' WriteSaveData: bEncounterResolved=%d bIsInBattle=%d"),
+		*GetName(), (int32)bEncounterResolved, (int32)bIsInBattle);
 
 	FSavePayload Payload;
 	FMemoryWriter Writer(Payload.Data, true);
@@ -117,16 +126,24 @@ void AFloorEncounterVolume::WriteSaveData_Implementation(FActorSaveData& OutData
 
 void AFloorEncounterVolume::ReadSaveData_Implementation(const FActorSaveData& InData)
 {
-	UE_LOG(LogTemp, Warning, TEXT("[FloorEncounterVolume] Reading save — bEncounterResolved: %d"), bEncounterResolved);
-
 	const FSavePayload* Payload = InData.CustomDataMap.Find(SaveKeys::EncounterVolume);
-	if (!Payload) return;
+	if (!Payload)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[FloorEncounterVolume] '%s' ReadSaveData: no payload for key '%s' — keeping defaults."),
+			*GetName(), *SaveKeys::EncounterVolume.ToString());
+		return;
+	}
 
 	FMemoryReader Reader(Payload->Data, true);
 	FArchive& Ar = Reader;
 
 	Ar << bEncounterResolved;
 	Ar << bIsInBattle;
+
+	UE_LOG(LogTemp, Log,
+		TEXT("[FloorEncounterVolume] '%s' ReadSaveData: bEncounterResolved=%d bIsInBattle=%d"),
+		*GetName(), (int32)bEncounterResolved, (int32)bIsInBattle);
 }
 
 void AFloorEncounterVolume::OnPostRestore_Implementation()
@@ -135,7 +152,7 @@ void AFloorEncounterVolume::OnPostRestore_Implementation()
 	{
 		DeactivateEncounter();
 	}
-	if (bIsInBattle)
+	if (bIsInBattle && IndicatorMesh)
 	{
 		IndicatorMesh->SetVisibility(false);
 	}

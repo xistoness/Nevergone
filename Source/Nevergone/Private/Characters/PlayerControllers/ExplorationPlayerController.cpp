@@ -10,8 +10,12 @@
 #include "Interfaces/ExplorationInputReceiver.h"
 #include "Party/PartyManagerSubsystem.h"
 #include "Widgets/DialogueWidget.h"
+#include "Widgets/ExplorationPromptWidget.h"
+#include "Widgets/InventoryWidget.h"
+#include "Widgets/ContainerTransferWidget.h"
 #include "Widgets/QuestLogWidget.h"
 #include "Widgets/Party/PartyManagerWidget.h"
+#include "Actors/ContainerActor.h"
 #include "World/DialogueSubsystem.h"
 #include "World/QuestSubsystem.h"
 
@@ -59,6 +63,15 @@ void AExplorationPlayerController::SetupInputComponent()
 
     if (PauseInput)
         PauseMenuComponent->BindPauseInput(EIC, PauseInput);
+
+    if (InventoryInput)
+        EIC->BindAction(InventoryInput, ETriggerEvent::Triggered, this, &AExplorationPlayerController::HandleInventory);
+
+    if (InventoryPrevCharInput)
+        EIC->BindAction(InventoryPrevCharInput, ETriggerEvent::Triggered, this, &AExplorationPlayerController::HandleInventoryPrevChar);
+
+    if (InventoryNextCharInput)
+        EIC->BindAction(InventoryNextCharInput, ETriggerEvent::Triggered, this, &AExplorationPlayerController::HandleInventoryNextChar);
 }
 
 // ---------------------------------------------------------------------------
@@ -130,8 +143,10 @@ void AExplorationPlayerController::ExitDialogueInputMode()   { ApplyExplorationI
 
 void AExplorationPlayerController::HandlePauseOpened()
 {
-    // Save the current mode so we can restore it exactly on close.
-    // This matters when pausing mid-dialogue or mid-overlay.
+    // Close any open overlay before entering pause so the player never returns
+    // to a stale widget state. Dialogue is exempt — pause mid-dialogue is allowed.
+    CloseActiveOverlay();
+
     PrePauseInputMode = CurrentInputMode;
     ApplyUIOverlayInputMode(EExplorationInputMode::PauseMenu);
 
@@ -142,8 +157,6 @@ void AExplorationPlayerController::HandlePauseOpened()
 
 void AExplorationPlayerController::HandlePauseClosed()
 {
-    // Restore the mode that was active before pause.
-    // Use the specific Apply* method for each mode to guarantee correct state.
     switch (PrePauseInputMode)
     {
     case EExplorationInputMode::Dialogue:
@@ -151,6 +164,8 @@ void AExplorationPlayerController::HandlePauseClosed()
         break;
     case EExplorationInputMode::QuestLog:
     case EExplorationInputMode::PartyManager:
+    case EExplorationInputMode::Inventory:
+    case EExplorationInputMode::Container:
         ApplyUIOverlayInputMode(PrePauseInputMode);
         break;
     default:
@@ -227,11 +242,7 @@ void AExplorationPlayerController::HandleQuestLog()
     }
     else
     {
-        if (CurrentInputMode == EExplorationInputMode::PartyManager && PartyManagerWidget)
-        {
-            PartyManagerWidget->SetVisibility(ESlateVisibility::Hidden);
-        }
-
+        CloseActiveOverlay();
         QuestLogWidget->RefreshQuestLog();
         QuestLogWidget->SetVisibility(ESlateVisibility::Visible);
         ApplyUIOverlayInputMode(EExplorationInputMode::QuestLog);
@@ -261,16 +272,53 @@ void AExplorationPlayerController::HandlePartyManager()
     }
     else
     {
-        if (CurrentInputMode == EExplorationInputMode::QuestLog && QuestLogWidget)
-        {
-            QuestLogWidget->SetVisibility(ESlateVisibility::Hidden);
-        }
-
+        CloseActiveOverlay();
         PartyManagerWidget->RefreshPartyManager();
         PartyManagerWidget->SetVisibility(ESlateVisibility::Visible);
         ApplyUIOverlayInputMode(EExplorationInputMode::PartyManager);
         UE_LOG(LogTemp, Log, TEXT("[ExplorationPlayerController] PartyManager opened."));
     }
+}
+
+void AExplorationPlayerController::HandleInventory()
+{
+    if (CurrentInputMode == EExplorationInputMode::Dialogue ||
+        CurrentInputMode == EExplorationInputMode::PauseMenu)
+    {
+        return;
+    }
+
+    if (!InventoryWidget)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[ExplorationPlayerController] HandleInventory: InventoryWidget is null."));
+        return;
+    }
+
+    if (CurrentInputMode == EExplorationInputMode::Inventory)
+    {
+        InventoryWidget->CloseInventory();
+        ApplyExplorationInputMode();
+        UE_LOG(LogTemp, Log, TEXT("[ExplorationPlayerController] Inventory closed."));
+    }
+    else
+    {
+        CloseActiveOverlay();
+        InventoryWidget->OpenInventory();
+        ApplyUIOverlayInputMode(EExplorationInputMode::Inventory);
+        UE_LOG(LogTemp, Log, TEXT("[ExplorationPlayerController] Inventory opened."));
+    }
+}
+
+void AExplorationPlayerController::HandleInventoryPrevChar()
+{
+    if (CurrentInputMode != EExplorationInputMode::Inventory) return;
+    if (InventoryWidget) InventoryWidget->SelectPreviousCharacter();
+}
+
+void AExplorationPlayerController::HandleInventoryNextChar()
+{
+    if (CurrentInputMode != EExplorationInputMode::Inventory) return;
+    if (InventoryWidget) InventoryWidget->SelectNextCharacter();
 }
 
 // ---------------------------------------------------------------------------
@@ -289,6 +337,12 @@ void AExplorationPlayerController::HandleUIConfirm()
         break;
     case EExplorationInputMode::PartyManager:
         if (PartyManagerWidget) { PartyManagerWidget->ConfirmSelection(); }
+        break;
+    case EExplorationInputMode::Inventory:
+        if (InventoryWidget) { InventoryWidget->ConfirmSelection(); }
+        break;
+    case EExplorationInputMode::Container:
+        if (ContainerTransferWidget) { ContainerTransferWidget->ConfirmSelection(); }
         break;
     case EExplorationInputMode::PauseMenu:
         PauseMenuComponent->ConfirmSelection();
@@ -327,9 +381,35 @@ void AExplorationPlayerController::HandleUICancel()
         }
         break;
 
+    case EExplorationInputMode::Inventory:
+        if (InventoryWidget)
+        {
+            // CancelSelection closes context menu first (returns true).
+            // On second press (nothing open) it returns false → close inventory.
+            if (!InventoryWidget->CancelSelection())
+            {
+                InventoryWidget->CloseInventory();
+                ApplyExplorationInputMode();
+                UE_LOG(LogTemp, Log, TEXT("[ExplorationPlayerController] Inventory closed via Cancel."));
+            }
+        }
+        break;
+
+    case EExplorationInputMode::Container:
+        if (ContainerTransferWidget)
+        {
+            // Same two-stage cancel as Inventory: first press dismisses the
+            // quantity prompt if open, second press closes the transfer UI.
+            if (!ContainerTransferWidget->CancelSelection())
+            {
+                ContainerTransferWidget->Close();
+                ApplyExplorationInputMode();
+                UE_LOG(LogTemp, Log, TEXT("[ExplorationPlayerController] Container closed via Cancel."));
+            }
+        }
+        break;
+
     case EExplorationInputMode::PauseMenu:
-        // CancelSelection on the component either navigates back to Resume
-        // or closes the menu — both cases handled internally.
         PauseMenuComponent->CancelSelection();
         break;
 
@@ -350,6 +430,12 @@ void AExplorationPlayerController::HandleUIUp()
         break;
     case EExplorationInputMode::PartyManager:
         if (PartyManagerWidget) { PartyManagerWidget->NavigateUp(); }
+        break;
+    case EExplorationInputMode::Inventory:
+        if (InventoryWidget) { InventoryWidget->NavigateUp(); }
+        break;
+    case EExplorationInputMode::Container:
+        if (ContainerTransferWidget) { ContainerTransferWidget->NavigateUp(); }
         break;
     case EExplorationInputMode::PauseMenu:
         PauseMenuComponent->NavigateUp();
@@ -372,6 +458,12 @@ void AExplorationPlayerController::HandleUIDown()
     case EExplorationInputMode::PartyManager:
         if (PartyManagerWidget) { PartyManagerWidget->NavigateDown(); }
         break;
+    case EExplorationInputMode::Inventory:
+        if (InventoryWidget) { InventoryWidget->NavigateDown(); }
+        break;
+    case EExplorationInputMode::Container:
+        if (ContainerTransferWidget) { ContainerTransferWidget->NavigateDown(); }
+        break;
     case EExplorationInputMode::PauseMenu:
         PauseMenuComponent->NavigateDown();
         break;
@@ -386,6 +478,14 @@ void AExplorationPlayerController::HandleUILeft()
     {
         if (PartyManagerWidget) { PartyManagerWidget->NavigateLeft(); }
     }
+    else if (CurrentInputMode == EExplorationInputMode::Inventory)
+    {
+        if (InventoryWidget) { InventoryWidget->NavigateLeft(); }
+    }
+    else if (CurrentInputMode == EExplorationInputMode::Container)
+    {
+        if (ContainerTransferWidget) { ContainerTransferWidget->NavigateLeft(); }
+    }
 }
 
 void AExplorationPlayerController::HandleUIRight()
@@ -394,11 +494,171 @@ void AExplorationPlayerController::HandleUIRight()
     {
         if (PartyManagerWidget) { PartyManagerWidget->NavigateRight(); }
     }
+    else if (CurrentInputMode == EExplorationInputMode::Inventory)
+    {
+        if (InventoryWidget) { InventoryWidget->NavigateRight(); }
+    }
+    else if (CurrentInputMode == EExplorationInputMode::Container)
+    {
+        if (ContainerTransferWidget) { ContainerTransferWidget->NavigateRight(); }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// CloseActiveOverlay
+// ---------------------------------------------------------------------------
+
+void AExplorationPlayerController::CloseActiveOverlay()
+{
+    // Closes whichever overlay widget is currently open and resets input mode
+    // to Gameplay. Does NOT touch Dialogue (it has its own lifecycle) or
+    // PauseMenu (only closeable via its own input).
+    switch (CurrentInputMode)
+    {
+    case EExplorationInputMode::QuestLog:
+        if (QuestLogWidget)
+        {
+            QuestLogWidget->SetVisibility(ESlateVisibility::Hidden);
+            UE_LOG(LogTemp, Log, TEXT("[ExplorationPlayerController] CloseActiveOverlay: QuestLog closed."));
+        }
+        ApplyExplorationInputMode();
+        break;
+
+    case EExplorationInputMode::PartyManager:
+        if (PartyManagerWidget)
+        {
+            PartyManagerWidget->SetVisibility(ESlateVisibility::Hidden);
+            UE_LOG(LogTemp, Log, TEXT("[ExplorationPlayerController] CloseActiveOverlay: PartyManager closed."));
+        }
+        ApplyExplorationInputMode();
+        break;
+
+    case EExplorationInputMode::Inventory:
+        if (InventoryWidget)
+        {
+            InventoryWidget->CloseInventory();
+            UE_LOG(LogTemp, Log, TEXT("[ExplorationPlayerController] CloseActiveOverlay: Inventory closed."));
+        }
+        ApplyExplorationInputMode();
+        break;
+
+    case EExplorationInputMode::Container:
+        if (ContainerTransferWidget)
+        {
+            ContainerTransferWidget->Close();
+            UE_LOG(LogTemp, Log, TEXT("[ExplorationPlayerController] CloseActiveOverlay: Container closed."));
+        }
+        ApplyExplorationInputMode();
+        break;
+
+    default:
+        // Gameplay, Dialogue, PauseMenu — nothing to close.
+        break;
+    }
 }
 
 // ---------------------------------------------------------------------------
 // Widget creation
 // ---------------------------------------------------------------------------
+
+void AExplorationPlayerController::CreateInventoryWidget()
+{
+    if (!IsValid(InventoryWidgetClass) || InventoryWidget) { return; }
+
+    InventoryWidget = CreateWidget<UInventoryWidget>(this, InventoryWidgetClass);
+    if (!InventoryWidget)
+    {
+        UE_LOG(LogTemp, Error, TEXT("[ExplorationPlayerController] CreateInventoryWidget failed."));
+        return;
+    }
+
+    // ZOrder 200 — above HUD elements (100) and dialogue (100), below pause menu (300+).
+    InventoryWidget->AddToViewport(200);
+    InventoryWidget->SetVisibility(ESlateVisibility::Collapsed);
+    UE_LOG(LogTemp, Log, TEXT("[ExplorationPlayerController] InventoryWidget created."));
+}
+
+void AExplorationPlayerController::CreateContainerTransferWidget()
+{
+    if (!IsValid(ContainerTransferWidgetClass) || ContainerTransferWidget) { return; }
+
+    ContainerTransferWidget = CreateWidget<UContainerTransferWidget>(this, ContainerTransferWidgetClass);
+    if (!ContainerTransferWidget)
+    {
+        UE_LOG(LogTemp, Error, TEXT("[ExplorationPlayerController] CreateContainerTransferWidget failed."));
+        return;
+    }
+
+    // Same ZOrder bracket as InventoryWidget — only one of them is visible at a time.
+    ContainerTransferWidget->AddToViewport(200);
+    ContainerTransferWidget->SetVisibility(ESlateVisibility::Collapsed);
+    UE_LOG(LogTemp, Log, TEXT("[ExplorationPlayerController] ContainerTransferWidget created."));
+}
+
+void AExplorationPlayerController::CreateExplorationPromptWidget()
+{
+    if (!IsValid(ExplorationPromptWidgetClass) || ExplorationPromptWidget) { return; }
+
+    ExplorationPromptWidget = CreateWidget<UExplorationPromptWidget>(this, ExplorationPromptWidgetClass);
+    if (!ExplorationPromptWidget)
+    {
+        UE_LOG(LogTemp, Error, TEXT("[ExplorationPlayerController] CreateExplorationPromptWidget failed."));
+        return;
+    }
+
+    // ZOrder 150 — above HUD elements (100) and dialogue (100), below interactive
+    // overlays (200+). The prompt is non-blocking informational text, so it must
+    // sit behind anything that captures input.
+    ExplorationPromptWidget->AddToViewport(150);
+    UE_LOG(LogTemp, Log, TEXT("[ExplorationPlayerController] ExplorationPromptWidget created."));
+}
+
+void AExplorationPlayerController::ShowExplorationPrompt(const FText& Message, float Duration)
+{
+    if (!ExplorationPromptWidget)
+    {
+        UE_LOG(LogTemp, Warning,
+            TEXT("[ExplorationPlayerController] ShowExplorationPrompt: widget not initialized — message '%s' dropped."),
+            *Message.ToString());
+        return;
+    }
+
+    UE_LOG(LogTemp, Verbose,
+        TEXT("[ExplorationPlayerController] ShowExplorationPrompt: '%s' duration=%.2fs"),
+        *Message.ToString(), Duration);
+
+    ExplorationPromptWidget->ShowMessage(Message, Duration);
+}
+
+void AExplorationPlayerController::OpenContainerInteraction(AContainerActor* Container)
+{
+    if (!Container)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[ExplorationPlayerController] OpenContainerInteraction: null container."));
+        return;
+    }
+
+    // Lazy-create on first open. The widget class field is editor-set on the
+    // BP_ExplorationPlayerController; if it's missing we log and bail rather
+    // than crash, mirroring the rest of the overlays' guarding pattern.
+    if (!ContainerTransferWidget)
+    {
+        CreateContainerTransferWidget();
+    }
+    if (!ContainerTransferWidget)
+    {
+        UE_LOG(LogTemp, Error,
+            TEXT("[ExplorationPlayerController] OpenContainerInteraction: ContainerTransferWidgetClass not set on BP."));
+        return;
+    }
+
+    CloseActiveOverlay();
+    ContainerTransferWidget->OpenForContainer(Container);
+    ApplyUIOverlayInputMode(EExplorationInputMode::Container);
+
+    UE_LOG(LogTemp, Log, TEXT("[ExplorationPlayerController] Container '%s' opened."),
+        *Container->GetName());
+}
 
 void AExplorationPlayerController::CreateDialogueWidget()
 {
@@ -445,7 +705,7 @@ void AExplorationPlayerController::CreatePartyManagerWidget()
 
     PartyManagerWidget->AddToViewport(100);
     PartyManagerWidget->SetVisibility(ESlateVisibility::Hidden);
-    UE_LOG(LogTemp, Log, TEXT("[ExplorationPlayerController] PartyManagerWidget created."));
+    UE_LOG(LogTemp, Log, TEXT("[ExplorationPlayerController] CreatePartyManagerWidget created."));
 }
 
 // ---------------------------------------------------------------------------
@@ -459,7 +719,6 @@ void AExplorationPlayerController::BeginPlay()
     BindDialogueSubsystem();
     BindQuestSubsystem();
 
-    // Subscribe to pause delegates so this controller manages CurrentInputMode.
     PauseMenuComponent->OnPauseOpened.AddUObject(this, &AExplorationPlayerController::HandlePauseOpened);
     PauseMenuComponent->OnPauseClosed.AddUObject(this, &AExplorationPlayerController::HandlePauseClosed);
 }
@@ -490,6 +749,9 @@ void AExplorationPlayerController::OnPossess(APawn* InPawn)
     CreateDialogueWidget();
     CreateQuestLogWidget();
     CreatePartyManagerWidget();
+    CreateInventoryWidget();
+    CreateContainerTransferWidget();
+    CreateExplorationPromptWidget();
     PauseMenuComponent->CreatePauseWidget();
 
     if (DialogueSubsystem && DialogueSubsystem->IsDialogueActive())

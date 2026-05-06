@@ -6,13 +6,20 @@
 #include "GameMode/BattleResultsContext.h"
 #include "Widgets/Combat/BattleResultsWidget.h"
 
-void ABattleResultsController::BeginPlay()
+void ABattleResultsController::ReceivedPlayer()
 {
-    Super::BeginPlay();
+    Super::ReceivedPlayer();
+
+    // ReceivedPlayer fires after LocalPlayer is assigned. Using it instead of
+    // BeginPlay prevents SetInputMode from running while LocalPlayer is null
+    // (SpawnActor triggers BeginPlay before SwapPlayerControllers assigns LocalPlayer).
+    if (!GetLocalPlayer()) { return; }
 
     // Show cursor and block all game input — this screen is UI-only.
     bShowMouseCursor = true;
     SetInputMode(FInputModeUIOnly());
+
+    UE_LOG(LogTemp, Log, TEXT("[BattleResultsController] ReceivedPlayer: UI setup complete."));
 }
 
 void ABattleResultsController::SetResultsContext(UBattleResultsContext* InContext)

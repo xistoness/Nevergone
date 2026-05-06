@@ -80,12 +80,11 @@ void ADialogueNPC::Interact_Implementation(AActor* Interactor)
 
 FGuid ADialogueNPC::GetNpcGuid() const
 {
-    if (SaveableComponent)
-    {
-        return SaveableComponent->GetOrCreateGuid();
-    }
-
-    UE_LOG(LogTemp, Warning,
-        TEXT("[DialogueNPC] '%s' has no SaveableComponent — GUID will be invalid."), *GetName());
-    return FGuid();
+    // Derive a deterministic FGuid from the actor's stable FName.
+    // Placed actors have their FName serialized in the level asset — same FName
+    // every session, so the same GUID is produced every session.
+    // GetTypeHash produces a 32-bit hash; we spread it across all four GUID
+    // components so the result is unique enough for NPC affinity tracking.
+    const uint32 Hash = GetTypeHash(GetFName());
+    return FGuid(Hash, Hash ^ 0xDEADBEEF, Hash ^ 0xCAFEBABE, Hash ^ 0xFACEFEED);
 }

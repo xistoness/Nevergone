@@ -25,8 +25,12 @@ class NEVERGONE_API UGameContextManager : public UGameInstanceSubsystem
 	GENERATED_BODY()
 
 public:
+	// UGameInstanceSubsystem interface
+	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+	virtual void Deinitialize() override;
+
 	/** State control */
-	
+
 	void RequestInitialState(EGameContextState InitialState);
 	void RequestExploration();
 	void RequestBattlePreparation(class AFloorEncounterVolume* EncounterSource);
@@ -66,7 +70,6 @@ public:
 	// Called by PartyManagerSubsystem::OnLeaderChanged during exploration —
 	// destroys the current pawn and spawns the new leader's pawn at same position.
 	void HandleLeaderChanged();
-	void InitializeSubsystem();
 
 	FOnGameContextChanged OnGameContextChanged;
 
