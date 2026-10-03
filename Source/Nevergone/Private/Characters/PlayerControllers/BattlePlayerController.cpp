@@ -6,6 +6,7 @@
 #include "EnhancedInputSubsystems.h"
 #include "ActorComponents/PauseMenuComponent.h"
 #include "Characters/CharacterBase.h"
+#include "EngineTools/CollisionChannels.h"
 #include "GameMode/CombatManager.h"
 #include "GameMode/Combat/BattleInputManager.h"
 #include "GameMode/Combat/BattleCameraPawn.h"
@@ -196,7 +197,7 @@ void ABattlePlayerController::HandleHover()
 	}
 
 	FHitResult Hit;
-	if (GetHitResultUnderCursor(ECC_GameTraceChannel2, false, Hit))
+	if (GetHitResultUnderCursor(NevergoneCollision::GridTrace, false, Hit))
 	{
 		UGridManager* GridManager = GetWorld()->GetSubsystem<UGridManager>();
 		if (!GridManager)

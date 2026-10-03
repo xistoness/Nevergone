@@ -3,7 +3,6 @@
 
 #include "Characters/CharacterBase.h"
 
-#include "AITestsCommon.h"
 #include "ActorComponents/UnitStatsComponent.h"
 #include "ActorComponents/CharacterModeComponent.h"
 #include "ActorComponents/SaveableComponent.h"
@@ -11,6 +10,7 @@
 #include "GameInstance/SaveKeys.h"
 #include "ActorComponents/BattleModeComponent.h"
 #include "ActorComponents/ExplorationModeComponent.h"
+#include "ActorComponents/ExcursionThrowComponent.h"
 #include "ActorComponents/MyAbilitySystemComponent.h"
 
 #include "GameFramework/SpringArmComponent.h"
@@ -42,6 +42,7 @@ ACharacterBase::ACharacterBase()
 	SaveableComponent->bPersistAcrossLoads = true;
 	ExplorationMode = CreateDefaultSubobject<UExplorationModeComponent>(TEXT("ExplorationMode"));
 	BattleMode      = CreateDefaultSubobject<UBattleModeComponent>(TEXT("BattleMode"));
+	ThrowComponent  = CreateDefaultSubobject<UExcursionThrowComponent>(TEXT("ThrowComponent"));
 	AbilitySystemComponent = CreateDefaultSubobject<UMyAbilitySystemComponent>(TEXT("AbilitySystem"));
 	
 	
@@ -245,7 +246,7 @@ void ACharacterBase::MoveToLocation(const FVector& InLocation, const TArray<FVec
 	//SetActorLocation(InLocation);
 }
 
-void ACharacterBase::SpawnFloatingText(const FString& Text, EFloatingTextType Type, UTexture2D* Icon)
+void ACharacterBase::SpawnFloatingText(const FText& Text, EFloatingTextType Type, UTexture2D* Icon)
 {
     APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
     if (!PC || !FloatingTextClass)
@@ -273,7 +274,7 @@ void ACharacterBase::SpawnFloatingText(const FString& Text, EFloatingTextType Ty
 
     UE_LOG(LogTemp, Verbose,
         TEXT("[CharacterBase] SpawnFloatingText: actor=%s text='%s' slot=%d offset=%.1f"),
-        *GetName(), *Text, ActiveFloatingTextCount - 1, ScreenYOffset);
+        *GetName(), *Text.ToString(), ActiveFloatingTextCount - 1, ScreenYOffset);
 
     // Decrement the counter when this widget finishes its animation and destroys itself
     Widget->OnDestroyed.BindLambda([this]()

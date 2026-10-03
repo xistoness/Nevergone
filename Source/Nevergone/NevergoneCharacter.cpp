@@ -1,15 +1,11 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "NevergoneCharacter.h"
-#include "Engine/LocalPlayer.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/Controller.h"
-#include "EnhancedInputComponent.h"
-#include "EnhancedInputSubsystems.h"
-#include "InputActionValue.h"
 #include "Nevergone.h"
 
 ANevergoneCharacter::ANevergoneCharacter()
@@ -50,70 +46,6 @@ ANevergoneCharacter::ANevergoneCharacter()
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
 }
 
-void ANevergoneCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
-{
-	// Set up action bindings
-	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent)) {
-		
-		// Jumping
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
-
-		// Moving
-		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ANevergoneCharacter::Move);
-		EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &ANevergoneCharacter::Look);
-
-		// Looking
-		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &ANevergoneCharacter::Look);
-	}
-	else
-	{
-		UE_LOG(LogNevergone, Error, TEXT("'%s' Failed to find an Enhanced Input component! This template is built to use the Enhanced Input system. If you intend to use the legacy system, then you will need to update this C++ file."), *GetNameSafe(this));
-	}
-}
-
-void ANevergoneCharacter::BeginPlay()
-{
-	Super::BeginPlay();
-	ApplyCharacterInputMapping();
-}
-
-void ANevergoneCharacter::Move(const FInputActionValue& Value)
-{
-	// input is a Vector2D
-	FVector2D MovementVector = Value.Get<FVector2D>();
-
-	// route the input
-	DoMove(MovementVector.X, MovementVector.Y);
-}
-
-void ANevergoneCharacter::Look(const FInputActionValue& Value)
-{
-	// input is a Vector2D
-	FVector2D LookAxisVector = Value.Get<FVector2D>();
-
-	// route the input
-	DoLook(LookAxisVector.X, LookAxisVector.Y);
-}
-
-void ANevergoneCharacter::ApplyCharacterInputMapping()
-{
-	if (APlayerController* PC = Cast<APlayerController>(GetController()))
-	{
-		if (ULocalPlayer* LP = PC->GetLocalPlayer())
-		{
-			if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
-				LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
-			{
-				if (DefaultMappingContext)
-				{
-					Subsystem->AddMappingContext(DefaultMappingContext, 0);
-				}
-			}
-		}
-	}
-}
-
 void ANevergoneCharacter::DoMove(float Right, float Forward)
 {
 	if (GetController() != nullptr)
@@ -131,16 +63,6 @@ void ANevergoneCharacter::DoMove(float Right, float Forward)
 		// add movement 
 		AddMovementInput(ForwardDirection, Forward);
 		AddMovementInput(RightDirection, Right);
-	}
-}
-
-void ANevergoneCharacter::DoLook(float Yaw, float Pitch)
-{
-	if (GetController() != nullptr)
-	{
-		// add yaw and pitch input to controller
-		AddControllerYawInput(Yaw);
-		AddControllerPitchInput(Pitch);
 	}
 }
 

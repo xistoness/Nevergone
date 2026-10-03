@@ -295,7 +295,7 @@ void UInventoryWidget::OnInventorySlotClicked(int32 SlotIndex, UWidget* OriginWi
 
     const FInventoryEntry& Entry = Entries[SlotIndex];
     const UItemDefinition* Def   = Entry.Definition.Get();
-    const bool bCanEquip = Def && Def->Category == EItemCategory::Equipment;
+    const bool bCanEquip = Def && Def->Category == EItemCategory::Equipment || Def && Def->Category == EItemCategory::Consumable;
     const bool bCanUse   = Def && Def->Category == EItemCategory::Consumable;
     const bool bCanDrop  = Def && !Def->bIsKeyItem;
 

@@ -9,14 +9,13 @@
 #include "Door.generated.h"
 
 class USceneComponent;
-class USkeletalMeshComponent;
+class UStaticMeshComponent;
 class USphereComponent;
 class UBoxComponent;
-class USoundBase;
 class UInteractableComponent;
 class USaveableComponent;
 class UItemDefinition;
-class UAudioSubsystem;
+class UNoiseDefinition;
 
 // ---------------------------------------------------------------------------
 // EDoorState
@@ -136,20 +135,23 @@ protected:
     FText LockedPromptText;
 
     // -----------------------------------------------------------------------
-    // SFX overrides — null entries fall back to UAudioSubsystem defaults
+    // Noises — sound for the player and noise for enemies, one asset each.
+    // Authored on the Blueprint subclass, so a squeaky door and a quiet one
+    // are different subclasses (or per-instance overrides). A null entry is
+    // silent to both.
     // -----------------------------------------------------------------------
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|SFX")
-    TObjectPtr<USoundBase> LockedAttemptSFX;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Noise")
+    TObjectPtr<UNoiseDefinition> LockedAttemptNoise;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|SFX")
-    TObjectPtr<USoundBase> UnlockSFX;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Noise")
+    TObjectPtr<UNoiseDefinition> UnlockNoise;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|SFX")
-    TObjectPtr<USoundBase> OpenSFX;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Noise")
+    TObjectPtr<UNoiseDefinition> OpenNoise;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|SFX")
-    TObjectPtr<USoundBase> CloseSFX;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Noise")
+    TObjectPtr<UNoiseDefinition> CloseNoise;
 
     // -----------------------------------------------------------------------
     // Components
@@ -161,7 +163,7 @@ protected:
     // Visual-only door leaf. NEVER configured for collision — see class comment.
     // BP subclass assigns the SkeletalMesh asset.
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-    TObjectPtr<USkeletalMeshComponent> DoorMesh;
+    TObjectPtr<UStaticMeshComponent> DoorMesh;
 
     // Solid collider that does the actual pawn blocking. Sized in the BP
     // subclass to match the visual door leaf (designer tunes BoxExtent and
@@ -238,9 +240,14 @@ private:
     // check and re-arm the timer if blocked.
     void ApplyCollisionForState(EDoorState State);
 
-    void PlayDoorSFX(USoundBase* Override, USoundBase* Fallback, const TCHAR* DebugLabel) const;
+    // Emits one of the door noises at the door leaf, attributed to the last
+    // actor who interacted with the door.
+    void EmitDoorNoise(const UNoiseDefinition* Noise, const TCHAR* DebugLabel) const;
 
-    UAudioSubsystem* GetAudioSubsystem() const;
+    // Survivor who last used the door. The auto-close has no interactor of
+    // its own, but the slam is still their fault as far as enemies are
+    // concerned.
+    TWeakObjectPtr<AActor> LastInteractor;
 
     // -----------------------------------------------------------------------
     // Timer

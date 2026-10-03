@@ -37,7 +37,7 @@ FActionResult UGA_AoE::BuildExecution(const FActionContext& Context) const
 bool UGA_AoE::BuildAoEResult(const FActionContext& Context, FActionResult& OutResult) const
 {
     OutResult = FActionResult();
-    
+
     if (!HasSufficientAP(Context))
     {
         return false;
@@ -239,7 +239,14 @@ void UGA_AoE::ActivateAbility(
     }
 
     ApplyResolvedEffect();
-    FinalizeAction();
+
+    // ApplyResolvedEffect may end the combat (last enemy killed), which triggers
+    // CombatManager::Cleanup → reentrant EndAbility on this instance and nullifies
+    // CachedCharacter. Skip Finalize in that case — the ability has already ended.
+    if (CachedCharacter)
+    {
+        FinalizeAction();
+    }
 }
 
 void UGA_AoE::ApplyResolvedEffect()
@@ -268,8 +275,23 @@ void UGA_AoE::ApplyResolvedEffect()
     // Play the cast SFX once — not per target — to avoid audio spam on AoE hits
     PlayCastSFX(CachedCharacter);
 
-    for (ACharacterBase* Target : CachedAffectedActors)
+    // Snapshot the target list locally. NotifyDamageApplied below may kill the
+    // last enemy and end the battle synchronously inside the broadcast chain:
+    //   OnDamageApplied → OnUnitDied → CombatManager::HandleUnitDeath →
+    //   EndCombatWithWinner → Cleanup → EndAbility on this instance →
+    //   CachedAffectedActors.Reset().
+    // Iterating CachedAffectedActors directly would trip the engine's
+    // "Array has changed during ranged-for iteration" ensure.
+    TArray<TObjectPtr<ACharacterBase>> TargetsSnapshot = CachedAffectedActors;
+
+    for (const TObjectPtr<ACharacterBase>& TargetPtr : TargetsSnapshot)
     {
+        // EndAbility nullifies CachedCharacter; use it as a cleanup sentinel.
+        // If combat ended on a previous target, Bus/BattleStateRef may now
+        // point at MarkPendingKill subobjects of the destroyed CombatManager.
+        if (!CachedCharacter) { return; }
+
+        ACharacterBase* Target = TargetPtr.Get();
         if (!IsValid(Target)) { continue; }
 
         // Re-check alive state each iteration: a previous NotifyDamageApplied broadcast

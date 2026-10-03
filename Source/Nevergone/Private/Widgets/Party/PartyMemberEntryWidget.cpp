@@ -6,12 +6,18 @@
 #include "Characters/PlayerUnitBase.h"
 #include "Data/UnitDefinition.h"
 
+// Localization namespace for all gathered strings in this translation unit.
+#define LOCTEXT_NAMESPACE "PartyMemberEntry"
+
 void UPartyMemberEntryWidget::SetMemberData(const FPartyMemberData& InData)
 {
     CharacterID = InData.CharacterID;
 
-    FText DisplayName        = FText::FromString(TEXT("Unknown"));
-    FText ClassName          = FText::FromString(TEXT("—"));
+    // Localizable fallbacks shown when the unit class CDO is missing or has no UnitDefinition.
+    // The em-dash ("—") for unset class is intentionally a separate key so a translator can
+    // swap it for a culture-appropriate placeholder if needed.
+    FText DisplayName = LOCTEXT("UnknownUnitFallback",  "Unknown");
+    FText ClassName   = LOCTEXT("UnknownClassFallback", "—");
     TObjectPtr<UTexture2D> DisplayPortrait;
 
     if (InData.CharacterClass)
@@ -21,7 +27,7 @@ void UPartyMemberEntryWidget::SetMemberData(const FPartyMemberData& InData)
             if (const UUnitDefinition* Def = CDO->GetUnitStats()->GetDefinition())
             {
                 DisplayName     = Def->DisplayName;
-                ClassName       = Def->ClassName;
+                ClassName       = Def->GetClassName(); // localized via UEnum metadata
                 DisplayPortrait = Def->DisplayPortrait;
             }
         }
@@ -48,3 +54,5 @@ void UPartyMemberEntryWidget::SetLeader(bool bInIsLeader)
     bIsLeader = bInIsLeader;
     BP_SetLeader(bInIsLeader);
 }
+
+#undef LOCTEXT_NAMESPACE

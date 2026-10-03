@@ -34,6 +34,7 @@ enum class EDialogueEffectType : uint8
     ChangeAffinity      UMETA(DisplayName = "Change Affinity"),      // Adds Value to NPC affinity
     RequestItem         UMETA(DisplayName = "Request Item"),         // Opens inventory to deliver item Param
     GiveItem            UMETA(DisplayName = "Give Item"),            // Gives item Param (future)
+    FollowPlayer        UMETA(DisplayName = "Follow Player"),        // Recruits the excursion survivor; it starts following the player
 };
 
 // ---------------------------------------------------------------------------

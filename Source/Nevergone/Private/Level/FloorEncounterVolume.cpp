@@ -1,6 +1,8 @@
 // Copyright Xyzto Works
 
 #include "Level/FloorEncounterVolume.h"
+
+#include "ActorComponents/CombatPresenceComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Data/ActorSaveData.h"
@@ -33,6 +35,14 @@ AFloorEncounterVolume::AFloorEncounterVolume()
 		&AFloorEncounterVolume::OnTriggerBeginOverlap
 	);
 
+	// EndOverlap subscription — required to clear the re-trigger guard so
+	// that the encounter can fire again once the player leaves and re-enters
+	// the trigger box. See bWaitingForExitBeforeRetrigger doc comment.
+	TriggerBox->OnComponentEndOverlap.AddDynamic(
+		this,
+		&AFloorEncounterVolume::OnTriggerEndOverlap
+	);
+
 	// --- Battle box (grid area) ---
 	BattleBox = CreateDefaultSubobject<UBoxComponent>(TEXT("BattleBox"));
 	BattleBox->SetupAttachment(RootComponent);
@@ -56,6 +66,15 @@ AFloorEncounterVolume::AFloorEncounterVolume()
 	// duplicate instances from being spawned by the save system if the world-actor
 	// matching ever fails.
 	SaveableComponent->bPersistAcrossLoads = false;
+
+	// --- Combat presence ---
+	// Encounter volumes (active and inactive) are hidden during the combat span.
+	// The active one's IndicatorMesh is already hidden by OnTriggerBeginOverlap;
+	// HideAndPause additionally cuts the actor's tick (the bob/rotation work is
+	// pointless on a hidden mesh) and disables the trigger so the battle camera
+	// pawn cannot accidentally re-fire it.
+	auto* CombatPresence = CreateDefaultSubobject<UCombatPresenceComponent>(TEXT("CombatPresenceComponent"));
+	CombatPresence->DefaultPolicy = ECombatPresencePolicy::HideAndPause;
 }
 
 void AFloorEncounterVolume::BeginPlay()
@@ -165,6 +184,16 @@ void AFloorEncounterVolume::RestoreEncounterVisual()
 		bIsInBattle = false;
 		IndicatorMesh->SetVisibility(true);
 	}
+
+	// Re-trigger guard: when prep is canceled, the player pawn is destroyed
+	// and respawned at the same position, which re-overlaps this trigger box.
+	// Without this flag we would re-enter BattlePreparation immediately on
+	// respawn, leaving the player unable to abort.
+	bWaitingForExitBeforeRetrigger = true;
+
+	UE_LOG(LogTemp, Log,
+		TEXT("[FloorEncounterVolume] '%s' RestoreEncounterVisual: bWaitingForExitBeforeRetrigger=true (player must leave & re-enter)."),
+		*GetName());
 }
 
 // --- Encounter lifecycle ---
@@ -180,12 +209,40 @@ void AFloorEncounterVolume::DeactivateEncounter()
 	SetActorTickEnabled(false);
 
 	bAutoStartOnEnter = false;
+
+	// Authority hand-off: this method is called inside the combat span (on
+	// victory) and writes the actor's authoritative end-state. Tell the
+	// presence component to drop its snapshot so ExitCombatPresenceMode does
+	// NOT restore the pre-combat (visible, ticking) state on top of this.
+	if (auto* CombatPresence = FindComponentByClass<UCombatPresenceComponent>())
+	{
+		CombatPresence->InvalidateSnapshot();
+	}
 }
 
 void AFloorEncounterVolume::OnTriggerBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
                                                   UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
+	// Re-trigger guard. The player pawn has been respawned inside this
+	// trigger box (e.g. right after aborting a battle preparation). Wait
+	// until the player physically leaves before allowing a new trigger.
+	if (bWaitingForExitBeforeRetrigger)
+	{
+		UE_LOG(LogTemp, Log,
+			TEXT("[FloorEncounterVolume] '%s' BeginOverlap suppressed — waiting for exit-before-retrigger."),
+			*GetName());
+		return;
+	}
+
 	if (!bAutoStartOnEnter || !EncounterData || bEncounterResolved)
+	{
+		return;
+	}
+
+	// Already in battle: BeginOverlap firing here would cause recursive prep.
+	// This can happen if, during the combat span, some pawn (e.g. battle
+	// camera) overlaps the trigger.
+	if (bIsInBattle)
 	{
 		return;
 	}
@@ -230,5 +287,30 @@ void AFloorEncounterVolume::OnTriggerBeginOverlap(UPrimitiveComponent* Overlappe
 		IndicatorMesh->SetVisibility(false);
 	}
 
+	UE_LOG(LogTemp, Log,
+		TEXT("[FloorEncounterVolume] '%s' BeginOverlap fired by '%s' — requesting battle preparation."),
+		*GetName(), *GetNameSafe(OtherActor));
+
 	ContextManager->RequestBattlePreparation(this);
+}
+
+void AFloorEncounterVolume::OnTriggerEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+                                                UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+{
+	// Only react to the player pawn leaving — other pawns (NPCs, battle
+	// camera) are irrelevant to the re-trigger guard.
+	const APawn* Pawn = Cast<APawn>(OtherActor);
+	if (!Pawn || !Pawn->IsPlayerControlled())
+	{
+		return;
+	}
+
+	if (bWaitingForExitBeforeRetrigger)
+	{
+		bWaitingForExitBeforeRetrigger = false;
+
+		UE_LOG(LogTemp, Log,
+			TEXT("[FloorEncounterVolume] '%s' EndOverlap by player — re-trigger guard cleared."),
+			*GetName());
+	}
 }

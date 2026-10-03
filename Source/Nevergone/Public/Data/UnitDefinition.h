@@ -32,18 +32,26 @@ public:
     EUnitClass UnitClass = EUnitClass::None;
 
     // Returns a display-friendly class name derived from EUnitClass.
-    // Handles compound names (e.g. TorturedSavage → "Tortured Savage").
-    // No need to manually maintain a separate FText field.
+    // Pulls the value from the enum's UMETA(DisplayName) metadata, which the
+    // Localization Dashboard auto-gathers as part of UEnum entries — adding a
+    // new language requires zero code change here, only a translation pass.
+    //
+    // Note: GetDisplayValueAsText is editor+runtime safe. The localized
+    // DisplayName table is cooked into shipping builds, so this works
+    // identically in PIE, Standalone, and packaged games.
     FText GetClassName() const
     {
-        switch (UnitClass)
+        const UEnum* EnumPtr = StaticEnum<EUnitClass>();
+
+        if (!EnumPtr)
         {
-        case EUnitClass::Planewalker:    return FText::FromString(TEXT("Planewalker"));
-        case EUnitClass::Defiled:        return FText::FromString(TEXT("Defiled"));
-        case EUnitClass::TorturedSavage: return FText::FromString(TEXT("Tortured Savage"));
-        case EUnitClass::Towerborn:      return FText::FromString(TEXT("Towerborn"));
-        default:                         return FText::FromString(TEXT("Unknown"));
+            UE_LOG(LogTemp, Error,
+                TEXT("[UnitDefinition] GetClassName: StaticEnum<EUnitClass>() returned null"));
+
+            return FText::GetEmpty();
         }
+
+        return EnumPtr->GetDisplayValueAsText(UnitClass);
     }
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)

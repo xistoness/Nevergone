@@ -98,6 +98,7 @@ void UContainerTransferWidget::Close()
     if (AContainerActor* Container = ActiveContainer.Get())
     {
         Container->OnContentsChanged.RemoveAll(this);
+        Container->OnContainerClose();
     }
 
     ActiveContainer = nullptr;
@@ -108,6 +109,7 @@ void UContainerTransferWidget::Close()
     BP_HideQuantityPrompt();
     BP_OnClosed();
     SetVisibility(ESlateVisibility::Collapsed);
+    
 
     UE_LOG(LogTemp, Log, TEXT("[ContainerTransferWidget] Closed."));
 }

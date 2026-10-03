@@ -8,6 +8,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Widgets/Menu/MenuPanelBase.h"
+#include "Widgets/Settings/SettingsPanelBase.h"
 #include "World/QuestSubsystem.h"
 
 class UAudioSubsystem;
@@ -21,7 +22,7 @@ void UMainMenuWidget::NativeOnInitialized()
 	BindPanel("NewGame",  Panel_NewGame,  [this]() { HandleNewGameConfirmed();  });
 	BindPanel("Continue", Panel_Continue, [this]() { HandleContinueConfirmed(); });
 	BindPanel("Load",     Panel_Load,     [this]() { HandleLoadConfirmed();     });
-	BindPanel("Settings", Panel_Settings, [this]() { HandleSettingsConfirmed(); });
+	BindPanel("Settings", Panel_Settings,	[this]() { HandleSettingsConfirmed(); });
 	BindPanel("Quit",     Panel_Quit,     [this]() { HandleQuitConfirmed();     });
 
 	// Open the default panel on startup
@@ -42,7 +43,7 @@ void UMainMenuWidget::NavigateTo(FName PanelId)
 	{
 		if (UMenuPanelBase** Current = NavigationMap.Find(ActivePanelId))
 		{
-			(*Current)->OnPanelDeactivated();
+			(*Current)->Deactivate();
 		}
 	}
 
@@ -51,7 +52,7 @@ void UMainMenuWidget::NavigateTo(FName PanelId)
 	ActivePanelId = PanelId;
 
 	// Notify the new panel
-	(*Found)->OnPanelActivated();
+	(*Found)->Activate();
 	if (UGameInstance* GI = GetGameInstance())
 	{
 		if (UAudioSubsystem* Audio = GI->GetSubsystem<UAudioSubsystem>())

@@ -19,6 +19,10 @@ class UInventoryWidget;
 class UContainerTransferWidget;
 class UExplorationPromptWidget;
 class AContainerActor;
+class IExplorationInputReceiver;
+class UExplorationModeComponent;
+class UExcursionResultWidget;
+struct FExcursionResult;
 
 /**
  * Defines the current input state of the exploration mode.
@@ -33,6 +37,13 @@ enum class EExplorationInputMode : uint8
     PauseMenu,
     Inventory,
     Container,
+
+    // An enemy caught the survivor. Input is blocked but the world is not
+    // paused: the capture plays, frozen around the survivor.
+    Capture,
+
+    // The excursion ended and its result is on screen.
+    Result,
 };
 
 /**
@@ -74,15 +85,55 @@ public:
 
     void ExitDialogueInputMode();
 
+    /** Blocks the survivor's input for a capture. Called by UExcursionEncounterSubsystem. */
+    void EnterCaptureInputMode();
+
+    /** Gives input back after a capture the survivor walked away from. */
+    void ExitCaptureInputMode();
+
     // --- Gameplay Input Actions ---
 
     /** Handles look/mouse movement. */
     void OnLook(const FInputActionValue& Value);
 
+    /** Handles movement. Routed to the pawn's exploration component. */
+    void OnMove(const FInputActionValue& Value);
+
+    void OnJumpStart();
+
+    void OnJumpStop();
+
+    void OnSprintStart();
+
+    void OnSprintStop();
+
+    void OnCrouchStart();
+
+    void OnCrouchStop();
+
+    void OnThrowStart();
+
+    void OnThrowStop();
+
     // --- Input Configuration (Properties) ---
 
     UPROPERTY(EditDefaultsOnly, Category = "Input|Gameplay", meta = (ToolTip = "Action for looking around."))
     UInputAction* LookInput;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Input|Gameplay", meta = (ToolTip = "Action for moving the survivor."))
+    UInputAction* MoveInput;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Input|Gameplay", meta = (ToolTip = "Action for jumping."))
+    UInputAction* JumpInput;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Input|Gameplay", meta = (ToolTip = "Action for sprinting. Held, not toggled."))
+    UInputAction* SprintInput;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Input|Gameplay", meta = (ToolTip = "Action for crouching. Toggle or hold, per the player's setting."))
+    UInputAction* CrouchInput;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Input|Gameplay", meta = (ToolTip = "Action for throwing a distraction. Held to aim, released to throw."))
+    UInputAction* ThrowInput;
 
     UPROPERTY(EditDefaultsOnly, Category = "Input|Gameplay", meta = (ToolTip = "Action for interacting with objects/NPCs."))
     UInputAction* InteractionInput;
@@ -125,6 +176,12 @@ public:
 
 protected:
     // --- Protected State ---
+
+    /** The possessed pawn's exploration component, or null outside gameplay. */
+    IExplorationInputReceiver* GetInputReceiver() const;
+
+    /** The possessed pawn's exploration component, whatever the input mode. */
+    UExplorationModeComponent* GetExplorationMode() const;
 
     UPROPERTY(EditAnywhere, Category = "Input|Look")
     float MouseSensitivity = 0.75f;
@@ -176,6 +233,12 @@ protected:
     UPROPERTY()
     UExplorationPromptWidget* ExplorationPromptWidget = nullptr;
 
+    UPROPERTY(EditDefaultsOnly, Category = "UI")
+    TSubclassOf<UExcursionResultWidget> ExcursionResultWidgetClass;
+
+    UPROPERTY()
+    TObjectPtr<UExcursionResultWidget> ExcursionResultWidget = nullptr;
+
 public:
 
     // Called by AContainerActor::Interact_Implementation to hand off the
@@ -212,6 +275,19 @@ private:
 
     // --- Internal Helpers ---
 
+    // Suspends the pawn's own input outside Gameplay and pauses the world
+    // while a screen is open. Called by every Apply*InputMode.
+    void SyncWorldWithInputMode();
+
+    // Every mode except Gameplay and Capture is a screen, and screens pause.
+    static bool IsScreenMode(EExplorationInputMode Mode);
+
+    void ApplyCaptureInputMode();
+
+    // Screens run on a paused world, where Enhanced Input only fires actions
+    // flagged Trigger When Paused. Logs every screen action missing the flag.
+    void WarnAboutActionsNotTriggeredWhenPaused() const;
+
     // Closes whichever overlay is currently open (QuestLog, PartyManager, Inventory).
     // Called before opening any new overlay and before opening the pause menu.
     // Does NOT close Dialogue or PauseMenu.
@@ -225,6 +301,11 @@ private:
     void CreateExplorationPromptWidget();
 
     void BindDialogueSubsystem();
+
+    // Shows the result screen when UExcursionSubsystem ends the excursion.
+    void BindExcursionSubsystem();
+    void HandleExcursionEnded(const FExcursionResult& Result);
+    void HandleExcursionResultContinue();
     void BindQuestSubsystem();
     void HandleDialogueStarted();
     void HandleDialogueEnded();

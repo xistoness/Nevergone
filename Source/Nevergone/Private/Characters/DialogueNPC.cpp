@@ -2,10 +2,11 @@
 
 #include "Characters/DialogueNPC.h"
 
+#include "ActorComponents/CombatPresenceComponent.h"
 #include "ActorComponents/InteractableComponent.h"
+#include "ActorComponents/SaveableComponent.h"
 #include "Data/DialogueData.h"
 #include "World/DialogueSubsystem.h"
-#include "ActorComponents/SaveableComponent.h"
 #include "World/NPCAffinitySubsystem.h"
 
 ADialogueNPC::ADialogueNPC()
@@ -13,6 +14,14 @@ ADialogueNPC::ADialogueNPC()
     // Static NPC — no per-frame logic needed.
     PrimaryActorTick.bCanEverTick = false;
     InteractableComponent = CreateDefaultSubobject<UInteractableComponent>(TEXT("InteractableComponent"));
+
+    // --- Combat presence ---
+    // Civilian NPCs are hidden and paused for the entire combat span. They
+    // "took cover" narratively. The transition is invisible to the player
+    // because BattlePreparation is a separate UI screen that overlays the
+    // world while the cull happens.
+    auto* CombatPresence = CreateDefaultSubobject<UCombatPresenceComponent>(TEXT("CombatPresenceComponent"));
+    CombatPresence->DefaultPolicy = ECombatPresencePolicy::HideAndPause;
 }
 
 void ADialogueNPC::BeginPlay()

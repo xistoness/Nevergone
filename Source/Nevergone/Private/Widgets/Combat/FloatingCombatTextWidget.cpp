@@ -9,7 +9,7 @@
 
 void UFloatingCombatTextWidget::InitFloatingText(
     FVector           InWorldAnchor,
-    const FString&    InText,
+    const FText&      InText,
     EFloatingTextType InType,
     float             InScreenYOffset,
     UTexture2D*       InIcon)
@@ -22,12 +22,14 @@ void UFloatingCombatTextWidget::InitFloatingText(
 
     UE_LOG(LogTemp, Verbose,
         TEXT("[FloatingCombatTextWidget] InitFloatingText: text='%s' type=%d screenYOffset=%.1f"),
-        *DisplayText, (int32)TextType, ScreenYOffset);
+        *DisplayText.ToString(), (int32)TextType, ScreenYOffset);
 
-    // Populate the TextBlock immediately to avoid an empty frame
+    // Populate the TextBlock immediately to avoid an empty frame.
+    // Pass DisplayText through directly — UTextBlock keeps the FText source live,
+    // so the displayed string re-localizes automatically when culture changes.
     if (FloatingText)
     {
-        FloatingText->SetText(FText::FromString(DisplayText));
+        FloatingText->SetText(DisplayText);
     }
 
     // Populate the icon if the slot exists in the UMG
@@ -87,7 +89,7 @@ void UFloatingCombatTextWidget::NativeTick(const FGeometry& MyGeometry, float In
 void UFloatingCombatTextWidget::RequestDestroy()
 {
     UE_LOG(LogTemp, Verbose,
-        TEXT("[FloatingCombatTextWidget] RequestDestroy: text='%s'"), *DisplayText);
+        TEXT("[FloatingCombatTextWidget] RequestDestroy: text='%s'"), *DisplayText.ToString());
 
     OnDestroyed.ExecuteIfBound();
     RemoveFromParent();

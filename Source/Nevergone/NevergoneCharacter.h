@@ -9,15 +9,15 @@
 
 class USpringArmComponent;
 class UCameraComponent;
-class UInputAction;
-class UInputMappingContext;
-struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
 
 /**
- *  A simple player-controllable third person character
- *  Implements a controllable orbiting camera
+ *  Third person character with an orbiting camera.
+ *
+ *  It owns no input. AExplorationPlayerController binds the actions and
+ *  routes them through IExplorationInputReceiver to
+ *  UExplorationModeComponent, which calls the Do* methods below.
  */
 UCLASS()
 class ANevergoneCharacter : public ACharacter
@@ -34,58 +34,16 @@ class ANevergoneCharacter : public ACharacter
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	UCameraComponent* FollowCamera;
 	
-protected:
-
-	/** Jump Input Action */
-	UPROPERTY(EditAnywhere, Category="Input")
-	UInputAction* JumpAction;
-
-	/** Move Input Action */
-	UPROPERTY(EditAnywhere, Category="Input")
-	UInputAction* MoveAction;
-
-	/** Look Input Action */
-	UPROPERTY(EditAnywhere, Category="Input")
-	UInputAction* LookAction;
-
-	/** Mouse Look Input Action */
-	UPROPERTY(EditAnywhere, Category="Input")
-	UInputAction* MouseLookAction;
-
 public:
 
 	/** Constructor */
 	ANevergoneCharacter();	
 
-protected:
-
-	/** Initialize input action bindings */
-	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
-
-protected:
-
-	virtual void BeginPlay() override;
-	
-	/** Called for movement input */
-	void Move(const FInputActionValue& Value);
-
-	/** Called for looking input */
-	void Look(const FInputActionValue& Value);
-	
-	UPROPERTY(EditDefaultsOnly, Category = "Input")
-	UInputMappingContext* DefaultMappingContext;
-
 public:
-	
-	void ApplyCharacterInputMapping();
 
 	/** Handles move inputs from either controls or UI interfaces */
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoMove(float Right, float Forward);
-
-	/** Handles look inputs from either controls or UI interfaces */
-	UFUNCTION(BlueprintCallable, Category="Input")
-	virtual void DoLook(float Yaw, float Pitch);
 
 	/** Handles jump pressed inputs from either controls or UI interfaces */
 	UFUNCTION(BlueprintCallable, Category="Input")

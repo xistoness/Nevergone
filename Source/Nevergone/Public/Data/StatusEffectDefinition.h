@@ -161,13 +161,16 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
     TObjectPtr<UTexture2D> Icon;
 
-    // Short string shown in floating text when this status is applied (e.g. "STUN").
+    // Short text shown in floating combat text when this status is applied (e.g. "STUN").
+    // Migrated from FString to FText so the value is gathered by the Localization
+    // Dashboard from the asset and translated alongside other player-facing strings.
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
-    FString DisplayLabel;
+    FText DisplayLabel;
 
     // Text shown in UI that explains the status effects and rules.
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
-    FString Description;
+    // Migrated from FString to FText for the same localization reason as DisplayLabel.
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI", meta = (MultiLine = true))
+    FText Description;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
     EStatusEffectCategory Category = EStatusEffectCategory::Debuff;

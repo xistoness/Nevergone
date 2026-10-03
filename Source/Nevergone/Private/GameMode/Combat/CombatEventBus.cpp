@@ -12,6 +12,11 @@
 #include "GameMode/Combat/StatusEffectManager.h"
 #include "Widgets/Combat/FloatingCombatTextWidget.h"
 
+// LOCTEXT_NAMESPACE pairs every LOCTEXT() call in this file with the same
+// localization namespace. The Localization Dashboard groups gathered text
+// by namespace, so a meaningful name keeps translator UIs tidy.
+#define LOCTEXT_NAMESPACE "CombatEventBus"
+
 void UCombatEventBus::Initialize(UBattleState* InBattleState)
 {
 	BattleState = InBattleState;
@@ -69,9 +74,10 @@ void UCombatEventBus::NotifyDamageApplied(
 	// This works without animations by temporarily overriding the emissive parameter.
 	FlashHitEffect(Target);
 
-	// Trigger floating combat text on the target character
+	// Trigger floating combat text on the target character.
+	// FText::AsNumber respects the active culture's number formatting (decimal/grouping).
 	Target->SpawnFloatingText(
-		FString::FromInt(ClampedAmount),
+		FText::AsNumber(ClampedAmount),
 		EFloatingTextType::Damage
 	);
 
@@ -106,11 +112,14 @@ void UCombatEventBus::NotifyHealApplied(ACharacterBase* Source, ACharacterBase* 
 		}
 	}
 
-	// Always show floating text and broadcast — even if heal was fully clamped
-	Target->SpawnFloatingText(
-		FString::Printf(TEXT("+%d"), ClampedHeal),
-		EFloatingTextType::Heal
-	);
+	// Always show floating text and broadcast — even if heal was fully clamped.
+	// FText::Format keeps the "+{0}" pattern translatable in case a locale wants
+	// a different sign convention or layout (e.g. some Asian locales prefer a space).
+	const FText HealText = FText::Format(
+		LOCTEXT("HealAmountFormat", "+{0}"),
+		FText::AsNumber(ClampedHeal));
+
+	Target->SpawnFloatingText(HealText, EFloatingTextType::Heal);
 
 	OnHealApplied.Broadcast(Source, Target, ClampedHeal);
 }
@@ -118,7 +127,7 @@ void UCombatEventBus::NotifyHealApplied(ACharacterBase* Source, ACharacterBase* 
 void UCombatEventBus::NotifyStatusApplied(
 	ACharacterBase*     Target,
 	const FGameplayTag& StatusTag,
-	const FString&      DisplayLabel,
+	const FText&        DisplayLabel,
 	UTexture2D*         Icon)
 {
 	if (!Target)
@@ -126,7 +135,8 @@ void UCombatEventBus::NotifyStatusApplied(
 		return;
 	}
 
-	// Trigger floating status text on the target character
+	// Trigger floating status text on the target character — DisplayLabel comes
+	// from UStatusEffectDefinition::DisplayLabel (FText) so it is fully localized.
 	Target->SpawnFloatingText(DisplayLabel, EFloatingTextType::StatusApply, Icon);
 
 	// Pass Icon along so HP bar widgets can display persistent status icons
@@ -194,3 +204,5 @@ void UCombatEventBus::FlashHitEffect(ACharacterBase* Target)
 		}
 	}, Duration, false);
 }
+
+#undef LOCTEXT_NAMESPACE

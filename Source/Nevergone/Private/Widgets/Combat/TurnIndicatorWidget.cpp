@@ -5,6 +5,11 @@
 #include "Components/TextBlock.h"
 #include "GameMode/TurnManager.h"
 
+// Localization namespace for all gathered strings in this translation unit.
+// The Localization Dashboard groups text by namespace + key — keep the namespace
+// stable so existing translations are never invalidated.
+#define LOCTEXT_NAMESPACE "TurnIndicator"
+
 void UTurnIndicatorWidget::InitializeWithTurnManager(UTurnManager* InTurnManager)
 {
 	if (!InTurnManager)
@@ -22,7 +27,9 @@ void UTurnIndicatorWidget::InitializeWithTurnManager(UTurnManager* InTurnManager
 	const bool bIsPlayer = (InTurnManager->GetCurrentTurnOwner() == EBattleTurnOwner::Player);
 	if (TurnLabel)
 	{
-		TurnLabel->SetText(FText::FromString(bIsPlayer ? TEXT("PLAYER TURN") : TEXT("ENEMY TURN")));
+		TurnLabel->SetText(bIsPlayer
+			? LOCTEXT("PlayerTurnLabel", "PLAYER TURN")
+			: LOCTEXT("EnemyTurnLabel",  "ENEMY TURN"));
 	}
 	OnTurnOwnerChanged(bIsPlayer);
 
@@ -53,7 +60,9 @@ void UTurnIndicatorWidget::HandleTurnStateChanged(EBattleTurnOwner NewOwner, EBa
 
 	if (TurnLabel)
 	{
-		TurnLabel->SetText(FText::FromString(bIsPlayerTurn ? TEXT("PLAYER TURN") : TEXT("ENEMY TURN")));
+		TurnLabel->SetText(bIsPlayerTurn
+			? LOCTEXT("PlayerTurnLabel", "PLAYER TURN")
+			: LOCTEXT("EnemyTurnLabel",  "ENEMY TURN"));
 	}
 
 	OnTurnOwnerChanged(bIsPlayerTurn);
@@ -61,3 +70,5 @@ void UTurnIndicatorWidget::HandleTurnStateChanged(EBattleTurnOwner NewOwner, EBa
 	UE_LOG(LogTemp, Log, TEXT("[TurnIndicatorWidget] Turn changed — %s"),
 		bIsPlayerTurn ? TEXT("Player") : TEXT("Enemy"));
 }
+
+#undef LOCTEXT_NAMESPACE

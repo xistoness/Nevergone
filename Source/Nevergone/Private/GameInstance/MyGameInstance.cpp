@@ -49,11 +49,16 @@ void UMyGameInstance::Init()
 		Audio->MasterSoundMix  = MasterSoundMix;
 		Audio->UISoundMap      = UISoundMap;
 
-		// Door SFX fallbacks — used by ADoor when its per-actor override is null.
-		Audio->DefaultDoorLockedSFX = DefaultDoorLockedSFX;
-		Audio->DefaultDoorUnlockSFX = DefaultDoorUnlockSFX;
-		Audio->DefaultDoorOpenSFX   = DefaultDoorOpenSFX;
-		Audio->DefaultDoorCloseSFX  = DefaultDoorCloseSFX;
+		// Mirror the per-category USoundClass mapping authored in BP_MyGameInstance.
+		// The AudioSubsystem uses this for SetCategoryVolume calls coming from the
+		// Settings sliders.
+		Audio->CategorySoundClasses = CategorySoundClasses;
+
+		// Now that CategorySoundClasses is populated, push the persisted player
+		// volumes onto the live SoundMix. The subsystem's own Initialize() runs
+		// before this point and made an early no-op call (because the map was
+		// still empty); this second call is the one that actually takes effect.
+		Audio->ApplyAllVolumesFromSettings();
 
 		UE_LOG(LogTemp, Log, TEXT("[MyGameInstance] Audio configuration passed to AudioSubsystem."));
 	}

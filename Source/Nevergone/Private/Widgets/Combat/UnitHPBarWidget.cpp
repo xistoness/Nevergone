@@ -9,6 +9,9 @@
 #include "GameMode/Combat/CombatEventBus.h"
 #include "Data/StatusEffectDefinition.h"
 
+// Localization namespace for all gathered strings in this translation unit.
+#define LOCTEXT_NAMESPACE "UnitHPBar"
+
 void UUnitHPBarWidget::InitializeForUnit(ACharacterBase* InUnit, UCombatEventBus* InEventBus,
                                           int32 MaxHP, int32 CurrentHP)
 {
@@ -166,7 +169,14 @@ void UUnitHPBarWidget::RefreshDisplay(int32 NewHP)
 
 	if (HPText)
 	{
-		HPText->SetText(FText::FromString(
-			FString::Printf(TEXT("%d / %d"), NewHP, CachedMaxHP)));
+		// FText::AsNumber respects the active culture's number formatting
+		// (decimal/grouping separators). The "{Current} / {Max}" pattern is
+		// localizable too, in case a target language prefers a different separator.
+		HPText->SetText(FText::Format(
+			LOCTEXT("HpFormat", "{Current} / {Max}"),
+			FText::AsNumber(NewHP),
+			FText::AsNumber(CachedMaxHP)));
 	}
 }
+
+#undef LOCTEXT_NAMESPACE

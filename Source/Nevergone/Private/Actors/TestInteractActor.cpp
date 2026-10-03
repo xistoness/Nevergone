@@ -1,10 +1,12 @@
-﻿// Copyright Xyzto Works
+// Copyright Xyzto Works
 
 
 #include "Actors/TestInteractActor.h"
-#include "Data/ActorSaveData.h"
+
+#include "ActorComponents/CombatPresenceComponent.h"
 #include "ActorComponents/InteractableComponent.h"
 #include "ActorComponents/SaveableComponent.h"
+#include "Data/ActorSaveData.h"
 #include "GameInstance/SaveKeys.h"
 
 
@@ -16,6 +18,10 @@ ATestInteractActor::ATestInteractActor()
 	SaveableComponent = CreateDefaultSubobject<USaveableComponent>(TEXT("SaveableComponent"));
 	InteractableComponent = CreateDefaultSubobject<UInteractableComponent>(TEXT("InteractableComponent"));
 
+	// --- Combat presence ---
+	// Debug actor — always hidden during combat.
+	auto* CombatPresence = CreateDefaultSubobject<UCombatPresenceComponent>(TEXT("CombatPresenceComponent"));
+	CombatPresence->DefaultPolicy = ECombatPresencePolicy::HideAndPause;
 }
 
 void ATestInteractActor::Interact_Implementation(AActor* Interactor)

@@ -48,6 +48,9 @@ public:
      * Initializes the widget with all required data.
      * Must be called immediately after CreateWidget, before AddToViewport.
      *
+     * Text is FText (not FString) so the value retains its localization key
+     * end-to-end — the bound UTextBlock auto-refreshes on culture change.
+     *
      * @param InWorldAnchor      3D position (world space) that the widget will follow
      * @param InText             Text to display (e.g., "42", "STUN", "MISS")
      * @param InType             Semantic type — controls color and icon in the Blueprint
@@ -58,7 +61,7 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Floating Text")
     void InitFloatingText(
         FVector             InWorldAnchor,
-        const FString&      InText,
+        const FText&        InText,
         EFloatingTextType   InType,
         float               InScreenYOffset = 0.f,
         UTexture2D*         InIcon = nullptr
@@ -77,7 +80,7 @@ public:
     UTexture2D* GetIcon() const { return Icon; }
 
     UFUNCTION(BlueprintPure, Category = "Floating Text")
-    FString GetDisplayText() const { return DisplayText; }
+    FText GetDisplayText() const { return DisplayText; }
 
     /**
      * Fired when RequestDestroy() is called so the owning character
@@ -117,7 +120,7 @@ private:
      */
     float ScreenYOffset = 0.f;
 
-    FString           DisplayText;
+    FText             DisplayText;
     EFloatingTextType TextType     = EFloatingTextType::Damage;
     TObjectPtr<UTexture2D> Icon    = nullptr;
 

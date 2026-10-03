@@ -8,6 +8,7 @@
 
 class UWidgetSwitcher;
 class UMenuPanelBase;
+class USettingsPanelBase;
 class UMyGameInstance;
 
 /**
@@ -54,8 +55,11 @@ protected:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	UMenuPanelBase* Panel_Load;
 
+	// Settings panel — typed to USettingsPanelBase so the menu widget can
+	// reach the tab API directly if it ever needs to drive tabs from outside
+	// (e.g. opening Settings already focused on the Audio tab).
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
-	UMenuPanelBase* Panel_Settings;
+	USettingsPanelBase* Panel_Settings;
 
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	UMenuPanelBase* Panel_Quit;

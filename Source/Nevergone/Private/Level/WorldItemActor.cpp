@@ -2,10 +2,12 @@
 
 #include "Level/WorldItemActor.h"
 
+#include "ActorComponents/CombatPresenceComponent.h"
 #include "ActorComponents/InteractableComponent.h"
 #include "ActorComponents/SaveableComponent.h"
 #include "Data/ActorSaveData.h"
 #include "Data/ItemDefinition.h"
+#include "EngineTools/CollisionChannels.h"
 #include "World/InventorySubsystem.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -39,8 +41,8 @@ AWorldItemActor::AWorldItemActor()
     InteractionSphere->SetCollisionResponseToAllChannels(ECR_Overlap);
     InteractionSphere->SetCollisionResponseToChannel(ECC_Visibility,        ECR_Ignore);
     InteractionSphere->SetCollisionResponseToChannel(ECC_Camera,            ECR_Ignore);
-    InteractionSphere->SetCollisionResponseToChannel(ECC_GameTraceChannel1, ECR_Ignore);  // GridTrace
-    InteractionSphere->SetCollisionResponseToChannel(ECC_GameTraceChannel2, ECR_Block);   // Interactable
+    InteractionSphere->SetCollisionResponseToChannel(NevergoneCollision::GridTrace,    ECR_Ignore);
+    InteractionSphere->SetCollisionResponseToChannel(NevergoneCollision::Interactable, ECR_Block);
     RootComponent = InteractionSphere;
 
     PickupMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PickupMesh"));
@@ -64,6 +66,15 @@ AWorldItemActor::AWorldItemActor()
     //   so SpawnMissingActors respawns them until their visit counter expires.
     SaveableComponent = CreateDefaultSubobject<USaveableComponent>(TEXT("SaveableComponent"));
     SaveableComponent->bPersistAcrossLoads = false;
+
+    // --- Combat presence ---
+    // World items remain on the ground in combat as flavor. They do not block
+    // tiles (their interaction sphere ignores the visibility channel that the
+    // grid generator traces with), so leaving them visible has no tactical
+    // impact. Marking as Ignore is more honest than BecomeObstacle here —
+    // they are not obstacles.
+    auto* CombatPresence = CreateDefaultSubobject<UCombatPresenceComponent>(TEXT("CombatPresenceComponent"));
+    CombatPresence->DefaultPolicy = ECombatPresencePolicy::Ignore;
 }
 
 // ---------------------------------------------------------------------------

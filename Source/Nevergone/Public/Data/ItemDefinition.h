@@ -4,11 +4,13 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "GameplayTagContainer.h"
 #include "Types/ItemTypes.h"
 #include "Types/UnitAttributeTypes.h"
 #include "ItemDefinition.generated.h"
 
 class AWorldItemActor;
+class UNoiseDefinition;
 class UStatusEffectDefinition;
 
 // ---------------------------------------------------------------------------
@@ -149,6 +151,20 @@ public:
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Identity")
     EItemCategory Category = EItemCategory::Material;
+
+    // Gameplay roles of the item, independent of its category.
+    // Item.Safeguard: used by itself and broken when an enemy catches the
+    // survivor, who kills the enemy and walks away unharmed.
+    // Item.Distraction: thrown during an excursion; needs ImpactNoise and a
+    // WorldActorClass.
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Identity")
+    FGameplayTagContainer ItemTags;
+
+    // Noise made where this item lands when thrown as a distraction. Tag it
+    // Noise.Distraction. The item flies with the mesh of its WorldActorClass
+    // and becomes that pickup again once it stops.
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Excursion")
+    TObjectPtr<UNoiseDefinition> ImpactNoise = nullptr;
 
     // -----------------------------------------------------------------------
     // Economy

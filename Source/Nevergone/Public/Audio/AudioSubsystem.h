@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Audio/AudioCategory.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "GameInstance/GameContextManager.h"
 #include "AudioSubsystem.generated.h"
@@ -121,14 +122,16 @@ public:
 	 * Use for: attack impacts, ability effects, footsteps.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Audio|SFX")
-	void PlaySFXAtLocation(USoundBase* Sound, FVector Location);
+	void PlaySFXAtLocation(USoundBase* Sound, FVector Location,
+		float VolumeMultiplier = 1.0f, float PitchMultiplier = 1.0f);
 
 	/**
 	 * Plays a one-shot SFX attached to a scene component.
 	 * Use for: character-bound loops, projectiles that follow their owner.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Audio|SFX")
-	void PlaySFXAttached(USoundBase* Sound, USceneComponent* AttachTo);
+	void PlaySFXAttached(USoundBase* Sound, USceneComponent* AttachTo,
+		float VolumeMultiplier = 1.0f, float PitchMultiplier = 1.0f);
 
 	// -----------------------------------------------------------------------
 	// SFX API — 2D (no attenuation)
@@ -147,7 +150,7 @@ public:
 
 
 	// -----------------------------------------------------------------------
-	// Volume control
+	// Volume control — low-level
 	// -----------------------------------------------------------------------
 
 	/**
@@ -158,6 +161,37 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Audio|Volume")
 	void SetSoundClassVolume(USoundClass* SoundClass, float Volume, float FadeTime = 0.0f);
+
+	// -----------------------------------------------------------------------
+	// Volume control — category API
+	//
+	// Player-facing volume sliders go through this layer. It maps the
+	// logical category to its USoundClass (via CategorySoundClasses), applies
+	// the volume to the running mix, and persists the new value into
+	// UNevergoneGameUserSettings so it survives the session.
+	// -----------------------------------------------------------------------
+
+	/**
+	 * Returns the persisted volume for a category, in [0..1].
+	 * Reads from UNevergoneGameUserSettings — single source of truth for the value.
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Audio|Volume")
+	float GetCategoryVolume(ENevergoneAudioCategory Category) const;
+
+	/**
+	 * Sets the volume for a category, persisting the choice and applying it
+	 * to the live SoundMix. Volume is clamped to [0..1].
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Audio|Volume")
+	void SetCategoryVolume(ENevergoneAudioCategory Category, float NewVolume);
+
+	/**
+	 * Re-applies all category volumes (Master/Music/SFX/UI) from
+	 * UNevergoneGameUserSettings to the live SoundMix.
+	 * Called once during Initialize so freshly booted sessions hear the
+	 * player's saved levels rather than asset defaults.
+	 */
+	void ApplyAllVolumesFromSettings();
 
 	// -----------------------------------------------------------------------
 	// Combat integration
@@ -190,26 +224,13 @@ public:
 	UPROPERTY()
 	TMap<EUISoundEvent, TObjectPtr<USoundBase>> UISoundMap;
 
-	// -----------------------------------------------------------------------
-	// Door SFX fallbacks — used by ADoor when the per-actor override is null.
-	// Assigned by UMyGameInstance::Init from its mirror UPROPERTYs.
-	// -----------------------------------------------------------------------
-
-	/** Fallback SFX for interacting with a Locked door without the right key. */
+	/**
+	 * Mapping of logical audio categories to their USoundClass assets.
+	 * Populated by UMyGameInstance::Init from its own mirror UPROPERTY so the
+	 * project Blueprint can author the assignment in Class Defaults.
+	 */
 	UPROPERTY()
-	TObjectPtr<USoundBase> DefaultDoorLockedSFX;
-
-	/** Fallback SFX played the moment a door becomes unlocked. */
-	UPROPERTY()
-	TObjectPtr<USoundBase> DefaultDoorUnlockSFX;
-
-	/** Fallback SFX played when a door transitions into the Open state. */
-	UPROPERTY()
-	TObjectPtr<USoundBase> DefaultDoorOpenSFX;
-
-	/** Fallback SFX played when a door auto-closes back to the Closed state. */
-	UPROPERTY()
-	TObjectPtr<USoundBase> DefaultDoorCloseSFX;
+	TMap<ENevergoneAudioCategory, TObjectPtr<USoundClass>> CategorySoundClasses;
 
 private:
 
@@ -223,6 +244,14 @@ private:
 	 * All other music changes are driven by TowerFloorGameMode directly.
 	 */
 	void HandleGameContextChanged(EGameContextState NewState);
+
+	/**
+	 * Subscribed to FCoreUObjectDelegates::PostLoadMapWithWorld.
+	 * Triggers a re-apply of category volumes once the world's audio device
+	 * is fully initialized — this is the earliest reliable point where
+	 * SoundMix push and class overrides actually take audible effect.
+	 */
+	void HandlePostLoadMap(UWorld* LoadedWorld);
 
 	// -----------------------------------------------------------------------
 	// CombatEventBus handlers
@@ -267,6 +296,18 @@ private:
 	/** GameContextManager delegate handle — stored for clean removal. */
 	FDelegateHandle ContextChangedHandle;
 
+	/** PostLoadMapWithWorld delegate handle — stored for clean removal. */
+	FDelegateHandle PostLoadMapHandle;
+
 	/** Deferred fade-in timer — fires after fade-out completes. */
 	FTimerHandle MusicFadeInHandle;
+
+	/**
+	 * Tracks whether MasterSoundMix has been pushed onto the audio device.
+	 * SoundMix overrides only take effect while the mix is active (pushed) —
+	 * we push lazily on the first ApplyAllVolumesFromSettings (when both World
+	 * and MasterSoundMix are guaranteed valid) and pop on Deinitialize.
+	 */
+	bool bMasterMixPushed = false;
+	
 };

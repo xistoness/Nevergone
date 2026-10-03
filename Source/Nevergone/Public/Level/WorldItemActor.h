@@ -50,6 +50,11 @@ public:
     UFUNCTION(BlueprintPure, Category = "Item")
     UItemDefinition* GetItemDefinition() const;
 
+    // The visual mesh. Read from a class default object, it is how anything
+    // else can show this item exactly as its pickup looks (a thrown
+    // distraction in flight).
+    UStaticMeshComponent* GetPickupMesh() const { return PickupMesh; }
+
     // Initializes this actor as a runtime-dropped item.
     // Sets ItemDefinition, VisitsRemaining from ItemDef->DropVisitLifetime,
     // and bPersistAcrossLoads = true so the save system tracks it.

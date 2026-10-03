@@ -14,6 +14,7 @@ class UStatusEffectDefinition;
 class ACharacterBase;
 class UMyGameInstance;
 class USaveableComponent;
+class AWorldItemActor;
 
 // Result codes returned by inventory mutation operations.
 // Callers use these to drive contextual feedback (e.g. "Inventory full" toast).
@@ -152,6 +153,14 @@ public:
      */
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     EInventoryResult DropItem(UItemDefinition* ItemDef, const FVector& SpawnLocation);
+
+    /**
+     * Spawns ItemDef's pickup actor (its WorldActorClass) as a dropped item,
+     * without touching the inventory. Used by DropItem and by thrown
+     * distractions coming to rest.
+     */
+    AWorldItemActor* SpawnWorldItem(UItemDefinition* ItemDef, const FVector& Location,
+        const FRotator& Rotation = FRotator::ZeroRotator);
 
     // -----------------------------------------------------------------------
     // Weight queries

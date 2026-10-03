@@ -106,13 +106,14 @@ public:
 	 * Syncs BattleState and broadcasts FOnStatusApplied.
 	 * Also triggers a floating status text on the target character.
 	 *
-	 * @param DisplayLabel  Short string shown as floating text (ex: "STUN")
+	 * @param DisplayLabel  Localizable short label shown as floating text (e.g. "STUN").
+	 *                      Sourced from UStatusEffectDefinition::DisplayLabel (FText).
 	 * @param Icon          Optional icon texture for the floating widget
 	 */
 	void NotifyStatusApplied(
 		ACharacterBase*     Target,
 		const FGameplayTag& StatusTag,
-		const FString&      DisplayLabel,
+		const FText&        DisplayLabel,
 		UTexture2D*         Icon = nullptr
 	);
 

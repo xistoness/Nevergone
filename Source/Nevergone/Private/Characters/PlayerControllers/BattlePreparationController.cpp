@@ -197,7 +197,7 @@ void ABattlePreparationController::SendRequestAbortBattle()
 	if (!ContextManager) { return; }
 
 	UE_LOG(LogTemp, Log,
-		TEXT("[BattlePreparationController] Requesting battle start"));
+		TEXT("[BattlePreparationController] Requesting abort battle"));
 
 	ContextManager->RequestAbortBattle();
 }
@@ -345,7 +345,7 @@ void ABattlePreparationController::HandleStartBattleClicked()
 void ABattlePreparationController::HandleAbortBattleClicked()
 {
 	UE_LOG(LogTemp, Log,
-		TEXT("[BattlePreparationController] Start Battle widget button — forwarding to RequestBattleStart"));
+		TEXT("[BattlePreparationController] Abort Battle widget button — forwarding to RequestAbortBattle"));
 
 	SendRequestAbortBattle();
 }

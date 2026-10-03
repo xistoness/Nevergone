@@ -8,6 +8,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Widgets/Menu/MenuPanelBase.h"
+#include "Widgets/Settings/SettingsPanelBase.h"
 
 void UPauseMenuWidget::NativeOnInitialized()
 {
@@ -19,7 +20,7 @@ void UPauseMenuWidget::NativeOnInitialized()
     BindPanel("Resume",   Panel_Resume,   [this]() { HandleResumeConfirmed();   });
     BindPanel("Save",     Panel_Save,     [this]() { HandleSaveConfirmed();     });
     BindPanel("Load",     Panel_Load,     [this]() { HandleLoadConfirmed();     });
-    BindPanel("Settings", Panel_Settings, [this]() { HandleSettingsConfirmed(); });
+    BindPanel("Settings", Panel_Settings,    [this]() { HandleSettingsConfirmed(); });
     BindPanel("Quit",     Panel_Quit,     [this]() { HandleQuitConfirmed();     });
 
     NavigateTo("Resume");
@@ -45,13 +46,13 @@ void UPauseMenuWidget::NavigateTo(FName PanelId)
     {
         if (UMenuPanelBase** Current = NavigationMap.Find(ActivePanelId))
         {
-            (*Current)->OnPanelDeactivated();
+            (*Current)->Deactivate();
         }
     }
 
     PanelSwitcher->SetActiveWidget(*Found);
     ActivePanelId = PanelId;
-    (*Found)->OnPanelActivated();
+    (*Found)->Activate();
 
     // Keep cursor index in sync when NavigateTo is called externally (e.g. Cancel buttons)
     const int32 OrderIndex = PanelOrder.IndexOfByKey(PanelId);

@@ -2,16 +2,17 @@
 
 #include "Actors/Door.h"
 
+#include "ActorComponents/CombatPresenceComponent.h"
 #include "ActorComponents/InteractableComponent.h"
 #include "ActorComponents/SaveableComponent.h"
-#include "Audio/AudioSubsystem.h"
 #include "Characters/PlayerControllers/ExplorationPlayerController.h"
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
-#include "Components/SkeletalMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Components/SphereComponent.h"
 #include "Data/ActorSaveData.h"
 #include "Data/ItemDefinition.h"
+#include "Data/NoiseDefinition.h"
 #include "GameInstance/SaveKeys.h"
 #include "Kismet/GameplayStatics.h"
 #include "Serialization/MemoryReader.h"
@@ -19,6 +20,7 @@
 #include "Serialization/ObjectAndNameAsStringProxyArchive.h"
 #include "TimerManager.h"
 #include "Widgets/ExplorationPromptWidget.h"
+#include "World/ExcursionNoiseSubsystem.h"
 #include "World/InventorySubsystem.h"
 
 const FName ADoor::SaveKey = SaveKeys::Door;
@@ -41,7 +43,7 @@ ADoor::ADoor()
     // without a Physics Asset, and we do not want to require one for every
     // door — DoorCollisionBox handles all blocking. Forcing NoCollision here
     // also prevents accidental misconfiguration in BP subclasses.
-    DoorMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("DoorMesh"));
+    DoorMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("DoorMesh"));
     DoorMesh->SetupAttachment(Root);
     DoorMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
@@ -83,6 +85,13 @@ ADoor::ADoor()
 
     // Sensible default for the locked-prompt fallback.
     LockedPromptText = NSLOCTEXT("Door", "DefaultLockedPrompt", "It's locked.");
+
+    // --- Combat presence ---
+    // Doors remain in place during combat — they are scenery and a real
+    // collision blocker. Interaction is implicitly disabled while the
+    // ExplorationModeComponent is dormant.
+    auto* CombatPresence = CreateDefaultSubobject<UCombatPresenceComponent>(TEXT("CombatPresenceComponent"));
+    CombatPresence->DefaultPolicy = ECombatPresencePolicy::BecomeObstacle;
 }
 
 // ===========================================================================
@@ -125,6 +134,8 @@ void ADoor::Interact_Implementation(AActor* Interactor)
         *GetName(),
         *UEnum::GetValueAsString(CurrentState),
         *GetNameSafe(Interactor));
+
+    LastInteractor = Interactor;
 
     switch (CurrentState)
     {
@@ -201,10 +212,7 @@ void ADoor::HandleUnlockAndOpen(AActor* Interactor)
         *GetNameSafe(Interactor),
         *KeyDef->DisplayName.ToString());
 
-    UAudioSubsystem* AudioSS = GetAudioSubsystem();
-    PlayDoorSFX(UnlockSFX,
-                AudioSS ? AudioSS->DefaultDoorUnlockSFX.Get() : nullptr,
-                TEXT("Unlock"));
+    EmitDoorNoise(UnlockNoise, TEXT("Unlock"));
     BP_OnUnlocked();
 
     TransitionToOpen();
@@ -214,10 +222,7 @@ void ADoor::HandleLockedAttempt()
 {
     UE_LOG(LogTemp, Log, TEXT("[Door] '%s' LOCKED ATTEMPT — player has no valid key."), *GetName());
 
-    UAudioSubsystem* AudioSS = GetAudioSubsystem();
-    PlayDoorSFX(LockedAttemptSFX,
-                AudioSS ? AudioSS->DefaultDoorLockedSFX.Get() : nullptr,
-                TEXT("LockedAttempt"));
+    EmitDoorNoise(LockedAttemptNoise, TEXT("LockedAttempt"));
 
     APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
     AExplorationPlayerController* ExpPC = Cast<AExplorationPlayerController>(PC);
@@ -245,10 +250,7 @@ void ADoor::TransitionToOpen()
     CurrentState = EDoorState::Open;
     ApplyCollisionForState(CurrentState);
 
-    UAudioSubsystem* AudioSS = GetAudioSubsystem();
-    PlayDoorSFX(OpenSFX,
-                AudioSS ? AudioSS->DefaultDoorOpenSFX.Get() : nullptr,
-                TEXT("Open"));
+    EmitDoorNoise(OpenNoise, TEXT("Open"));
     BP_OnDoorOpening();
 
     if (UWorld* World = GetWorld())
@@ -273,10 +275,7 @@ void ADoor::TransitionToClosed()
     CurrentState = EDoorState::Closed;
     ApplyCollisionForState(CurrentState);
 
-    UAudioSubsystem* AudioSS = GetAudioSubsystem();
-    PlayDoorSFX(CloseSFX,
-                AudioSS ? AudioSS->DefaultDoorCloseSFX.Get() : nullptr,
-                TEXT("Close"));
+    EmitDoorNoise(CloseNoise, TEXT("Close"));
     BP_OnDoorClosing();
 }
 
@@ -307,36 +306,35 @@ void ADoor::ApplyCollisionForState(EDoorState State)
 }
 
 // ===========================================================================
-// Audio helpers
+// Noise
 // ===========================================================================
 
-void ADoor::PlayDoorSFX(USoundBase* Override, USoundBase* Fallback, const TCHAR* DebugLabel) const
+void ADoor::EmitDoorNoise(const UNoiseDefinition* Noise, const TCHAR* DebugLabel) const
 {
-    USoundBase* Sound = Override ? Override : Fallback;
-    if (!Sound)
+    if (!Noise)
     {
         UE_LOG(LogTemp, Verbose,
-            TEXT("[Door] '%s' PlayDoorSFX(%s): no override and no fallback — skipped."),
+            TEXT("[Door] '%s' EmitDoorNoise(%s): no noise assigned — silent."),
             *GetName(), DebugLabel);
         return;
     }
 
-    UAudioSubsystem* AudioSS = GetAudioSubsystem();
-    if (!AudioSS)
+    UExcursionNoiseSubsystem* NoiseSS = UExcursionNoiseSubsystem::Get(this);
+    if (!NoiseSS)
     {
         UE_LOG(LogTemp, Warning,
-            TEXT("[Door] '%s' PlayDoorSFX(%s): UAudioSubsystem unavailable."),
+            TEXT("[Door] '%s' EmitDoorNoise(%s): UExcursionNoiseSubsystem unavailable."),
             *GetName(), DebugLabel);
         return;
     }
 
-    AudioSS->PlaySFXAtLocation(Sound, GetActorLocation());
-}
+    // Centre of the leaf rather than the floor pivot. The occlusion trace
+    // ignores the door itself here, because it touches the noise source.
+    const FVector NoiseLocation = DoorCollisionBox
+        ? DoorCollisionBox->GetComponentLocation()
+        : GetActorLocation();
 
-UAudioSubsystem* ADoor::GetAudioSubsystem() const
-{
-    UGameInstance* GI = GetGameInstance();
-    return GI ? GI->GetSubsystem<UAudioSubsystem>() : nullptr;
+    NoiseSS->EmitNoise(Noise, NoiseLocation, LastInteractor.Get());
 }
 
 // ===========================================================================

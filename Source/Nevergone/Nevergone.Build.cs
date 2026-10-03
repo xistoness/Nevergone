@@ -12,12 +12,16 @@ public class Nevergone : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
+			// PhysicsCore: UPhysicalMaterial and EPhysicalSurface, used by the noise system
+			"PhysicsCore",
 			"GameplayAbilities",
 			"GameplayTags",
+			"DeveloperSettings",
 			"GameplayTasks",
 			"InputCore",
 			"EnhancedInput",
 			"AIModule",
+			"NavigationSystem",
 			"StateTreeModule",
 			"GameplayStateTreeModule",
 			"UMG",
@@ -28,8 +32,7 @@ public class Nevergone : ModuleRules
 			"AudioMixer",
 			"MetasoundEngine"
 		});
-
-		PrivateDependencyModuleNames.AddRange(new string[] { "AITestSuite" });
+		
 
 		PublicIncludePaths.AddRange(new string[] {
 			"Nevergone",

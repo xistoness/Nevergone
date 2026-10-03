@@ -5,6 +5,7 @@
 #include "GameInstance/GameContextManager.h"
 #include "GameMode/Combat/CombatEventBus.h"
 #include "Characters/CharacterBase.h"
+#include "Localization/NevergoneGameUserSettings.h"
 
 #include "Components/AudioComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -32,10 +33,66 @@ void UAudioSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 		UE_LOG(LogTemp, Log, TEXT("[Audio] AudioSubsystem initialized."));
 	}
+
+	// Apply persisted player volumes to the live SoundMix.
+	// Note on ordering: UMyGameInstance::Init populates CategorySoundClasses
+	// BEFORE the subsystems' Initialize() is called for new subsystems but
+	// not necessarily for already-instantiated ones. To be safe, the GI also
+	// calls ApplyAllVolumesFromSettings explicitly after the assignments —
+	// this first call here is mostly for editor PIE startups where the GI
+	// path still applies but we want a sensible initial state.
+	ApplyAllVolumesFromSettings();
+
+	// Subscribe to PostLoadMapWithWorld so volumes are re-applied once the
+	// audio device is fully created and bound to a world.
+	//
+	// Why this is necessary (junior-friendly):
+	//   UGameInstance::Init() — and therefore this subsystem's Initialize() and
+	//   the first ApplyAllVolumesFromSettings call from MyGameInstance — both
+	//   run BEFORE the engine creates the level's audio device. SoundMix
+	//   overrides registered before the device exists are silently dropped by
+	//   the audio thread because there is no live mix bus to apply them to.
+	//   That's why "raise the slider then lower it again" worked while the
+	//   initial 0% on launch did not — the first state was applied too early.
+	//
+	//   PostLoadMapWithWorld fires AFTER the world's audio device is up and
+	//   running, which is the earliest point where push + override are
+	//   guaranteed to take effect.
+	PostLoadMapHandle = FCoreUObjectDelegates::PostLoadMapWithWorld.AddUObject(
+		this, &UAudioSubsystem::HandlePostLoadMap);
 }
 
 void UAudioSubsystem::Deinitialize()
 {
+	// Unsubscribe from PostLoadMapWithWorld first so a level transition during
+	// shutdown cannot trigger a re-apply on a half-torn-down subsystem.
+	FCoreUObjectDelegates::PostLoadMapWithWorld.Remove(PostLoadMapHandle);
+	PostLoadMapHandle.Reset();
+
+	// Pop the master mix if we pushed it. PopSoundMixModifier is no-op if the
+	// mix was never pushed; we still gate on bMasterMixPushed so the log is accurate.
+	if (bMasterMixPushed)
+	{
+		if (UWorld* World = GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr)
+		{
+			if (MasterSoundMix)
+			{
+				UGameplayStatics::PopSoundMixModifier(World, MasterSoundMix);
+
+				UE_LOG(LogTemp, Log,
+					TEXT("[Audio] Deinitialize: popped MasterSoundMix '%s' from audio device"),
+					*GetNameSafe(MasterSoundMix));
+			}
+		}
+		bMasterMixPushed = false;
+	}
+
+	// Remove GameContextManager binding
+	if (UGameContextManager* ContextManager = GetGameInstance()->GetSubsystem<UGameContextManager>())
+	{
+		ContextManager->OnGameContextChanged.Remove(ContextChangedHandle);
+	}
+	
 	// Remove GameContextManager binding
 	if (UGameContextManager* ContextManager = GetGameInstance()->GetSubsystem<UGameContextManager>())
 	{
@@ -165,7 +222,8 @@ void UAudioSubsystem::StopMusic(float FadeOutTime)
 // SFX API — world-positioned
 // ---------------------------------------------------------------------------
 
-void UAudioSubsystem::PlaySFXAtLocation(USoundBase* Sound, FVector Location)
+void UAudioSubsystem::PlaySFXAtLocation(USoundBase* Sound, FVector Location,
+	float VolumeMultiplier, float PitchMultiplier)
 {
 	if (!Sound)
 	{
@@ -176,10 +234,11 @@ void UAudioSubsystem::PlaySFXAtLocation(USoundBase* Sound, FVector Location)
 	UWorld* World = GetGameInstance()->GetWorld();
 	if (!World) { return; }
 
-	UGameplayStatics::PlaySoundAtLocation(World, Sound, Location);
+	UGameplayStatics::PlaySoundAtLocation(World, Sound, Location, VolumeMultiplier, PitchMultiplier);
 }
 
-void UAudioSubsystem::PlaySFXAttached(USoundBase* Sound, USceneComponent* AttachTo)
+void UAudioSubsystem::PlaySFXAttached(USoundBase* Sound, USceneComponent* AttachTo,
+	float VolumeMultiplier, float PitchMultiplier)
 {
 	if (!Sound)
 	{
@@ -190,11 +249,13 @@ void UAudioSubsystem::PlaySFXAttached(USoundBase* Sound, USceneComponent* Attach
 	if (!AttachTo)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[Audio] PlaySFXAttached: null component — falling back to world origin."));
-		PlaySFXAtLocation(Sound, FVector::ZeroVector);
+		PlaySFXAtLocation(Sound, FVector::ZeroVector, VolumeMultiplier, PitchMultiplier);
 		return;
 	}
 
-	UGameplayStatics::SpawnSoundAttached(Sound, AttachTo);
+	UGameplayStatics::SpawnSoundAttached(Sound, AttachTo, NAME_None, FVector(ForceInit),
+		EAttachLocation::KeepRelativeOffset, /*bStopWhenAttachedToDestroyed=*/false,
+		VolumeMultiplier, PitchMultiplier);
 }
 
 // ---------------------------------------------------------------------------
@@ -248,6 +309,129 @@ void UAudioSubsystem::SetSoundClassVolume(USoundClass* SoundClass, float Volume,
 
 	UE_LOG(LogTemp, Log, TEXT("[Audio] Volume: '%s' -> %.2f (Fade=%.1fs)"),
 		*GetNameSafe(SoundClass), Volume, FadeTime);
+}
+
+// ---------------------------------------------------------------------------
+// Volume control — category API
+// ---------------------------------------------------------------------------
+
+float UAudioSubsystem::GetCategoryVolume(ENevergoneAudioCategory Category) const
+{
+	// The persisted player choice in UNevergoneGameUserSettings is the single
+	// source of truth — the SoundMix only mirrors that value at runtime.
+	if (const UNevergoneGameUserSettings* Settings = UNevergoneGameUserSettings::GetNevergoneGameUserSettings())
+	{
+		return Settings->GetCategoryVolume(Category);
+	}
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("[Audio] GetCategoryVolume: NevergoneGameUserSettings unavailable — returning 1.0"));
+	return 1.0f;
+}
+
+void UAudioSubsystem::SetCategoryVolume(ENevergoneAudioCategory Category, float NewVolume)
+{
+	const float ClampedVolume = FMath::Clamp(NewVolume, 0.0f, 1.0f);
+
+	// 1. Persist the choice. The settings object writes to disk synchronously.
+	if (UNevergoneGameUserSettings* Settings = UNevergoneGameUserSettings::GetNevergoneGameUserSettings())
+	{
+		Settings->SetCategoryVolume(Category, ClampedVolume);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[Audio] SetCategoryVolume: NevergoneGameUserSettings unavailable — choice NOT persisted ")
+			TEXT("(check DefaultEngine.ini GameUserSettingsClassName entry)"));
+	}
+
+	// 2. Apply to the live SoundMix.
+	const TObjectPtr<USoundClass>* SoundClassPtr = CategorySoundClasses.Find(Category);
+	if (!SoundClassPtr || !*SoundClassPtr)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[Audio] SetCategoryVolume: no USoundClass mapped for category %d — assign one in BP_MyGameInstance.CategorySoundClasses"),
+			static_cast<int32>(Category));
+		return;
+	}
+
+	// FadeTime 0 — Settings sliders need immediate, snappy feedback.
+	SetSoundClassVolume(*SoundClassPtr, ClampedVolume, 0.0f);
+}
+
+void UAudioSubsystem::ApplyAllVolumesFromSettings()
+{
+	// SoundMix overrides only take effect while the mix is "pushed" onto the
+	// audio device. UGameplayStatics::SetSoundMixClassOverride registers the
+	// new volume value, but if the mix isn't active the override is dormant.
+	//
+	// Push must happen AFTER the audio device exists. The earliest reliable
+	// point in the editor (PIE) is PostLoadMapWithWorld — the GameInstance
+	// path runs too early, before the world's audio device is created. We
+	// gate via bMasterMixPushed so this runs at most once per session;
+	// pushing the same mix multiple times stacks reference counts and Pop on
+	// Deinitialize would only decrement once.
+	UWorld* World = GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr;
+	if (!bMasterMixPushed && World && MasterSoundMix)
+	{
+		UGameplayStatics::PushSoundMixModifier(World, MasterSoundMix);
+		bMasterMixPushed = true;
+
+		UE_LOG(LogTemp, Log,
+			TEXT("[Audio] ApplyAllVolumesFromSettings: pushed MasterSoundMix '%s' onto audio device"),
+			*GetNameSafe(MasterSoundMix));
+	}
+
+	// Cheap helper: re-applies every category volume from persisted settings.
+	// Safe to call multiple times (idempotent).
+	const ENevergoneAudioCategory AllCategories[] = {
+		ENevergoneAudioCategory::Master,
+		ENevergoneAudioCategory::Music,
+		ENevergoneAudioCategory::SFX,
+		ENevergoneAudioCategory::UI,
+	};
+
+	for (ENevergoneAudioCategory Category : AllCategories)
+	{
+		const float Volume = GetCategoryVolume(Category);
+
+		// Apply directly via SetSoundClassVolume to avoid the redundant SaveSettings
+		// disk write that SetCategoryVolume would trigger when value is unchanged.
+		const TObjectPtr<USoundClass>* SoundClassPtr = CategorySoundClasses.Find(Category);
+		if (SoundClassPtr && *SoundClassPtr)
+		{
+			SetSoundClassVolume(*SoundClassPtr, Volume, 0.0f);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Verbose,
+				TEXT("[Audio] ApplyAllVolumesFromSettings: skipping category %d — no USoundClass mapped"),
+				static_cast<int32>(Category));
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[Audio] ApplyAllVolumesFromSettings: live mix synced with player preferences"));
+}
+
+// ---------------------------------------------------------------------------
+// PostLoadMapWithWorld handler — pushes the mix and re-applies volumes once
+// the world's audio device is fully initialized. This is the fix for the
+// "initial 0% slider has no audible effect" bug: GameInstance::Init's first
+// apply runs too early, before the audio device exists, so the override is
+// dropped silently.
+// ---------------------------------------------------------------------------
+
+void UAudioSubsystem::HandlePostLoadMap(UWorld* LoadedWorld)
+{
+	UE_LOG(LogTemp, Log,
+		TEXT("[Audio] HandlePostLoadMap: world='%s' — re-applying volumes now that audio device is up"),
+		*GetNameSafe(LoadedWorld));
+
+	// ApplyAllVolumesFromSettings is idempotent and handles the lazy push
+	// (it only pushes if !bMasterMixPushed and the mix is valid). Calling
+	// it again here guarantees the very first audible state matches the
+	// player's persisted preferences, with the audio device fully ready.
+	ApplyAllVolumesFromSettings();
 }
 
 // ---------------------------------------------------------------------------

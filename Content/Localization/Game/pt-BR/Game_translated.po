@@ -1,0 +1,1590 @@
+﻿# Game Portuguese (Brazil) translation.
+# Copyright Xyzto Works
+# 
+msgid ""
+msgstr ""
+"Project-Id-Version: Game\n"
+"POT-Creation-Date: 2026-05-09 17:25\n"
+"PO-Revision-Date: 2026-05-09 17:25\n"
+"Language-Team: \n"
+"Language: pt-BR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#. Key:	6DC06FB5451E1615CD493A954BAB0F88
+#. SourceLocation:	/Game/Blueprints/Widgets/CombatWidgets/WBP_ActionHotbar.WBP_ActionHotbar_C:WidgetTree.APCost.Text
+#: /Game/Blueprints/Widgets/CombatWidgets/WBP_ActionHotbar.WBP_ActionHotbar_C:WidgetTree.APCost.Text
+msgctxt ",6DC06FB5451E1615CD493A954BAB0F88"
+msgid "0"
+msgstr "0"
+
+#. Key:	1A78AE2245FCD5D843923C8F45CC504F
+#. SourceLocation:	/Game/Blueprints/Widgets/CombatWidgets/WBP_ActionHotbar.WBP_ActionHotbar_C:WidgetTree.RemainingAP.Text
+#: /Game/Blueprints/Widgets/CombatWidgets/WBP_ActionHotbar.WBP_ActionHotbar_C:WidgetTree.RemainingAP.Text
+msgctxt ",1A78AE2245FCD5D843923C8F45CC504F"
+msgid "2"
+msgstr "2"
+
+#. Key:	1CCE62884CDD52D65EF2BB87F9354E1D
+#. SourceLocation:	/Game/Blueprints/Widgets/CombatWidgets/WBP_ActionHotbar.WBP_ActionHotbar_C:WidgetTree.TextBlock_353.Text
+#: /Game/Blueprints/Widgets/CombatWidgets/WBP_ActionHotbar.WBP_ActionHotbar_C:WidgetTree.TextBlock_353.Text
+msgctxt ",1CCE62884CDD52D65EF2BB87F9354E1D"
+msgid "Remaining AP : "
+msgstr "PA Restante: "
+
+#. Key:	70C81DF54F6CCA053C3E9DB4F9F7DE0C
+#. SourceLocation:	/Game/Blueprints/Widgets/CombatWidgets/WBP_ActionHotbar.WBP_ActionHotbar_C:WidgetTree.TextBlock_470.Text
+#: /Game/Blueprints/Widgets/CombatWidgets/WBP_ActionHotbar.WBP_ActionHotbar_C:WidgetTree.TextBlock_470.Text
+msgctxt ",70C81DF54F6CCA053C3E9DB4F9F7DE0C"
+msgid "AP Cost : "
+msgstr "Custo de PA: "
+
+#. Key:	6791BDF149F3F28442A0B6A991625EAA
+#. SourceLocation:	/Game/Blueprints/Widgets/CombatWidgets/WBP_ActionSlot.WBP_ActionSlot_C:WidgetTree.AbilityNameText.Text
+#: /Game/Blueprints/Widgets/CombatWidgets/WBP_ActionSlot.WBP_ActionSlot_C:WidgetTree.AbilityNameText.Text
+msgctxt ",6791BDF149F3F28442A0B6A991625EAA"
+msgid "Healing Rain"
+msgstr "Chuva Curativa"
+
+#. Key:	AFF990BD478CB08AB654DD80FC82A70B
+#. SourceLocation:	/Game/Blueprints/Widgets/CombatWidgets/WBP_BattlePreparation.WBP_BattlePreparation_C:WidgetTree.AbortBattleText.Text
+#: /Game/Blueprints/Widgets/CombatWidgets/WBP_BattlePreparation.WBP_BattlePreparation_C:WidgetTree.AbortBattleText.Text
+msgctxt ",AFF990BD478CB08AB654DD80FC82A70B"
+msgid "Abort Battle"
+msgstr "Abortar Batalha"
+
+#. Key:	10320CD84B1F2418E79799A9C89EE3E8
+#. SourceLocation:	/Game/Blueprints/Widgets/CombatWidgets/WBP_BattlePreparation.WBP_BattlePreparation_C:WidgetTree.AlliesHeader.Text
+#: /Game/Blueprints/Widgets/CombatWidgets/WBP_BattlePreparation.WBP_BattlePreparation_C:WidgetTree.AlliesHeader.Text
+msgctxt ",10320CD84B1F2418E79799A9C89EE3E8"
+msgid "Allies"
+msgstr "Aliados"
+
+#. Key:	3960DC134FC8EDB36474FDBA7AF876AA
+#. SourceLocation:	/Game/Blueprints/Widgets/CombatWidgets/WBP_BattlePreparation.WBP_BattlePreparation_C:WidgetTree.EnemiesHeader.Text
+#: /Game/Blueprints/Widgets/CombatWidgets/WBP_BattlePreparation.WBP_BattlePreparation_C:WidgetTree.EnemiesHeader.Text
+msgctxt ",3960DC134FC8EDB36474FDBA7AF876AA"
+msgid "Enemies"
+msgstr "Inimigos"
+
+#. Key:	8678E5BA42A0C9ADDDFA588DD99E5F7C
+#. SourceLocation:	/Game/Blueprints/Widgets/CombatWidgets/WBP_BattlePreparation.WBP_BattlePreparation_C:WidgetTree.HeaderText.Text
+#: /Game/Blueprints/Widgets/CombatWidgets/WBP_BattlePreparation.WBP_BattlePreparation_C:WidgetTree.HeaderText.Text
+msgctxt ",8678E5BA42A0C9ADDDFA588DD99E5F7C"
+msgid "Battle Preparation"
+msgstr "Preparação de Batalha"
+
+#. Key:	80A201D94219395F89A9359C854CD3D8
+#. SourceLocation:	/Game/Blueprints/Widgets/CombatWidgets/WBP_BattlePreparation.WBP_BattlePreparation_C:WidgetTree.StartBattleText.Text
+#: /Game/Blueprints/Widgets/CombatWidgets/WBP_BattlePreparation.WBP_BattlePreparation_C:WidgetTree.StartBattleText.Text
+msgctxt ",80A201D94219395F89A9359C854CD3D8"
+msgid "Start Battle"
+msgstr "Iniciar Batalha"
+
+#. Key:	C6415ACA4CDBCA06FF1BDD8B43D79644
+#. SourceLocation:	/Game/Blueprints/Widgets/CombatWidgets/WBP_BattleResults.WBP_BattleResults_C:WidgetTree.TextBlock_82.Text
+#: /Game/Blueprints/Widgets/CombatWidgets/WBP_BattleResults.WBP_BattleResults_C:WidgetTree.TextBlock_82.Text
+msgctxt ",C6415ACA4CDBCA06FF1BDD8B43D79644"
+msgid "Continue"
+msgstr "Continuar"
+
+#. Key:	4FB03BFC4E21467A93E2A685D274978D
+#. SourceLocation:	/Game/Blueprints/Widgets/CombatWidgets/WBP_TurnIndicator.WBP_TurnIndicator_C:WidgetTree.TurnLabel.Text
+#: /Game/Blueprints/Widgets/CombatWidgets/WBP_TurnIndicator.WBP_TurnIndicator_C:WidgetTree.TurnLabel.Text
+msgctxt ",4FB03BFC4E21467A93E2A685D274978D"
+msgid "EnemyTurn"
+msgstr "Turno Inimigo"
+
+#. Key:	55CAE08044725DE20F6C04B17AC97960
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_ContainerTransfer.WBP_ContainerTransfer_C:ExecuteUbergraph_WBP_ContainerTransfer [Script Bytecode]
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_ContainerTransfer.WBP_ContainerTransfer_C:ExecuteUbergraph_WBP_ContainerTransfer [Script Bytecode]
+msgctxt ",55CAE08044725DE20F6C04B17AC97960"
+msgid "{0} kg"
+msgstr "{0} kg"
+
+#. Key:	84901D334F85FF52CD881AA7EAD77A32
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_ContainerTransfer.WBP_ContainerTransfer_C:ExecuteUbergraph_WBP_ContainerTransfer [Script Bytecode]
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_ContainerTransfer.WBP_ContainerTransfer_C:ExecuteUbergraph_WBP_ContainerTransfer [Script Bytecode]
+msgctxt ",84901D334F85FF52CD881AA7EAD77A32"
+msgid "{0}/{1} kg"
+msgstr "{0}/{1} kg"
+
+#. Key:	B4EE2A414AC2D24046D5C3A5FB5E5A03
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_ContainerTransfer.WBP_ContainerTransfer_C:ExecuteUbergraph_WBP_ContainerTransfer [Script Bytecode]
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_ContainerTransfer.WBP_ContainerTransfer_C:ExecuteUbergraph_WBP_ContainerTransfer [Script Bytecode]
+msgctxt ",B4EE2A414AC2D24046D5C3A5FB5E5A03"
+msgid "Inventory full"
+msgstr "Inventário cheio"
+
+#. Key:	E0CBF2F5401B9D0DEA76B6B90388A898
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_ContainerTransfer.WBP_ContainerTransfer_C:ExecuteUbergraph_WBP_ContainerTransfer [Script Bytecode]
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_ContainerTransfer.WBP_ContainerTransfer_C:ExecuteUbergraph_WBP_ContainerTransfer [Script Bytecode]
+msgctxt ",E0CBF2F5401B9D0DEA76B6B90388A898"
+msgid "{0}/{1} slots"
+msgstr "{0}/{1} espaços"
+
+#. Key:	FF2F2F654157007F4301BEBCAF0888CE
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_ContainerTransfer.WBP_ContainerTransfer_C:ExecuteUbergraph_WBP_ContainerTransfer [Script Bytecode]
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_ContainerTransfer.WBP_ContainerTransfer_C:ExecuteUbergraph_WBP_ContainerTransfer [Script Bytecode]
+msgctxt ",FF2F2F654157007F4301BEBCAF0888CE"
+msgid "Item not available"
+msgstr "Item indisponível"
+
+#. Key:	9DB66D8049473542A2387F813D63C268
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_ContainerTransfer.WBP_ContainerTransfer_C:WidgetTree.Txt_ContainerHeader.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_ContainerTransfer.WBP_ContainerTransfer_C:WidgetTree.Txt_ContainerHeader.Text
+msgctxt ",9DB66D8049473542A2387F813D63C268"
+msgid "Wooden Chest"
+msgstr "Baú de Madeira"
+
+#. Key:	93A3A4864C08F01018C81DA77EFA8187
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_ContainerTransfer.WBP_ContainerTransfer_C:WidgetTree.Txt_ContainerSlots.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_ContainerTransfer.WBP_ContainerTransfer_C:WidgetTree.Txt_ContainerSlots.Text
+msgctxt ",93A3A4864C08F01018C81DA77EFA8187"
+msgid "3/15 slots"
+msgstr "3/15 espaços"
+
+#. Key:	54BBF9D54331CFC72D5EBC96A1B1BEEF
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_ContainerTransfer.WBP_ContainerTransfer_C:WidgetTree.Txt_ContainerWeight.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_ContainerTransfer.WBP_ContainerTransfer_C:WidgetTree.Txt_ContainerWeight.Text
+msgctxt ",54BBF9D54331CFC72D5EBC96A1B1BEEF"
+msgid "10 kg"
+msgstr "10 kg"
+
+#. Key:	BBA1D752471BFCE07AF396A4AD1F2898
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_ContainerTransfer.WBP_ContainerTransfer_C:WidgetTree.Txt_PlayerGold.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_ContainerTransfer.WBP_ContainerTransfer_C:WidgetTree.Txt_PlayerGold.Text
+msgctxt ",BBA1D752471BFCE07AF396A4AD1F2898"
+msgid "250"
+msgstr "250"
+
+#. Key:	8E594F06446B32B3D4F59686B35C728F
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_ContainerTransfer.WBP_ContainerTransfer_C:WidgetTree.Txt_PlayerHeader.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_ContainerTransfer.WBP_ContainerTransfer_C:WidgetTree.Txt_PlayerHeader.Text
+msgctxt ",8E594F06446B32B3D4F59686B35C728F"
+msgid "Inventory"
+msgstr "Inventário"
+
+#. Key:	E70E8E7F48B604DA3C3F818631F8C787
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_ContainerTransfer.WBP_ContainerTransfer_C:WidgetTree.Txt_PlayerSlots.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_ContainerTransfer.WBP_ContainerTransfer_C:WidgetTree.Txt_PlayerSlots.Text
+msgctxt ",E70E8E7F48B604DA3C3F818631F8C787"
+msgid "12/30 slots"
+msgstr "12/30 espaços"
+
+#. Key:	5223F4CC41F3EB6D52729BB360756220
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_ContainerTransfer.WBP_ContainerTransfer_C:WidgetTree.Txt_PlayerWeight.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_ContainerTransfer.WBP_ContainerTransfer_C:WidgetTree.Txt_PlayerWeight.Text
+msgctxt ",5223F4CC41F3EB6D52729BB360756220"
+msgid "45/100 kg"
+msgstr "45/100 kg"
+
+#. Key:	BFC9C6554D97725A7DC8A689C7724F47
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_EquipmentSlot.WBP_EquipmentSlot_C:WidgetTree.SlotLabel.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_EquipmentSlot.WBP_EquipmentSlot_C:WidgetTree.SlotLabel.Text
+msgctxt ",BFC9C6554D97725A7DC8A689C7724F47"
+msgid "ARMOR"
+msgstr "ARMADURA"
+
+#. Key:	A2FB366D45571060653DE6B8850882E2
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_Inventory.WBP_Inventory_C:WidgetTree.CharClassText.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_Inventory.WBP_Inventory_C:WidgetTree.CharClassText.Text
+msgctxt ",A2FB366D45571060653DE6B8850882E2"
+msgid "TorturedSavage"
+msgstr "TorturedSavage"
+
+#. Key:	573335D148951863FA663FB324CF6159
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_Inventory.WBP_Inventory_C:WidgetTree.CharNameText.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_Inventory.WBP_Inventory_C:WidgetTree.CharNameText.Text
+msgctxt ",573335D148951863FA663FB324CF6159"
+msgid "Thorus"
+msgstr "Thorus"
+
+#. Key:	5EFAE8DB4D547169927FF8A28F818905
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_Inventory.WBP_Inventory_C:WidgetTree.CurrentHP.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_Inventory.WBP_Inventory_C:WidgetTree.CurrentHP.Text
+msgctxt ",5EFAE8DB4D547169927FF8A28F818905"
+msgid "10"
+msgstr "10"
+
+#. Key:	66ABA683454C0105108042A5F2E8225E
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_Inventory.WBP_Inventory_C:WidgetTree.Max_HP.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_Inventory.WBP_Inventory_C:WidgetTree.Max_HP.Text
+msgctxt ",66ABA683454C0105108042A5F2E8225E"
+msgid "30"
+msgstr "30"
+
+#. Key:	FB869BD041D921B7DA6DFE80228C4DDB
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_Inventory.WBP_Inventory_C:WidgetTree.TextBlock_1274.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_Inventory.WBP_Inventory_C:WidgetTree.TextBlock_1274.Text
+msgctxt ",FB869BD041D921B7DA6DFE80228C4DDB"
+msgid "<"
+msgstr "<"
+
+#. Key:	651D8FED44795F5280C01EA5A8596DD5
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_Inventory.WBP_Inventory_C:WidgetTree.TextBlock_1388.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_Inventory.WBP_Inventory_C:WidgetTree.TextBlock_1388.Text
+msgctxt ",651D8FED44795F5280C01EA5A8596DD5"
+msgid ">"
+msgstr ">"
+
+#. Key:	3E724DA847D180D3BB68F7BBC326AFBD
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_Inventory.WBP_Inventory_C:WidgetTree.TextBlock_190.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_Inventory.WBP_Inventory_C:WidgetTree.TextBlock_190.Text
+msgctxt ",3E724DA847D180D3BB68F7BBC326AFBD"
+msgid "INVENTORY"
+msgstr "INVENTÁRIO"
+
+#. Key:	A86182414D21B56ABD00FE80CABAB80F
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_Inventory.WBP_Inventory_C:WidgetTree.TextBlock_660.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_Inventory.WBP_Inventory_C:WidgetTree.TextBlock_660.Text
+msgctxt ",A86182414D21B56ABD00FE80CABAB80F"
+msgid " / "
+msgstr " / "
+
+#. Key:	248080F54D39FE7E7F8C8294A37E59E9
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_Inventory.WBP_Inventory_C:WidgetTree.Txt_Gold.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_Inventory.WBP_Inventory_C:WidgetTree.Txt_Gold.Text
+msgctxt ",248080F54D39FE7E7F8C8294A37E59E9"
+msgid "0"
+msgstr "0"
+
+#. Key:	C4D4419D411F05A5F323B5B8CEB2975D
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_Inventory.WBP_Inventory_C:WidgetTree.WeightText.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_Inventory.WBP_Inventory_C:WidgetTree.WeightText.Text
+msgctxt ",C4D4419D411F05A5F323B5B8CEB2975D"
+msgid "12.5"
+msgstr "12.5"
+
+#. Key:	43598BDE4C2AA527D1C70EA1AC9BAF65
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_InventoryContextMenu.WBP_InventoryContextMenu_C:WidgetTree.TextBlock_1091.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_InventoryContextMenu.WBP_InventoryContextMenu_C:WidgetTree.TextBlock_1091.Text
+msgctxt ",43598BDE4C2AA527D1C70EA1AC9BAF65"
+msgid "Slot 4"
+msgstr "Espaço 4"
+
+#. Key:	D345C31243AF8B11EBF3E1A26F19D261
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_InventoryContextMenu.WBP_InventoryContextMenu_C:WidgetTree.TextBlock_263.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_InventoryContextMenu.WBP_InventoryContextMenu_C:WidgetTree.TextBlock_263.Text
+msgctxt ",D345C31243AF8B11EBF3E1A26F19D261"
+msgid "EQUIP"
+msgstr "EQUIPAR"
+
+#. Key:	85741C314651997F633066A635ADDA45
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_InventoryContextMenu.WBP_InventoryContextMenu_C:WidgetTree.TextBlock_34.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_InventoryContextMenu.WBP_InventoryContextMenu_C:WidgetTree.TextBlock_34.Text
+msgctxt ",85741C314651997F633066A635ADDA45"
+msgid "Choose slot:"
+msgstr "Escolha slot:"
+
+#. Key:	C973C1A248B96F9570178D8742AC5B83
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_InventoryContextMenu.WBP_InventoryContextMenu_C:WidgetTree.TextBlock_345.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_InventoryContextMenu.WBP_InventoryContextMenu_C:WidgetTree.TextBlock_345.Text
+msgctxt ",C973C1A248B96F9570178D8742AC5B83"
+msgid "USE"
+msgstr "USAR"
+
+#. Key:	FCB6EFF64454A51334C7C39F5C036A11
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_InventoryContextMenu.WBP_InventoryContextMenu_C:WidgetTree.TextBlock_452.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_InventoryContextMenu.WBP_InventoryContextMenu_C:WidgetTree.TextBlock_452.Text
+msgctxt ",FCB6EFF64454A51334C7C39F5C036A11"
+msgid "DROP"
+msgstr "DESCARTAR"
+
+#. Key:	F13A0DD544242AB3E2283180C85C8BAF
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_InventoryContextMenu.WBP_InventoryContextMenu_C:WidgetTree.TextBlock_554.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_InventoryContextMenu.WBP_InventoryContextMenu_C:WidgetTree.TextBlock_554.Text
+msgctxt ",F13A0DD544242AB3E2283180C85C8BAF"
+msgid "CANCEL"
+msgstr "CANCELAR"
+
+#. Key:	085A34844517E971E088D0A9F58547C1
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_InventoryContextMenu.WBP_InventoryContextMenu_C:WidgetTree.TextBlock_714.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_InventoryContextMenu.WBP_InventoryContextMenu_C:WidgetTree.TextBlock_714.Text
+msgctxt ",085A34844517E971E088D0A9F58547C1"
+msgid "Slot 1"
+msgstr "Espaço 1"
+
+#. Key:	521586264271B4162176CAB93B4F1D68
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_InventoryContextMenu.WBP_InventoryContextMenu_C:WidgetTree.TextBlock_810.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_InventoryContextMenu.WBP_InventoryContextMenu_C:WidgetTree.TextBlock_810.Text
+msgctxt ",521586264271B4162176CAB93B4F1D68"
+msgid "Slot 2"
+msgstr "Espaço 2"
+
+#. Key:	40FA628D48D366829FAEF3BC60304CDF
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_InventoryContextMenu.WBP_InventoryContextMenu_C:WidgetTree.TextBlock_906.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_InventoryContextMenu.WBP_InventoryContextMenu_C:WidgetTree.TextBlock_906.Text
+msgctxt ",40FA628D48D366829FAEF3BC60304CDF"
+msgid "Slot 3"
+msgstr "Espaço 3"
+
+#. Key:	41A44CC34643C3E56AB2F5BDF6DD8192
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_ItemSlot.WBP_ItemSlot_C:WidgetTree.QuantityText.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_ItemSlot.WBP_ItemSlot_C:WidgetTree.QuantityText.Text
+msgctxt ",41A44CC34643C3E56AB2F5BDF6DD8192"
+msgid "99"
+msgstr "99"
+
+#. Key:	82BD7B834A477A9B1F92F98059A1B839
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_QuantityPrompt.WBP_QuantityPrompt_C:Setup [Script Bytecode]
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_QuantityPrompt.WBP_QuantityPrompt_C:Setup [Script Bytecode]
+msgctxt ",82BD7B834A477A9B1F92F98059A1B839"
+msgid "Transfer {0}"
+msgstr "Transferir {0}"
+
+#. Key:	BCC2561747B2FDA8A488B686C2E5E211
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_QuantityPrompt.WBP_QuantityPrompt_C:WidgetTree.Cancel.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_QuantityPrompt.WBP_QuantityPrompt_C:WidgetTree.Cancel.Text
+msgctxt ",BCC2561747B2FDA8A488B686C2E5E211"
+msgid "Cancel"
+msgstr "Cancelar"
+
+#. Key:	03CEC5F24AAF84FE165C5A8B24FFAD59
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_QuantityPrompt.WBP_QuantityPrompt_C:WidgetTree.Confirm.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_QuantityPrompt.WBP_QuantityPrompt_C:WidgetTree.Confirm.Text
+msgctxt ",03CEC5F24AAF84FE165C5A8B24FFAD59"
+msgid "Confirm"
+msgstr "Confirmar"
+
+#. Key:	FA9BC3D54BAB2BB24969C98C62BE7855
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_QuantityPrompt.WBP_QuantityPrompt_C:WidgetTree.TextBlock_257.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_QuantityPrompt.WBP_QuantityPrompt_C:WidgetTree.TextBlock_257.Text
+msgctxt ",FA9BC3D54BAB2BB24969C98C62BE7855"
+msgid "-"
+msgstr "-"
+
+#. Key:	9E6D8E5A4E68159B8481D0A671EF5642
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_QuantityPrompt.WBP_QuantityPrompt_C:WidgetTree.TextBlock_333.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_QuantityPrompt.WBP_QuantityPrompt_C:WidgetTree.TextBlock_333.Text
+msgctxt ",9E6D8E5A4E68159B8481D0A671EF5642"
+msgid "+"
+msgstr "+"
+
+#. Key:	DD72D8FC4632D2039255FF893C881BF0
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_QuantityPrompt.WBP_QuantityPrompt_C:WidgetTree.Txt_PromptHeader.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_QuantityPrompt.WBP_QuantityPrompt_C:WidgetTree.Txt_PromptHeader.Text
+msgctxt ",DD72D8FC4632D2039255FF893C881BF0"
+msgid "Transfer X"
+msgstr "Transferir X"
+
+#. Key:	1562075D46F51F2D495FBB9A8B8E80F6
+#. SourceLocation:	/Game/Blueprints/Widgets/InventoryWidgets/WBP_QuantityPrompt.WBP_QuantityPrompt_C:WidgetTree.Txt_Quantity.Text
+#: /Game/Blueprints/Widgets/InventoryWidgets/WBP_QuantityPrompt.WBP_QuantityPrompt_C:WidgetTree.Txt_Quantity.Text
+msgctxt ",1562075D46F51F2D495FBB9A8B8E80F6"
+msgid "5"
+msgstr "5"
+
+#. Key:	7ACCD8644E4FA0EDB396F696489D669D
+#. SourceLocation:	/Game/Blueprints/Widgets/MainMenuWidgets/WBP_MainMenuWidget.WBP_MainMenuWidget_C:WidgetTree.TextBlock_178.Text
+#: /Game/Blueprints/Widgets/MainMenuWidgets/WBP_MainMenuWidget.WBP_MainMenuWidget_C:WidgetTree.TextBlock_178.Text
+msgctxt ",7ACCD8644E4FA0EDB396F696489D669D"
+msgid "New Game"
+msgstr "Novo Jogo"
+
+#. Key:	6B60155D448DAF61EF2BFE889ED7841E
+#. SourceLocation:	/Game/Blueprints/Widgets/MainMenuWidgets/WBP_MainMenuWidget.WBP_MainMenuWidget_C:WidgetTree.TextBlock_290.Text
+#: /Game/Blueprints/Widgets/MainMenuWidgets/WBP_MainMenuWidget.WBP_MainMenuWidget_C:WidgetTree.TextBlock_290.Text
+msgctxt ",6B60155D448DAF61EF2BFE889ED7841E"
+msgid "Continue"
+msgstr "Continuar"
+
+#. Key:	7158FFF64022CFF24FADA8B3DF59D5B0
+#. SourceLocation:	/Game/Blueprints/Widgets/MainMenuWidgets/WBP_MainMenuWidget.WBP_MainMenuWidget_C:WidgetTree.TextBlock_380.Text
+#: /Game/Blueprints/Widgets/MainMenuWidgets/WBP_MainMenuWidget.WBP_MainMenuWidget_C:WidgetTree.TextBlock_380.Text
+msgctxt ",7158FFF64022CFF24FADA8B3DF59D5B0"
+msgid "Nevergone"
+msgstr "Nevergone"
+
+#. Key:	54EECEDB497DBA4E8EC0C1A10E3D86F3
+#. SourceLocation:	/Game/Blueprints/Widgets/MainMenuWidgets/WBP_MainMenuWidget.WBP_MainMenuWidget_C:WidgetTree.TextBlock_457.Text
+#: /Game/Blueprints/Widgets/MainMenuWidgets/WBP_MainMenuWidget.WBP_MainMenuWidget_C:WidgetTree.TextBlock_457.Text
+msgctxt ",54EECEDB497DBA4E8EC0C1A10E3D86F3"
+msgid "Load Game"
+msgstr "Carregar Jogo"
+
+#. Key:	2F07B56947144BBF3CB9009DED0A5BD1
+#. SourceLocation:	/Game/Blueprints/Widgets/MainMenuWidgets/WBP_MainMenuWidget.WBP_MainMenuWidget_C:WidgetTree.TextBlock_529.Text
+#: /Game/Blueprints/Widgets/MainMenuWidgets/WBP_MainMenuWidget.WBP_MainMenuWidget_C:WidgetTree.TextBlock_529.Text
+msgctxt ",2F07B56947144BBF3CB9009DED0A5BD1"
+msgid "Settings"
+msgstr "Configurações"
+
+#. Key:	67A573C4424E8CAF0CDE4E9166AC08CF
+#. SourceLocation:	/Game/Blueprints/Widgets/MainMenuWidgets/WBP_MainMenuWidget.WBP_MainMenuWidget_C:WidgetTree.TextBlock_698.Text
+#: /Game/Blueprints/Widgets/MainMenuWidgets/WBP_MainMenuWidget.WBP_MainMenuWidget_C:WidgetTree.TextBlock_698.Text
+msgctxt ",67A573C4424E8CAF0CDE4E9166AC08CF"
+msgid "Quit Game"
+msgstr "Sair do Jogo"
+
+#. Key:	A51CB54141CF4FB493F111B6091EC9A6
+#. SourceLocation:	/Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Continue.WBP_Panel_Continue_C:WidgetTree.Continue.Text
+#: /Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Continue.WBP_Panel_Continue_C:WidgetTree.Continue.Text
+msgctxt ",A51CB54141CF4FB493F111B6091EC9A6"
+msgid "Continue"
+msgstr "Continuar"
+
+#. Key:	2C87AEF74660C8706DD659BA918878C3
+#. SourceLocation:	/Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Continue.WBP_Panel_Continue_C:WidgetTree.Resumelastsession.Text
+#: /Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Continue.WBP_Panel_Continue_C:WidgetTree.Resumelastsession.Text
+msgctxt ",2C87AEF74660C8706DD659BA918878C3"
+msgid "Resume last session"
+msgstr "Retomar última sessão"
+
+#. Key:	F1CE3AFE4DF0B716D3DAFAAB80CA08AB
+#. SourceLocation:	/Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Continue.WBP_Panel_Continue_C:WidgetTree.Text_NoSave.Text
+#: /Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Continue.WBP_Panel_Continue_C:WidgetTree.Text_NoSave.Text
+msgctxt ",F1CE3AFE4DF0B716D3DAFAAB80CA08AB"
+msgid "No save file found"
+msgstr "Nenhum save encontrado"
+
+#. Key:	7EB70072421BF16AF8F4718993FD5824
+#. SourceLocation:	/Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Continue.WBP_Panel_Continue_C:WidgetTree.TextBlock_1166.Text
+#: /Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Continue.WBP_Panel_Continue_C:WidgetTree.TextBlock_1166.Text
+msgctxt ",7EB70072421BF16AF8F4718993FD5824"
+msgid "Continue"
+msgstr "Continuar"
+
+#. Key:	1F108BED4514DA3B90560A868F88864D
+#. SourceLocation:	/Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Load.WBP_Panel_Load_C:WidgetTree.ChooseaSave.Text
+#: /Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Load.WBP_Panel_Load_C:WidgetTree.ChooseaSave.Text
+msgctxt ",1F108BED4514DA3B90560A868F88864D"
+msgid "Choose a save"
+msgstr "Escolha um save"
+
+#. Key:	F379BB774669872B31ADE48DED9DA6A8
+#. SourceLocation:	/Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Load.WBP_Panel_Load_C:WidgetTree.Delete.Text
+#: /Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Load.WBP_Panel_Load_C:WidgetTree.Delete.Text
+msgctxt ",F379BB774669872B31ADE48DED9DA6A8"
+msgid "Delete"
+msgstr "Excluir"
+
+#. Key:	DEDC6524478AC9D42FA60F966960470A
+#. SourceLocation:	/Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Load.WBP_Panel_Load_C:WidgetTree.Load.Text
+#: /Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Load.WBP_Panel_Load_C:WidgetTree.Load.Text
+msgctxt ",DEDC6524478AC9D42FA60F966960470A"
+msgid "Load"
+msgstr "Carregar"
+
+#. Key:	7E5E0029489C3E4ABB4F088233053101
+#. SourceLocation:	/Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Load.WBP_Panel_Load_C:WidgetTree.LoadGame.Text
+#: /Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Load.WBP_Panel_Load_C:WidgetTree.LoadGame.Text
+msgctxt ",7E5E0029489C3E4ABB4F088233053101"
+msgid "Load Game"
+msgstr "Carregar Jogo"
+
+#. Key:	36E70A074817BC29E21C548441E6D2D9
+#. SourceLocation:	/Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_NewGame.WBP_Panel_NewGame_C:WidgetTree.TextBlock_121.Text
+#: /Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_NewGame.WBP_Panel_NewGame_C:WidgetTree.TextBlock_121.Text
+msgctxt ",36E70A074817BC29E21C548441E6D2D9"
+msgid "Start New Game"
+msgstr "Iniciar Novo Jogo"
+
+#. Key:	03E49C8B487BBD04C84A069884808AE4
+#. SourceLocation:	/Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_NewGame.WBP_Panel_NewGame_C:WidgetTree.TextBlock_2103.Text
+#: /Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_NewGame.WBP_Panel_NewGame_C:WidgetTree.TextBlock_2103.Text
+msgctxt ",03E49C8B487BBD04C84A069884808AE4"
+msgid "New Game"
+msgstr "Novo Jogo"
+
+#. Key:	B4F118114472C63C6F270FA66DBA0578
+#. SourceLocation:	/Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_NewGame.WBP_Panel_NewGame_C:WidgetTree.TextBlock_2278.Text
+#: /Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_NewGame.WBP_Panel_NewGame_C:WidgetTree.TextBlock_2278.Text
+msgctxt ",B4F118114472C63C6F270FA66DBA0578"
+msgid "Begin a new journey"
+msgstr "Comece uma nova jornada"
+
+#. Key:	006C5B064DD64890A352D58DBCE59909
+#. SourceLocation:	/Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_NewGame.WBP_Panel_NewGame_C:WidgetTree.TextBlock_2384.Text
+#: /Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_NewGame.WBP_Panel_NewGame_C:WidgetTree.TextBlock_2384.Text
+msgctxt ",006C5B064DD64890A352D58DBCE59909"
+msgid "Select a save slot"
+msgstr "Selecione um slot de save"
+
+#. Key:	A0D8530944E42CB7943D46BCB0AEC811
+#. SourceLocation:	/Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Quit.WBP_Panel_Quit_C:WidgetTree.Areyousure?.Text
+#: /Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Quit.WBP_Panel_Quit_C:WidgetTree.Areyousure?.Text
+msgctxt ",A0D8530944E42CB7943D46BCB0AEC811"
+msgid "Are you sure?"
+msgstr "Tem certeza?"
+
+#. Key:	E065F9C44CB9972DC5DA8DA8E55ABB0E
+#. SourceLocation:	/Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Quit.WBP_Panel_Quit_C:WidgetTree.Progress.Text
+#: /Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Quit.WBP_Panel_Quit_C:WidgetTree.Progress.Text
+msgctxt ",E065F9C44CB9972DC5DA8DA8E55ABB0E"
+msgid "Your progress will be autosaved before closing."
+msgstr "Seu progresso será salvo automaticamente antes de fechar."
+
+#. Key:	0626CF93424076CC37F80386A425A604
+#. SourceLocation:	/Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Quit.WBP_Panel_Quit_C:WidgetTree.Text_Cancel.Text
+#: /Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Quit.WBP_Panel_Quit_C:WidgetTree.Text_Cancel.Text
+msgctxt ",0626CF93424076CC37F80386A425A604"
+msgid "Cancel"
+msgstr "Cancelar"
+
+#. Key:	2EF3DE79463CEFDA419069B99A3CDC39
+#. SourceLocation:	/Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Quit.WBP_Panel_Quit_C:WidgetTree.Text_Exit.Text
+#: /Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Quit.WBP_Panel_Quit_C:WidgetTree.Text_Exit.Text
+msgctxt ",2EF3DE79463CEFDA419069B99A3CDC39"
+msgid "Exit to desktop"
+msgstr "Sair para área de trabalho"
+
+#. Key:	9D40BCF148E75175F0E63F9DE05116C3
+#. SourceLocation:	/Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Quit.WBP_Panel_Quit_C:WidgetTree.Text_Quit.Text
+#: /Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Quit.WBP_Panel_Quit_C:WidgetTree.Text_Quit.Text
+msgctxt ",9D40BCF148E75175F0E63F9DE05116C3"
+msgid "Quit"
+msgstr "Sair"
+
+#. Key:	2DCA7F0E464589C768ED3BB8142F4223
+#. SourceLocation:	/Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Quit.WBP_Panel_Quit_C:WidgetTree.Text_QuitTitle.Text
+#: /Game/Blueprints/Widgets/MainMenuWidgets/WBP_Panel_Quit.WBP_Panel_Quit_C:WidgetTree.Text_QuitTitle.Text
+msgctxt ",2DCA7F0E464589C768ED3BB8142F4223"
+msgid "Quit Game"
+msgstr "Sair do Jogo"
+
+#. Key:	26E894F1471EA43ADAF6C3870AC3DC7F
+#. SourceLocation:	/Game/Blueprints/Widgets/MainMenuWidgets/WBP_SaveSlotEntry.WBP_SaveSlotEntry_C:WidgetTree.Text_Label.Text
+#: /Game/Blueprints/Widgets/MainMenuWidgets/WBP_SaveSlotEntry.WBP_SaveSlotEntry_C:WidgetTree.Text_Label.Text
+msgctxt ",26E894F1471EA43ADAF6C3870AC3DC7F"
+msgid "SlotLabel"
+msgstr "SlotLabel"
+
+#. Key:	8842FF2D4B0C5408DDCD148EA47F2401
+#. SourceLocation:	/Game/Blueprints/Widgets/MainMenuWidgets/WBP_SaveSlotEntry.WBP_SaveSlotEntry_C:WidgetTree.Text_Meta.Text
+#: /Game/Blueprints/Widgets/MainMenuWidgets/WBP_SaveSlotEntry.WBP_SaveSlotEntry_C:WidgetTree.Text_Meta.Text
+msgctxt ",8842FF2D4B0C5408DDCD148EA47F2401"
+msgid "SlotMeta"
+msgstr "SlotMeta"
+
+#. Key:	EB71A9894CC136FB976450954CCB7B48
+#. SourceLocation:	/Game/Blueprints/Widgets/MainMenuWidgets/WBP_SaveSlotEntry.WBP_SaveSlotEntry_C:WidgetTree.TextBadge.Text
+#: /Game/Blueprints/Widgets/MainMenuWidgets/WBP_SaveSlotEntry.WBP_SaveSlotEntry_C:WidgetTree.TextBadge.Text
+msgctxt ",EB71A9894CC136FB976450954CCB7B48"
+msgid "SlotBadge"
+msgstr "SlotBadge"
+
+#. Key:	B17B3A424D31956FB38452A978410B09
+#. SourceLocation:	/Game/Blueprints/Widgets/PartyWidgets/WBP_PartyManager.WBP_PartyManager_C:ExecuteUbergraph_WBP_PartyManager [Script Bytecode]
+#: /Game/Blueprints/Widgets/PartyWidgets/WBP_PartyManager.WBP_PartyManager_C:ExecuteUbergraph_WBP_PartyManager [Script Bytecode]
+msgctxt ",B17B3A424D31956FB38452A978410B09"
+msgid "Select who to replace"
+msgstr "Selecione quem substituir"
+
+#. Key:	0644649F47BCB284C7BA28A2C4108078
+#. SourceLocation:	/Game/Blueprints/Widgets/PartyWidgets/WBP_PartyManager.WBP_PartyManager_C:WidgetTree.TextBlock_1138.Text
+#: /Game/Blueprints/Widgets/PartyWidgets/WBP_PartyManager.WBP_PartyManager_C:WidgetTree.TextBlock_1138.Text
+msgctxt ",0644649F47BCB284C7BA28A2C4108078"
+msgid "PARTY"
+msgstr "GRUPO"
+
+#. Key:	58FE6D8647D9DB7A8A57D89F0C016669
+#. SourceLocation:	/Game/Blueprints/Widgets/PartyWidgets/WBP_PartyManager.WBP_PartyManager_C:WidgetTree.TextBlock_3484.Text
+#: /Game/Blueprints/Widgets/PartyWidgets/WBP_PartyManager.WBP_PartyManager_C:WidgetTree.TextBlock_3484.Text
+msgctxt ",58FE6D8647D9DB7A8A57D89F0C016669"
+msgid "ROSTER"
+msgstr "ELENCO"
+
+#. Key:	9F3AFF1942626CF3912D9394C8D3E57D
+#. SourceLocation:	/Game/Blueprints/Widgets/PartyWidgets/WBP_PartyManager.WBP_PartyManager_C:WidgetTree.TXT_Active.Text
+#: /Game/Blueprints/Widgets/PartyWidgets/WBP_PartyManager.WBP_PartyManager_C:WidgetTree.TXT_Active.Text
+msgctxt ",9F3AFF1942626CF3912D9394C8D3E57D"
+msgid "ACTIVE"
+msgstr "ATIVO"
+
+#. Key:	4C9E7D78479AAA1CA192A883CB666C91
+#. SourceLocation:	/Game/Blueprints/Widgets/PartyWidgets/WBP_PartyMemberEntryWidget.WBP_PartyMemberEntryWidget_C:WidgetTree.TXT_ClassName.Text
+#: /Game/Blueprints/Widgets/PartyWidgets/WBP_PartyMemberEntryWidget.WBP_PartyMemberEntryWidget_C:WidgetTree.TXT_ClassName.Text
+msgctxt ",4C9E7D78479AAA1CA192A883CB666C91"
+msgid "Defiled"
+msgstr "Defiled"
+
+#. Key:	29041DBF44ED83D5EA7CBD8370D49A58
+#. SourceLocation:	/Game/Blueprints/Widgets/PartyWidgets/WBP_PartyMemberEntryWidget.WBP_PartyMemberEntryWidget_C:WidgetTree.TXT_Level.Text
+#: /Game/Blueprints/Widgets/PartyWidgets/WBP_PartyMemberEntryWidget.WBP_PartyMemberEntryWidget_C:WidgetTree.TXT_Level.Text
+msgctxt ",29041DBF44ED83D5EA7CBD8370D49A58"
+msgid "Lv 1"
+msgstr "Lv 1"
+
+#. Key:	60157F4D42ACECB8C2100BBF6D6FBA0E
+#. SourceLocation:	/Game/Blueprints/Widgets/PartyWidgets/WBP_PartyMemberEntryWidget.WBP_PartyMemberEntryWidget_C:WidgetTree.TXT_Name.Text
+#: /Game/Blueprints/Widgets/PartyWidgets/WBP_PartyMemberEntryWidget.WBP_PartyMemberEntryWidget_C:WidgetTree.TXT_Name.Text
+msgctxt ",60157F4D42ACECB8C2100BBF6D6FBA0E"
+msgid "Garret"
+msgstr "Garret"
+
+#. Key:	046481D54361A912D4F07787BCF81E9D
+#. SourceLocation:	/Game/Blueprints/Widgets/PauseMenuWidgets/WBP_Panel_Resume.WBP_Panel_Resume_C:WidgetTree.CurrentSession.Text
+#: /Game/Blueprints/Widgets/PauseMenuWidgets/WBP_Panel_Resume.WBP_Panel_Resume_C:WidgetTree.CurrentSession.Text
+msgctxt ",046481D54361A912D4F07787BCF81E9D"
+msgid "Your current session will continue from where you left off"
+msgstr "Sua sessão atual continuará de onde parou"
+
+#. Key:	637C1AC44E74B84B8286299AB9B99549
+#. SourceLocation:	/Game/Blueprints/Widgets/PauseMenuWidgets/WBP_Panel_Resume.WBP_Panel_Resume_C:WidgetTree.Resume.Text
+#: /Game/Blueprints/Widgets/PauseMenuWidgets/WBP_Panel_Resume.WBP_Panel_Resume_C:WidgetTree.Resume.Text
+msgctxt ",637C1AC44E74B84B8286299AB9B99549"
+msgid "Resume Game"
+msgstr "Retomar Jogo"
+
+#. Key:	AB9DD9E045E1603B3B9BB28F0644A61A
+#. SourceLocation:	/Game/Blueprints/Widgets/PauseMenuWidgets/WBP_Panel_Resume.WBP_Panel_Resume_C:WidgetTree.ReturnToGame.Text
+#: /Game/Blueprints/Widgets/PauseMenuWidgets/WBP_Panel_Resume.WBP_Panel_Resume_C:WidgetTree.ReturnToGame.Text
+msgctxt ",AB9DD9E045E1603B3B9BB28F0644A61A"
+msgid "Return to game"
+msgstr "Voltar ao jogo"
+
+#. Key:	E4A89C6D4D9B8E3EA1AB4787EDD6DAC0
+#. SourceLocation:	/Game/Blueprints/Widgets/PauseMenuWidgets/WBP_Panel_Save.WBP_Panel_Save_C:WidgetTree.ChooseaSave.Text
+#: /Game/Blueprints/Widgets/PauseMenuWidgets/WBP_Panel_Save.WBP_Panel_Save_C:WidgetTree.ChooseaSave.Text
+msgctxt ",E4A89C6D4D9B8E3EA1AB4787EDD6DAC0"
+msgid "Choose a save"
+msgstr "Escolha um save"
+
+#. Key:	D88DE41245CF6C90F5D3609D6AF4F776
+#. SourceLocation:	/Game/Blueprints/Widgets/PauseMenuWidgets/WBP_Panel_Save.WBP_Panel_Save_C:WidgetTree.Delete.Text
+#: /Game/Blueprints/Widgets/PauseMenuWidgets/WBP_Panel_Save.WBP_Panel_Save_C:WidgetTree.Delete.Text
+msgctxt ",D88DE41245CF6C90F5D3609D6AF4F776"
+msgid "Delete"
+msgstr "Excluir"
+
+#. Key:	128C4DD74DF2C15A1C4513BC81A46A22
+#. SourceLocation:	/Game/Blueprints/Widgets/PauseMenuWidgets/WBP_Panel_Save.WBP_Panel_Save_C:WidgetTree.Save.Text
+#: /Game/Blueprints/Widgets/PauseMenuWidgets/WBP_Panel_Save.WBP_Panel_Save_C:WidgetTree.Save.Text
+msgctxt ",128C4DD74DF2C15A1C4513BC81A46A22"
+msgid "Save"
+msgstr "Salvar"
+
+#. Key:	23E4D7F540253395EEC3F58539902224
+#. SourceLocation:	/Game/Blueprints/Widgets/PauseMenuWidgets/WBP_Panel_Save.WBP_Panel_Save_C:WidgetTree.SaveGame.Text
+#: /Game/Blueprints/Widgets/PauseMenuWidgets/WBP_Panel_Save.WBP_Panel_Save_C:WidgetTree.SaveGame.Text
+msgctxt ",23E4D7F540253395EEC3F58539902224"
+msgid "Save Game"
+msgstr "Salvar Jogo"
+
+#. Key:	C910624C4A86A05FF98A44A3E3DE2141
+#. SourceLocation:	/Game/Blueprints/Widgets/PauseMenuWidgets/WBP_PauseMenuWidget.WBP_PauseMenuWidget_C:WidgetTree.TextBlock_178.Text
+#: /Game/Blueprints/Widgets/PauseMenuWidgets/WBP_PauseMenuWidget.WBP_PauseMenuWidget_C:WidgetTree.TextBlock_178.Text
+msgctxt ",C910624C4A86A05FF98A44A3E3DE2141"
+msgid "Resume"
+msgstr "Retomar"
+
+#. Key:	539369174BB4256F4C5D179083E3FD9E
+#. SourceLocation:	/Game/Blueprints/Widgets/PauseMenuWidgets/WBP_PauseMenuWidget.WBP_PauseMenuWidget_C:WidgetTree.TextBlock_290.Text
+#: /Game/Blueprints/Widgets/PauseMenuWidgets/WBP_PauseMenuWidget.WBP_PauseMenuWidget_C:WidgetTree.TextBlock_290.Text
+msgctxt ",539369174BB4256F4C5D179083E3FD9E"
+msgid "Save Game"
+msgstr "Salvar Jogo"
+
+#. Key:	6070EF794C00E168DBA9208ED07ABFB6
+#. SourceLocation:	/Game/Blueprints/Widgets/PauseMenuWidgets/WBP_PauseMenuWidget.WBP_PauseMenuWidget_C:WidgetTree.TextBlock_380.Text
+#: /Game/Blueprints/Widgets/PauseMenuWidgets/WBP_PauseMenuWidget.WBP_PauseMenuWidget_C:WidgetTree.TextBlock_380.Text
+msgctxt ",6070EF794C00E168DBA9208ED07ABFB6"
+msgid "Paused"
+msgstr "Pausado"
+
+#. Key:	C8A0EB844131ED4A9F190EA2FDEC3507
+#. SourceLocation:	/Game/Blueprints/Widgets/PauseMenuWidgets/WBP_PauseMenuWidget.WBP_PauseMenuWidget_C:WidgetTree.TextBlock_457.Text
+#: /Game/Blueprints/Widgets/PauseMenuWidgets/WBP_PauseMenuWidget.WBP_PauseMenuWidget_C:WidgetTree.TextBlock_457.Text
+msgctxt ",C8A0EB844131ED4A9F190EA2FDEC3507"
+msgid "Load Game"
+msgstr "Carregar Jogo"
+
+#. Key:	23E2143141D4C1B3483A089D038E2344
+#. SourceLocation:	/Game/Blueprints/Widgets/PauseMenuWidgets/WBP_PauseMenuWidget.WBP_PauseMenuWidget_C:WidgetTree.TextBlock_529.Text
+#: /Game/Blueprints/Widgets/PauseMenuWidgets/WBP_PauseMenuWidget.WBP_PauseMenuWidget_C:WidgetTree.TextBlock_529.Text
+msgctxt ",23E2143141D4C1B3483A089D038E2344"
+msgid "Settings"
+msgstr "Configurações"
+
+#. Key:	D4402ACF40E099B41F27989976456C32
+#. SourceLocation:	/Game/Blueprints/Widgets/PauseMenuWidgets/WBP_PauseMenuWidget.WBP_PauseMenuWidget_C:WidgetTree.TextBlock_698.Text
+#: /Game/Blueprints/Widgets/PauseMenuWidgets/WBP_PauseMenuWidget.WBP_PauseMenuWidget_C:WidgetTree.TextBlock_698.Text
+msgctxt ",D4402ACF40E099B41F27989976456C32"
+msgid "Quit Game"
+msgstr "Sair do Jogo"
+
+#. Key:	2E2BF2BC430961A83915489038BAE519
+#. SourceLocation:	/Game/Blueprints/Widgets/QuestLogWidgets/WBP_QuestEntry.WBP_QuestEntry_C:HighlightQuest [Script Bytecode]
+#: /Game/Blueprints/Widgets/QuestLogWidgets/WBP_QuestEntry.WBP_QuestEntry_C:HighlightQuest [Script Bytecode]
+msgctxt ",2E2BF2BC430961A83915489038BAE519"
+msgid "<hs>{0}</>"
+msgstr "<hs>{0}</>"
+
+#. Key:	387380064651B7E7438DE4A367DB8854
+#. SourceLocation:	/Game/Blueprints/Widgets/QuestLogWidgets/WBP_QuestEntry.WBP_QuestEntry_C:HighlightQuest [Script Bytecode]
+#: /Game/Blueprints/Widgets/QuestLogWidgets/WBP_QuestEntry.WBP_QuestEntry_C:HighlightQuest [Script Bytecode]
+msgctxt ",387380064651B7E7438DE4A367DB8854"
+msgid "<Default>{0}</>"
+msgstr "<Default>{0}</>"
+
+#. Key:	5B06867E4190A5A788F238A9984BEB45
+#. SourceLocation:	/Game/Blueprints/Widgets/QuestLogWidgets/WBP_QuestEntry.WBP_QuestEntry_C:HighlightQuest [Script Bytecode]
+#: /Game/Blueprints/Widgets/QuestLogWidgets/WBP_QuestEntry.WBP_QuestEntry_C:HighlightQuest [Script Bytecode]
+msgctxt ",5B06867E4190A5A788F238A9984BEB45"
+msgid "<h>{0}</>"
+msgstr "<h>{0}</>"
+
+#. Key:	AD739858443F8675D892DCBC4F8EAED2
+#. SourceLocation:	/Game/Blueprints/Widgets/QuestLogWidgets/WBP_QuestEntry.WBP_QuestEntry_C:HighlightQuest [Script Bytecode]
+#: /Game/Blueprints/Widgets/QuestLogWidgets/WBP_QuestEntry.WBP_QuestEntry_C:HighlightQuest [Script Bytecode]
+msgctxt ",AD739858443F8675D892DCBC4F8EAED2"
+msgid "<s>{0}</>"
+msgstr "<s>{0}</>"
+
+#. Key:	0D1747BA465AACE4391664B6A4386DAC
+#. SourceLocation:	/Game/Blueprints/Widgets/QuestLogWidgets/WBP_QuestEntry.WBP_QuestEntry_C:QuestState [Script Bytecode]
+#: /Game/Blueprints/Widgets/QuestLogWidgets/WBP_QuestEntry.WBP_QuestEntry_C:QuestState [Script Bytecode]
+msgctxt ",0D1747BA465AACE4391664B6A4386DAC"
+msgid "<s>{0}</>"
+msgstr "<s>{0}</>"
+
+#. Key:	C8BF5DFE44A6E09EC129149953A71070
+#. SourceLocation:	/Game/Blueprints/Widgets/QuestLogWidgets/WBP_QuestEntry.WBP_QuestEntry_C:QuestState [Script Bytecode]
+#: /Game/Blueprints/Widgets/QuestLogWidgets/WBP_QuestEntry.WBP_QuestEntry_C:QuestState [Script Bytecode]
+msgctxt ",C8BF5DFE44A6E09EC129149953A71070"
+msgid "<Default>{0}</>"
+msgstr "<Default>{0}</>"
+
+#. Key:	72474DB64C28176DC7A5FDAC2951788D
+#. SourceLocation:	/Game/Blueprints/Widgets/QuestLogWidgets/WBP_QuestStep.WBP_QuestStep_C:EntryState [Script Bytecode]
+#: /Game/Blueprints/Widgets/QuestLogWidgets/WBP_QuestStep.WBP_QuestStep_C:EntryState [Script Bytecode]
+msgctxt ",72474DB64C28176DC7A5FDAC2951788D"
+msgid "<Default>{0}</>"
+msgstr "<Default>{0}</>"
+
+#. Key:	E896EE1C44D312DFC4FE19B559A2B3D4
+#. SourceLocation:	/Game/Blueprints/Widgets/QuestLogWidgets/WBP_QuestStep.WBP_QuestStep_C:EntryState [Script Bytecode]
+#: /Game/Blueprints/Widgets/QuestLogWidgets/WBP_QuestStep.WBP_QuestStep_C:EntryState [Script Bytecode]
+msgctxt ",E896EE1C44D312DFC4FE19B559A2B3D4"
+msgid "<s>{0}</>"
+msgstr "<s>{0}</>"
+
+#. Key:	TextBlockDefaultValue
+#. SourceLocation:	/Game/Blueprints/Widgets/WBP_ExplorationPrompt.WBP_ExplorationPrompt_C:WidgetTree.PromptText.Text
+#: /Game/Blueprints/Widgets/WBP_ExplorationPrompt.WBP_ExplorationPrompt_C:WidgetTree.PromptText.Text
+msgctxt "UMG,TextBlockDefaultValue"
+msgid "Text Block"
+msgstr "Bloco de Texto"
+
+#. Key:	74558BF44FF7177D82366FA8304FEA75
+#. SourceLocation:	/Game/Blueprints/Widgets/WBP_LoadingScreenWidget.WBP_LoadingScreenWidget_C:WidgetTree.TextBlock_0.Text
+#: /Game/Blueprints/Widgets/WBP_LoadingScreenWidget.WBP_LoadingScreenWidget_C:WidgetTree.TextBlock_0.Text
+msgctxt ",74558BF44FF7177D82366FA8304FEA75"
+msgid "Loading..."
+msgstr "Carregando..."
+
+#. Key:	83FDB7F2424AAA3DDF44A18C0DEBFBA1
+#. SourceLocation:	/Game/Data/AbilityDefinition/AoE/Healing_Rain.Healing_Rain.DisplayName
+#: /Game/Data/AbilityDefinition/AoE/Healing_Rain.Healing_Rain.DisplayName
+msgctxt ",83FDB7F2424AAA3DDF44A18C0DEBFBA1"
+msgid "Healing Rain"
+msgstr "Chuva Curativa"
+
+#. Key:	D5B7556D4B705D5A5301868CA0FBB306
+#. SourceLocation:	/Game/Data/AbilityDefinition/AoE/Thunder.Thunder.DisplayName
+#: /Game/Data/AbilityDefinition/AoE/Thunder.Thunder.DisplayName
+msgctxt ",D5B7556D4B705D5A5301868CA0FBB306"
+msgid "Thunder"
+msgstr "Trovão"
+
+#. Key:	A0549F9549F43ECC884DA4A1187CB84E
+#. SourceLocation:	/Game/Data/AbilityDefinition/MeleeAttack/Bash.Bash.DisplayName
+#: /Game/Data/AbilityDefinition/MeleeAttack/Bash.Bash.DisplayName
+msgctxt ",A0549F9549F43ECC884DA4A1187CB84E"
+msgid "Bash"
+msgstr "Golpe"
+
+#. Key:	57A4023C48443631120D4EBECA53C0CE
+#. SourceLocation:	/Game/Data/AbilityDefinition/MeleeAttack/Punch.Punch.DisplayName
+#: /Game/Data/AbilityDefinition/MeleeAttack/Punch.Punch.DisplayName
+msgctxt ",57A4023C48443631120D4EBECA53C0CE"
+msgid "Punch"
+msgstr "Soco"
+
+#. Key:	D9B403594F34E9FBCD57E5AEE4C09366
+#. SourceLocation:	/Game/Data/AbilityDefinition/MeleeAttack/Slash.Slash.DisplayName
+#: /Game/Data/AbilityDefinition/MeleeAttack/Slash.Slash.DisplayName
+msgctxt ",D9B403594F34E9FBCD57E5AEE4C09366"
+msgid "Slash"
+msgstr "Corte"
+
+#. Key:	AD7749F8469938A4F71F94A5C7BB1781
+#. SourceLocation:	/Game/Data/AbilityDefinition/MoveAbility/Move_Simple.Move_Simple.DisplayName
+#: /Game/Data/AbilityDefinition/MoveAbility/Move_Simple.Move_Simple.DisplayName
+msgctxt ",AD7749F8469938A4F71F94A5C7BB1781"
+msgid "Move"
+msgstr "Mover"
+
+#. Key:	71E783A8411E168D0F451997D6E7CED4
+#. SourceLocation:	/Game/Data/AbilityDefinition/RangedAttack/AD_PowerUp.AD_PowerUp.DisplayName
+#: /Game/Data/AbilityDefinition/RangedAttack/AD_PowerUp.AD_PowerUp.DisplayName
+msgctxt ",71E783A8411E168D0F451997D6E7CED4"
+msgid "Power Up"
+msgstr "Fortalecer"
+
+#. Key:	797018F0413E10AD30302F8767BC44F4
+#. SourceLocation:	/Game/Data/AbilityDefinition/RangedAttack/Fireball.Fireball.DisplayName
+#: /Game/Data/AbilityDefinition/RangedAttack/Fireball.Fireball.DisplayName
+msgctxt ",797018F0413E10AD30302F8767BC44F4"
+msgid "Fireball"
+msgstr "Bola de Fogo"
+
+#. Key:	F9E4869B43A135CCC1C2AEB7809B0E14
+#. SourceLocation:	/Game/Data/AbilityDefinition/RangedAttack/Long_Shot.Long_Shot.DisplayName
+#: /Game/Data/AbilityDefinition/RangedAttack/Long_Shot.Long_Shot.DisplayName
+msgctxt ",F9E4869B43A135CCC1C2AEB7809B0E14"
+msgid "Long Shot"
+msgstr "Tiro Longo"
+
+#. Key:	322118CF4F6EEA9CE10214B2AE92A3DE
+#. SourceLocation:	/Game/Data/AbilityDefinition/RangedAttack/Poison_Dart.Poison_Dart.DisplayName
+#: /Game/Data/AbilityDefinition/RangedAttack/Poison_Dart.Poison_Dart.DisplayName
+msgctxt ",322118CF4F6EEA9CE10214B2AE92A3DE"
+msgid "Poison Dart"
+msgstr "Dardo Venenoso"
+
+#. Key:	C294257D4FE756FF035BF6BD5F9301E3
+#. SourceLocation:	/Game/Data/AbilityDefinition/RangedAttack/Short_Shot.Short_Shot.DisplayName
+#: /Game/Data/AbilityDefinition/RangedAttack/Short_Shot.Short_Shot.DisplayName
+msgctxt ",C294257D4FE756FF035BF6BD5F9301E3"
+msgid "Short Shot"
+msgstr "Tiro Curto"
+
+#. Key:	A0E9ED03400DAD96BCF09E95610B98DB
+#. SourceLocation:	/Game/Data/AbilityDefinition/SelfCast/AD_SelfConstitute.AD_SelfConstitute.DisplayName
+#: /Game/Data/AbilityDefinition/SelfCast/AD_SelfConstitute.AD_SelfConstitute.DisplayName
+msgctxt ",A0E9ED03400DAD96BCF09E95610B98DB"
+msgid "Self Constitute"
+msgstr "Autoconstituir"
+
+#. Key:	A4EC5631433798505B38398691E6C5EF
+#. SourceLocation:	/Game/Data/AbilityDefinition/SelfCast/AD_SelfHeal.AD_SelfHeal.DisplayName
+#: /Game/Data/AbilityDefinition/SelfCast/AD_SelfHeal.AD_SelfHeal.DisplayName
+msgctxt ",A4EC5631433798505B38398691E6C5EF"
+msgid "Self Heal"
+msgstr "Auto Cura"
+
+#. Key:	C63B5BA84F024523111ED0883FC1B867
+#. SourceLocation:	/Game/Data/AbilityDefinition/SelfCast/AD_SkipTurn.AD_SkipTurn.DisplayName
+#: /Game/Data/AbilityDefinition/SelfCast/AD_SkipTurn.AD_SkipTurn.DisplayName
+msgctxt ",C63B5BA84F024523111ED0883FC1B867"
+msgid "Skip Turn"
+msgstr "Pular Turno"
+
+#. Key:	1B191C74404001B1C9D945AB9266F16C
+#. SourceLocation:	/Game/Data/ContainerDefinition/CD_WoodenChest.CD_WoodenChest.DisplayName
+#: /Game/Data/ContainerDefinition/CD_WoodenChest.CD_WoodenChest.DisplayName
+msgctxt ",1B191C74404001B1C9D945AB9266F16C"
+msgid "Wooden Chest"
+msgstr "Baú de Madeira"
+
+#. Key:	6986AEBD4D1889798EAE9D8D05FEAB2B
+#. SourceLocation:	/Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(0).Nodes.Body
+#: /Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(0).Nodes.Body
+msgctxt ",6986AEBD4D1889798EAE9D8D05FEAB2B"
+msgid "Hello stranger, welcome to this crazy world. What can I do for you?"
+msgstr "Olá estranho, bem-vindo a este mundo louco. O que posso fazer por você?"
+
+#. Key:	9699266A442B7BB6130CA5A638F5790E
+#. SourceLocation:	/Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(0).Nodes.Choices(0).Choices.Label
+#: /Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(0).Nodes.Choices(0).Choices.Label
+msgctxt ",9699266A442B7BB6130CA5A638F5790E"
+msgid "Can you give me some directions?"
+msgstr "Pode me dar algumas direções?"
+
+#. Key:	942F9AC245F732382B170CA62C9387B8
+#. SourceLocation:	/Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(0).Nodes.Choices(1).Choices.Label
+#: /Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(0).Nodes.Choices(1).Choices.Label
+msgctxt ",942F9AC245F732382B170CA62C9387B8"
+msgid "Who are you and where am I?"
+msgstr "Quem é você e onde estou?"
+
+#. Key:	BEA3F2644BCAC8E065BA97BDCCE08CCE
+#. SourceLocation:	/Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(0).Nodes.Choices(2).Choices.Label
+#: /Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(0).Nodes.Choices(2).Choices.Label
+msgctxt ",BEA3F2644BCAC8E065BA97BDCCE08CCE"
+msgid "Nah, I'm just looking"
+msgstr "Não, só estou olhando"
+
+#. Key:	19F8E0F94AC18970EB98EB9A017135FE
+#. SourceLocation:	/Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(0).Nodes.Choices(3).Choices.Label
+#: /Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(0).Nodes.Choices(3).Choices.Label
+msgctxt ",19F8E0F94AC18970EB98EB9A017135FE"
+msgid "Say another word and I will split your spine in two"
+msgstr "Diga mais uma palavra e eu quebrarei sua coluna ao meio"
+
+#. Key:	8EDEB3A7465DCA4CDE464D94F779361B
+#. SourceLocation:	/Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(0).Nodes.Choices(3).Choices.LockedTooltip
+#: /Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(0).Nodes.Choices(3).Choices.LockedTooltip
+msgctxt ",8EDEB3A7465DCA4CDE464D94F779361B"
+msgid "Requires 1 Strength"
+msgstr "Requer 1 Força"
+
+#. Key:	DD59F68947D8C9CA2991AF89D3F3EDE2
+#. SourceLocation:	/Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(0).Nodes.SpeakerName
+#: /Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(0).Nodes.SpeakerName
+msgctxt ",DD59F68947D8C9CA2991AF89D3F3EDE2"
+msgid "Harrold"
+msgstr "Harrold"
+
+#. Key:	967B4EE94ED172835152CFB1F9D2F31F
+#. SourceLocation:	/Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(1).Nodes.Body
+#: /Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(1).Nodes.Body
+msgctxt ",967B4EE94ED172835152CFB1F9D2F31F"
+msgid "Sure, head north for some action, head south to go to the next test level. Or just keep exploring as you want."
+msgstr "Claro, siga ao norte para ação, ao sul para ir ao próximo nível de teste. Ou apenas continue explorando como quiser."
+
+#. Key:	675348894C925CD4C1E0E79D7BC579F7
+#. SourceLocation:	/Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(1).Nodes.Choices(0).Choices.Label
+#: /Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(1).Nodes.Choices(0).Choices.Label
+msgctxt ",675348894C925CD4C1E0E79D7BC579F7"
+msgid "Thanks a bunch!"
+msgstr "Muito obrigado!"
+
+#. Key:	0E2F09804EC151547768D8A8B402CB8E
+#. SourceLocation:	/Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(1).Nodes.Choices(1).Choices.Label
+#: /Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(1).Nodes.Choices(1).Choices.Label
+msgctxt ",0E2F09804EC151547768D8A8B402CB8E"
+msgid "I'd like to ask you something else..."
+msgstr "Gostaria de perguntar outra coisa..."
+
+#. Key:	28A3433A49BE7E15F34C5EB9CA8B7A1C
+#. SourceLocation:	/Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(1).Nodes.SpeakerName
+#: /Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(1).Nodes.SpeakerName
+msgctxt ",28A3433A49BE7E15F34C5EB9CA8B7A1C"
+msgid "Harrold"
+msgstr "Harrold"
+
+#. Key:	5D666B7341A1E9CCF3D85A8B216AD94D
+#. SourceLocation:	/Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(2).Nodes.Body
+#: /Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(2).Nodes.Body
+msgctxt ",5D666B7341A1E9CCF3D85A8B216AD94D"
+msgid "I'm Harrold and this is my territory. But my friend, I have no idea who you are."
+msgstr "Sou Harrold e este é meu território. Mas, meu amigo, não faço ideia de quem você é."
+
+#. Key:	6388351B482B4B456A731D85DD0BEAFB
+#. SourceLocation:	/Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(2).Nodes.Choices(0).Choices.Label
+#: /Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(2).Nodes.Choices(0).Choices.Label
+msgctxt ",6388351B482B4B456A731D85DD0BEAFB"
+msgid "Well, thanks for nothing I guess..."
+msgstr "Bem, obrigado por nada, eu acho..."
+
+#. Key:	43B8FBC14CFCF97E6CD608872342DD09
+#. SourceLocation:	/Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(2).Nodes.Choices(1).Choices.Label
+#: /Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(2).Nodes.Choices(1).Choices.Label
+msgctxt ",43B8FBC14CFCF97E6CD608872342DD09"
+msgid "I'd like to ask you something else..."
+msgstr "Gostaria de perguntar outra coisa..."
+
+#. Key:	E99A4A1B4F164BA2BC669D82CA5F8121
+#. SourceLocation:	/Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(2).Nodes.SpeakerName
+#: /Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(2).Nodes.SpeakerName
+msgctxt ",E99A4A1B4F164BA2BC669D82CA5F8121"
+msgid "Harrold"
+msgstr "Harrold"
+
+#. Key:	9F5755664861DDC76059B8B7C5876C60
+#. SourceLocation:	/Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(3).Nodes.Body
+#: /Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(3).Nodes.Body
+msgctxt ",9F5755664861DDC76059B8B7C5876C60"
+msgid ". . ."
+msgstr ". . ."
+
+#. Key:	3BB1DC8C433E4F036AA42E8BAA098680
+#. SourceLocation:	/Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(3).Nodes.Choices(0).Choices.Label
+#: /Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(3).Nodes.Choices(0).Choices.Label
+msgctxt ",3BB1DC8C433E4F036AA42E8BAA098680"
+msgid "Leave him alone"
+msgstr "Deixe-o em paz"
+
+#. Key:	2DF7FD2B4C6DBB02BC0CA8B57FDACC9B
+#. SourceLocation:	/Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(3).Nodes.SpeakerName
+#: /Game/Data/DialogueData/DD_NPC_Test.DD_NPC_Test.Nodes(3).Nodes.SpeakerName
+msgctxt ",2DF7FD2B4C6DBB02BC0CA8B57FDACC9B"
+msgid "Harrold"
+msgstr "Harrold"
+
+#. Key:	632BE04241FD7C0D57E53085C62C010F
+#. SourceLocation:	/Game/Data/DialogueData/DD_NPC_Test1.DD_NPC_Test1.Nodes(0).Nodes.Body
+#: /Game/Data/DialogueData/DD_NPC_Test1.DD_NPC_Test1.Nodes(0).Nodes.Body
+msgctxt ",632BE04241FD7C0D57E53085C62C010F"
+msgid "Get away, punk!"
+msgstr "Sai daqui, punk!"
+
+#. Key:	6D7116A84284017D48A9D3A0B7602686
+#. SourceLocation:	/Game/Data/DialogueData/DD_NPC_Test1.DD_NPC_Test1.Nodes(0).Nodes.Choices(0).Choices.Label
+#: /Game/Data/DialogueData/DD_NPC_Test1.DD_NPC_Test1.Nodes(0).Nodes.Choices(0).Choices.Label
+msgctxt ",6D7116A84284017D48A9D3A0B7602686"
+msgid "Easy there, hothead"
+msgstr "Calma aí, esquentadinho"
+
+#. Key:	E3A7E8C441D699AE9D8C0BA62DA7F82B
+#. SourceLocation:	/Game/Data/DialogueData/DD_NPC_Test1.DD_NPC_Test1.Nodes(0).Nodes.SpeakerName
+#: /Game/Data/DialogueData/DD_NPC_Test1.DD_NPC_Test1.Nodes(0).Nodes.SpeakerName
+msgctxt ",E3A7E8C441D699AE9D8C0BA62DA7F82B"
+msgid "Harrold"
+msgstr "Harrold"
+
+#. Key:	06636E564DC46DE483DDC88CAECD2235
+#. SourceLocation:	/Game/Data/ItemDefinition/Consumables/ID_HealingPotion.ID_HealingPotion.Description
+#: /Game/Data/ItemDefinition/Consumables/ID_HealingPotion.ID_HealingPotion.Description
+msgctxt ",06636E564DC46DE483DDC88CAECD2235"
+msgid "Heals 10 HP"
+msgstr "Cura 10 HP"
+
+#. Key:	FBD5AEE3498B835D7A195CA8F05D543A
+#. SourceLocation:	/Game/Data/ItemDefinition/Consumables/ID_HealingPotion.ID_HealingPotion.DisplayName
+#: /Game/Data/ItemDefinition/Consumables/ID_HealingPotion.ID_HealingPotion.DisplayName
+msgctxt ",FBD5AEE3498B835D7A195CA8F05D543A"
+msgid "Healing Potion"
+msgstr "Poção de Cura"
+
+#. Key:	E8308C0245E9635644A58994DDD1E9B4
+#. SourceLocation:	/Game/Data/ItemDefinition/Equipment/Weapons/ID_Sword.ID_Sword.Description
+#: /Game/Data/ItemDefinition/Equipment/Weapons/ID_Sword.ID_Sword.Description
+msgctxt ",E8308C0245E9635644A58994DDD1E9B4"
+msgid "Just a simple sword"
+msgstr "Apenas uma espada simples"
+
+#. Key:	3F48D27A4AE936AA1654C0BE6DC80E3A
+#. SourceLocation:	/Game/Data/ItemDefinition/Equipment/Weapons/ID_Sword.ID_Sword.DisplayName
+#: /Game/Data/ItemDefinition/Equipment/Weapons/ID_Sword.ID_Sword.DisplayName
+msgctxt ",3F48D27A4AE936AA1654C0BE6DC80E3A"
+msgid "Sword"
+msgstr "Espada"
+
+#. Key:	EDC0AFA948602B91EB2A4AA3E3855521
+#. SourceLocation:	/Game/Data/ItemDefinition/Equipment/Weapons/ID_Sword.ID_Sword.StatModifiers(0).StatModifiers.Label
+#: /Game/Data/ItemDefinition/Equipment/Weapons/ID_Sword.ID_Sword.StatModifiers(0).StatModifiers.Label
+msgctxt ",EDC0AFA948602B91EB2A4AA3E3855521"
+msgid "PhysicalAttack + 10"
+msgstr "PhysicalAttack + 10"
+
+#. Key:	BCBD8A094EF265E9015C2B90B8F649C3
+#. SourceLocation:	/Game/Data/ItemDefinition/ID_GoldCoin.ID_GoldCoin.DisplayName
+#: /Game/Data/ItemDefinition/ID_GoldCoin.ID_GoldCoin.DisplayName
+msgctxt ",BCBD8A094EF265E9015C2B90B8F649C3"
+msgid "Gold Coin"
+msgstr "Moeda de Ouro"
+
+#. Key:	0CA9DE99495C76B183520BA21C791975
+#. SourceLocation:	/Game/Data/ItemDefinition/Keys/ID_Key.ID_Key.DisplayName
+#: /Game/Data/ItemDefinition/Keys/ID_Key.ID_Key.DisplayName
+msgctxt ",0CA9DE99495C76B183520BA21C791975"
+msgid "Key"
+msgstr "Chave"
+
+#. Key:	C988123F4567D03AA17908BCAE52F55B
+#. SourceLocation:	/Game/Data/QuestData/QD_FirstQuest.QD_FirstQuest.Description
+#: /Game/Data/QuestData/QD_FirstQuest.QD_FirstQuest.Description
+msgctxt ",C988123F4567D03AA17908BCAE52F55B"
+msgid "Talk to Harrold to find out more about your world."
+msgstr "Fale com Harrold para descobrir mais sobre seu mundo."
+
+#. Key:	03F2791746BC258419C048A2E11D872D
+#. SourceLocation:	/Game/Data/QuestData/QD_FirstQuest.QD_FirstQuest.Steps(0).Steps.DiaryEntry
+#: /Game/Data/QuestData/QD_FirstQuest.QD_FirstQuest.Steps(0).Steps.DiaryEntry
+msgctxt ",03F2791746BC258419C048A2E11D872D"
+msgid "Have a simple talk with a man called Harrold"
+msgstr "Tenha uma conversa simples com um homem chamado Harrold"
+
+#. Key:	EA5B952C4FD64F3585E799886316D7AE
+#. SourceLocation:	/Game/Data/QuestData/QD_FirstQuest.QD_FirstQuest.Steps(1).Steps.DiaryEntry
+#: /Game/Data/QuestData/QD_FirstQuest.QD_FirstQuest.Steps(1).Steps.DiaryEntry
+msgctxt ",EA5B952C4FD64F3585E799886316D7AE"
+msgid "Intimidate Harrold and show him who's boss"
+msgstr "Intimide Harrold e mostre quem manda"
+
+#. Key:	3AAB527A4058E6BFF3F0248BF950C801
+#. SourceLocation:	/Game/Data/QuestData/QD_FirstQuest.QD_FirstQuest.Title
+#: /Game/Data/QuestData/QD_FirstQuest.QD_FirstQuest.Title
+msgctxt ",3AAB527A4058E6BFF3F0248BF950C801"
+msgid "Talk to Harrold"
+msgstr "Fale com Harrold"
+
+#. Key:	7A36350A4422F678CB8E6BA11B524A79
+#. SourceLocation:	/Game/Data/QuestData/QD_SecondQuest.QD_SecondQuest.Description
+#: /Game/Data/QuestData/QD_SecondQuest.QD_SecondQuest.Description
+msgctxt ",7A36350A4422F678CB8E6BA11B524A79"
+msgid "Show the world who you are. Start a fight and give someone a good beating"
+msgstr "Mostre ao mundo quem você é. Comece uma briga e dê uma boa surra em alguém"
+
+#. Key:	E92A2EC64B0C4CBFD9DF7BBE6971C112
+#. SourceLocation:	/Game/Data/QuestData/QD_SecondQuest.QD_SecondQuest.Steps(0).Steps.DiaryEntry
+#: /Game/Data/QuestData/QD_SecondQuest.QD_SecondQuest.Steps(0).Steps.DiaryEntry
+msgctxt ",E92A2EC64B0C4CBFD9DF7BBE6971C112"
+msgid "Start a fight"
+msgstr "Começar uma luta"
+
+#. Key:	222170CA4352139C6EA70581A2CB30B0
+#. SourceLocation:	/Game/Data/QuestData/QD_SecondQuest.QD_SecondQuest.Steps(1).Steps.DiaryEntry
+#: /Game/Data/QuestData/QD_SecondQuest.QD_SecondQuest.Steps(1).Steps.DiaryEntry
+msgctxt ",222170CA4352139C6EA70581A2CB30B0"
+msgid "Win a fight"
+msgstr "Vença uma luta"
+
+#. Key:	2983FB924A83B1B2157B28B13DABFB78
+#. SourceLocation:	/Game/Data/QuestData/QD_SecondQuest.QD_SecondQuest.Title
+#: /Game/Data/QuestData/QD_SecondQuest.QD_SecondQuest.Title
+msgctxt ",2983FB924A83B1B2157B28B13DABFB78"
+msgid "Start a Fight"
+msgstr "Começar uma Luta"
+
+#. Key:	ECEF18F04B009D790E761A8E786EC020
+#. SourceLocation:	/Game/Data/StatusDefinition/Buffs/SD_Constitution_Up.SD_Constitution_Up.Description
+#: /Game/Data/StatusDefinition/Buffs/SD_Constitution_Up.SD_Constitution_Up.Description
+msgctxt ",ECEF18F04B009D790E761A8E786EC020"
+msgid "Increases Constitution temporarily"
+msgstr "Aumenta Constituição temporariamente"
+
+#. Key:	6B2FA6404AA79FD4D15D02866C7E20E8
+#. SourceLocation:	/Game/Data/StatusDefinition/Buffs/SD_Constitution_Up.SD_Constitution_Up.DisplayLabel
+#: /Game/Data/StatusDefinition/Buffs/SD_Constitution_Up.SD_Constitution_Up.DisplayLabel
+msgctxt ",6B2FA6404AA79FD4D15D02866C7E20E8"
+msgid "CON Up"
+msgstr "CON Aumentado"
+
+#. Key:	E6B9DCE8493D473570CFFD828A9EA590
+#. SourceLocation:	/Game/Data/StatusDefinition/Buffs/SD_Constitution_Up.SD_Constitution_Up.DisplayName
+#: /Game/Data/StatusDefinition/Buffs/SD_Constitution_Up.SD_Constitution_Up.DisplayName
+msgctxt ",E6B9DCE8493D473570CFFD828A9EA590"
+msgid "Constitution Up"
+msgstr "Constituição Up"
+
+#. Key:	AA7CF9494289625BEEE475B39371A49C
+#. SourceLocation:	/Game/Data/StatusDefinition/Buffs/SD_Cure.SD_Cure.Description
+#: /Game/Data/StatusDefinition/Buffs/SD_Cure.SD_Cure.Description
+msgctxt ",AA7CF9494289625BEEE475B39371A49C"
+msgid "Cures Poison and Bleeding"
+msgstr "Cura Veneno e Sangramento"
+
+#. Key:	069F4D1F40072F3E97C31995E6E30AD2
+#. SourceLocation:	/Game/Data/StatusDefinition/Buffs/SD_Cure.SD_Cure.DisplayLabel
+#: /Game/Data/StatusDefinition/Buffs/SD_Cure.SD_Cure.DisplayLabel
+msgctxt ",069F4D1F40072F3E97C31995E6E30AD2"
+msgid "Cure"
+msgstr "Curar"
+
+#. Key:	3A3CB09E44F57B37A8DD539EB3E23B9D
+#. SourceLocation:	/Game/Data/StatusDefinition/Buffs/SD_Cure.SD_Cure.DisplayName
+#: /Game/Data/StatusDefinition/Buffs/SD_Cure.SD_Cure.DisplayName
+msgctxt ",3A3CB09E44F57B37A8DD539EB3E23B9D"
+msgid "Cure"
+msgstr "Curar"
+
+#. Key:	0A83E121426DAA1984A940AAC9D5C36F
+#. SourceLocation:	/Game/Data/StatusDefinition/Buffs/SD_Regen.SD_Regen.Description
+#: /Game/Data/StatusDefinition/Buffs/SD_Regen.SD_Regen.Description
+msgctxt ",0A83E121426DAA1984A940AAC9D5C36F"
+msgid "Heals for 25% of target max HP each turn for 3 turns"
+msgstr "Cura 25% do HP máximo do alvo a cada turno por 3 turnos"
+
+#. Key:	8E4EA74546F34AA92A64A3A4F956E419
+#. SourceLocation:	/Game/Data/StatusDefinition/Buffs/SD_Regen.SD_Regen.DisplayLabel
+#: /Game/Data/StatusDefinition/Buffs/SD_Regen.SD_Regen.DisplayLabel
+msgctxt ",8E4EA74546F34AA92A64A3A4F956E419"
+msgid "Regen"
+msgstr "Regeneração"
+
+#. Key:	7AB84C50485CDB108ADFA484C1510630
+#. SourceLocation:	/Game/Data/StatusDefinition/Buffs/SD_Regen.SD_Regen.DisplayName
+#: /Game/Data/StatusDefinition/Buffs/SD_Regen.SD_Regen.DisplayName
+msgctxt ",7AB84C50485CDB108ADFA484C1510630"
+msgid "Regen"
+msgstr "Regeneração"
+
+#. Key:	187EB50F4761ECF77649EA944E3859FD
+#. SourceLocation:	/Game/Data/StatusDefinition/Buffs/SD_Respite.SD_Respite.Description
+#: /Game/Data/StatusDefinition/Buffs/SD_Respite.SD_Respite.Description
+msgctxt ",187EB50F4761ECF77649EA944E3859FD"
+msgid "Grants 2 adicional action points for this turn"
+msgstr "Concede 2 pontos de ação adicionais neste turno"
+
+#. Key:	F8A5EEB04DF528B99D929A9E7F5FF80B
+#. SourceLocation:	/Game/Data/StatusDefinition/Buffs/SD_Respite.SD_Respite.DisplayLabel
+#: /Game/Data/StatusDefinition/Buffs/SD_Respite.SD_Respite.DisplayLabel
+msgctxt ",F8A5EEB04DF528B99D929A9E7F5FF80B"
+msgid "Respite"
+msgstr "Respite"
+
+#. Key:	4DC4B31F406B659EF6982BB057191087
+#. SourceLocation:	/Game/Data/StatusDefinition/Buffs/SD_Respite.SD_Respite.DisplayName
+#: /Game/Data/StatusDefinition/Buffs/SD_Respite.SD_Respite.DisplayName
+msgctxt ",4DC4B31F406B659EF6982BB057191087"
+msgid "Respite"
+msgstr "Respite"
+
+#. Key:	C9DA832843F361A786AF9DBC1F0F0D43
+#. SourceLocation:	/Game/Data/StatusDefinition/Buffs/SD_Shield.SD_Shield.Description
+#: /Game/Data/StatusDefinition/Buffs/SD_Shield.SD_Shield.Description
+msgctxt ",C9DA832843F361A786AF9DBC1F0F0D43"
+msgid "Grants a shield that scales with the caster magical power"
+msgstr "Concede um escudo que escala com o poder mágico do conjurador"
+
+#. Key:	133F8C0349B6B1D56F797BA5020CF733
+#. SourceLocation:	/Game/Data/StatusDefinition/Buffs/SD_Shield.SD_Shield.DisplayLabel
+#: /Game/Data/StatusDefinition/Buffs/SD_Shield.SD_Shield.DisplayLabel
+msgctxt ",133F8C0349B6B1D56F797BA5020CF733"
+msgid "Shield"
+msgstr "Escudo"
+
+#. Key:	CDD6152540DDC365FA0260880657CF6F
+#. SourceLocation:	/Game/Data/StatusDefinition/Buffs/SD_Shield.SD_Shield.DisplayName
+#: /Game/Data/StatusDefinition/Buffs/SD_Shield.SD_Shield.DisplayName
+msgctxt ",CDD6152540DDC365FA0260880657CF6F"
+msgid "Shield"
+msgstr "Escudo"
+
+#. Key:	968071914A0F0A7A1DD323B6F6E75910
+#. SourceLocation:	/Game/Data/StatusDefinition/Buffs/SD_Strength_Up.SD_Strength_Up.Description
+#: /Game/Data/StatusDefinition/Buffs/SD_Strength_Up.SD_Strength_Up.Description
+msgctxt ",968071914A0F0A7A1DD323B6F6E75910"
+msgid "Increases Strength temporarily"
+msgstr "Aumenta Força temporariamente"
+
+#. Key:	2F00A699418766E6CEF65791FB4F76F8
+#. SourceLocation:	/Game/Data/StatusDefinition/Buffs/SD_Strength_Up.SD_Strength_Up.DisplayLabel
+#: /Game/Data/StatusDefinition/Buffs/SD_Strength_Up.SD_Strength_Up.DisplayLabel
+msgctxt ",2F00A699418766E6CEF65791FB4F76F8"
+msgid "STR Up"
+msgstr "FOR Up"
+
+#. Key:	81D302FA4D17E3D1FEFA68B4CD21BE99
+#. SourceLocation:	/Game/Data/StatusDefinition/Buffs/SD_Strength_Up.SD_Strength_Up.DisplayName
+#: /Game/Data/StatusDefinition/Buffs/SD_Strength_Up.SD_Strength_Up.DisplayName
+msgctxt ",81D302FA4D17E3D1FEFA68B4CD21BE99"
+msgid "Strength Up"
+msgstr "Força Up"
+
+#. Key:	39D042B44E6AA478C7293F92BA0E58B5
+#. SourceLocation:	/Game/Data/StatusDefinition/Debuffs/SD_Bleed.SD_Bleed.DisplayName
+#: /Game/Data/StatusDefinition/Debuffs/SD_Bleed.SD_Bleed.DisplayName
+msgctxt ",39D042B44E6AA478C7293F92BA0E58B5"
+msgid "Bleed"
+msgstr "Sangramento"
+
+#. Key:	28BD81B64AE284B923C81481059948A6
+#. SourceLocation:	/Game/Data/StatusDefinition/Debuffs/SD_Charm.SD_Charm.DisplayName
+#: /Game/Data/StatusDefinition/Debuffs/SD_Charm.SD_Charm.DisplayName
+msgctxt ",28BD81B64AE284B923C81481059948A6"
+msgid "Charm"
+msgstr "Encanto"
+
+#. Key:	24C759E6473F1E59C9B557849BC42778
+#. SourceLocation:	/Game/Data/StatusDefinition/Debuffs/SD_DrainActionPoints.SD_DrainActionPoints.DisplayLabel
+#: /Game/Data/StatusDefinition/Debuffs/SD_DrainActionPoints.SD_DrainActionPoints.DisplayLabel
+msgctxt ",24C759E6473F1E59C9B557849BC42778"
+msgid "AP Drained"
+msgstr "PA Esgotado"
+
+#. Key:	F1EBB8BF4CE87ED060817B8F6FC151E5
+#. SourceLocation:	/Game/Data/StatusDefinition/Debuffs/SD_DrainActionPoints.SD_DrainActionPoints.DisplayName
+#: /Game/Data/StatusDefinition/Debuffs/SD_DrainActionPoints.SD_DrainActionPoints.DisplayName
+msgctxt ",F1EBB8BF4CE87ED060817B8F6FC151E5"
+msgid "AP Drained"
+msgstr "PA Esgotado"
+
+#. Key:	74D755504861B63D4957248358B14C29
+#. SourceLocation:	/Game/Data/StatusDefinition/Debuffs/SD_Overweight.SD_Overweight.DisplayLabel
+#: /Game/Data/StatusDefinition/Debuffs/SD_Overweight.SD_Overweight.DisplayLabel
+msgctxt ",74D755504861B63D4957248358B14C29"
+msgid "Overweight"
+msgstr "Sobrepeso"
+
+#. Key:	0743D58A4FD0837D779F98BEC06BD9AB
+#. SourceLocation:	/Game/Data/StatusDefinition/Debuffs/SD_Overweight.SD_Overweight.DisplayName
+#: /Game/Data/StatusDefinition/Debuffs/SD_Overweight.SD_Overweight.DisplayName
+msgctxt ",0743D58A4FD0837D779F98BEC06BD9AB"
+msgid "Overweight"
+msgstr "Sobrepeso"
+
+#. Key:	C05084C24D136AABA6BF8C9ADE561BE7
+#. SourceLocation:	/Game/Data/StatusDefinition/Debuffs/SD_Poison.SD_Poison.DisplayLabel
+#: /Game/Data/StatusDefinition/Debuffs/SD_Poison.SD_Poison.DisplayLabel
+msgctxt ",C05084C24D136AABA6BF8C9ADE561BE7"
+msgid "Poison"
+msgstr "Veneno"
+
+#. Key:	A201FE8449FB74A0849E3BAA0DEA0925
+#. SourceLocation:	/Game/Data/StatusDefinition/Debuffs/SD_Poison.SD_Poison.DisplayName
+#: /Game/Data/StatusDefinition/Debuffs/SD_Poison.SD_Poison.DisplayName
+msgctxt ",A201FE8449FB74A0849E3BAA0DEA0925"
+msgid "Poison"
+msgstr "Veneno"
+
+#. Key:	229D5897494DF6573048339D805A2EF9
+#. SourceLocation:	/Game/Data/StatusDefinition/Debuffs/SD_Root.SD_Root.DisplayLabel
+#: /Game/Data/StatusDefinition/Debuffs/SD_Root.SD_Root.DisplayLabel
+msgctxt ",229D5897494DF6573048339D805A2EF9"
+msgid "Root"
+msgstr "Enraizar"
+
+#. Key:	E8CADB76428CBD400C7C2091D069021E
+#. SourceLocation:	/Game/Data/StatusDefinition/Debuffs/SD_Root.SD_Root.DisplayName
+#: /Game/Data/StatusDefinition/Debuffs/SD_Root.SD_Root.DisplayName
+msgctxt ",E8CADB76428CBD400C7C2091D069021E"
+msgid "Root"
+msgstr "Enraizar"
+
+#. Key:	CFE2855A4CE89F6CEC152DAA25283B99
+#. SourceLocation:	/Game/Data/StatusDefinition/Debuffs/SD_Silence.SD_Silence.DisplayLabel
+#: /Game/Data/StatusDefinition/Debuffs/SD_Silence.SD_Silence.DisplayLabel
+msgctxt ",CFE2855A4CE89F6CEC152DAA25283B99"
+msgid "Silence"
+msgstr "Silêncio"
+
+#. Key:	4DE8F92747B23E0A78A4B1AF36DFAF2A
+#. SourceLocation:	/Game/Data/StatusDefinition/Debuffs/SD_Silence.SD_Silence.DisplayName
+#: /Game/Data/StatusDefinition/Debuffs/SD_Silence.SD_Silence.DisplayName
+msgctxt ",4DE8F92747B23E0A78A4B1AF36DFAF2A"
+msgid "Silence"
+msgstr "Silêncio"
+
+#. Key:	B58DA6FB430D591D34012AA339C0DDB7
+#. SourceLocation:	/Game/Data/StatusDefinition/Debuffs/SD_Slow.SD_Slow.DisplayLabel
+#: /Game/Data/StatusDefinition/Debuffs/SD_Slow.SD_Slow.DisplayLabel
+msgctxt ",B58DA6FB430D591D34012AA339C0DDB7"
+msgid "Slow"
+msgstr "Lentidão"
+
+#. Key:	5BA04B8542530A64AF9BA1A9EB971E58
+#. SourceLocation:	/Game/Data/StatusDefinition/Debuffs/SD_Slow.SD_Slow.DisplayName
+#: /Game/Data/StatusDefinition/Debuffs/SD_Slow.SD_Slow.DisplayName
+msgctxt ",5BA04B8542530A64AF9BA1A9EB971E58"
+msgid "Slow"
+msgstr "Lentidão"
+
+#. Key:	9660402F43EB09FF6B32FCA7B5B06CF6
+#. SourceLocation:	/Game/Data/StatusDefinition/Debuffs/SD_Stun.SD_Stun.DisplayLabel
+#: /Game/Data/StatusDefinition/Debuffs/SD_Stun.SD_Stun.DisplayLabel
+msgctxt ",9660402F43EB09FF6B32FCA7B5B06CF6"
+msgid "Stun"
+msgstr "Atordoar"
+
+#. Key:	6B2E672E4A44F180C4997DA32E487CA1
+#. SourceLocation:	/Game/Data/StatusDefinition/Debuffs/SD_Stun.SD_Stun.DisplayName
+#: /Game/Data/StatusDefinition/Debuffs/SD_Stun.SD_Stun.DisplayName
+msgctxt ",6B2E672E4A44F180C4997DA32E487CA1"
+msgid "Stun"
+msgstr "Atordoar"
+
+#. Key:	988C23BB422DCA45A9FC92AA6E9CA399
+#. SourceLocation:	/Game/Data/UnitDefinition/EnemyUnitDefinition/UD_Creeper.UD_Creeper.DisplayName
+#: /Game/Data/UnitDefinition/EnemyUnitDefinition/UD_Creeper.UD_Creeper.DisplayName
+msgctxt ",988C23BB422DCA45A9FC92AA6E9CA399"
+msgid "Creeper"
+msgstr "Creeper"
+
+#. Key:	35509B714631B29FB718849C58F8FE47
+#. SourceLocation:	/Game/Data/UnitDefinition/EnemyUnitDefinition/UD_Galgan.UD_Galgan.DisplayName
+#: /Game/Data/UnitDefinition/EnemyUnitDefinition/UD_Galgan.UD_Galgan.DisplayName
+msgctxt ",35509B714631B29FB718849C58F8FE47"
+msgid "Galgan"
+msgstr "Galgan"
+
+#. Key:	DD82E7AA4C166F7657CDB88828347971
+#. SourceLocation:	/Game/Data/UnitDefinition/EnemyUnitDefinition/UD_Skulltaur.UD_Skulltaur.DisplayName
+#: /Game/Data/UnitDefinition/EnemyUnitDefinition/UD_Skulltaur.UD_Skulltaur.DisplayName
+msgctxt ",DD82E7AA4C166F7657CDB88828347971"
+msgid "Skulltaur"
+msgstr "Skulltaur"
+
+#. Key:	17D294A8435F519AB9B363B81C5AAB16
+#. SourceLocation:	/Game/Data/UnitDefinition/PlayerUnitDefinition/UD_Defiled.UD_Defiled.ClassName
+#: /Game/Data/UnitDefinition/PlayerUnitDefinition/UD_Defiled.UD_Defiled.ClassName
+msgctxt ",17D294A8435F519AB9B363B81C5AAB16"
+msgid "Defiled"
+msgstr "Defiled"
+
+#. Key:	0E711D2745680D6353E8819AB2138F80
+#. SourceLocation:	/Game/Data/UnitDefinition/PlayerUnitDefinition/UD_Defiled.UD_Defiled.DisplayName
+#: /Game/Data/UnitDefinition/PlayerUnitDefinition/UD_Defiled.UD_Defiled.DisplayName
+msgctxt ",0E711D2745680D6353E8819AB2138F80"
+msgid "Garret"
+msgstr "Garret"
+
+#. Key:	660281A64025F48B4847968BAB25D4A9
+#. SourceLocation:	/Game/Data/UnitDefinition/PlayerUnitDefinition/UD_PlaneWalker.UD_PlaneWalker.ClassName
+#: /Game/Data/UnitDefinition/PlayerUnitDefinition/UD_PlaneWalker.UD_PlaneWalker.ClassName
+msgctxt ",660281A64025F48B4847968BAB25D4A9"
+msgid "Planewalker"
+msgstr "Planewalker"
+
+#. Key:	23B6682C451C14CB5A48C6A39C1E4FE3
+#. SourceLocation:	/Game/Data/UnitDefinition/PlayerUnitDefinition/UD_PlaneWalker.UD_PlaneWalker.DisplayName
+#: /Game/Data/UnitDefinition/PlayerUnitDefinition/UD_PlaneWalker.UD_PlaneWalker.DisplayName
+msgctxt ",23B6682C451C14CB5A48C6A39C1E4FE3"
+msgid "Kaheen"
+msgstr "Kaheen"
+
+#. Key:	BF54461048EC65E819B92690C74768D8
+#. SourceLocation:	/Game/Data/UnitDefinition/PlayerUnitDefinition/UD_TorturedSavage.UD_TorturedSavage.ClassName
+#: /Game/Data/UnitDefinition/PlayerUnitDefinition/UD_TorturedSavage.UD_TorturedSavage.ClassName
+msgctxt ",BF54461048EC65E819B92690C74768D8"
+msgid "Tortured Savage"
+msgstr "Tortured Savage"
+
+#. Key:	2EFBF344472187A376FEA4B472AB0FAC
+#. SourceLocation:	/Game/Data/UnitDefinition/PlayerUnitDefinition/UD_TorturedSavage.UD_TorturedSavage.DisplayName
+#: /Game/Data/UnitDefinition/PlayerUnitDefinition/UD_TorturedSavage.UD_TorturedSavage.DisplayName
+msgctxt ",2EFBF344472187A376FEA4B472AB0FAC"
+msgid "Thorus"
+msgstr "Thorus"
+
+#. Key:	5DC2C8DE496BF37B9ABEA6855C8C4763
+#. SourceLocation:	/Game/Data/UnitDefinition/PlayerUnitDefinition/UD_Towerborn.UD_Towerborn.ClassName
+#: /Game/Data/UnitDefinition/PlayerUnitDefinition/UD_Towerborn.UD_Towerborn.ClassName
+msgctxt ",5DC2C8DE496BF37B9ABEA6855C8C4763"
+msgid "Towerborn"
+msgstr "Towerborn"
+
+#. Key:	9C3253F14A29044DFD3D369E69E8B082
+#. SourceLocation:	/Game/Data/UnitDefinition/PlayerUnitDefinition/UD_Towerborn.UD_Towerborn.DisplayName
+#: /Game/Data/UnitDefinition/PlayerUnitDefinition/UD_Towerborn.UD_Towerborn.DisplayName
+msgctxt ",9C3253F14A29044DFD3D369E69E8B082"
+msgid "Snake"
+msgstr "Snake"
+
+#. Key:	789A78B04DD6DA99266176A702F16F32
+#. SourceLocation:	/Game/LevelPrototyping/Materials/M_PrototypeGrid.M_PrototypeGrid:MaterialExpressionVectorParameter_7.ChannelNames.G
+#: /Game/LevelPrototyping/Materials/M_PrototypeGrid.M_PrototypeGrid:MaterialExpressionVectorParameter_7.ChannelNames.G
+msgctxt ",789A78B04DD6DA99266176A702F16F32"
+msgid "Thickness"
+msgstr "Espessura"
+
+#. Key:	B0200BCD4D80FEF66090908737FCD942
+#. SourceLocation:	/Game/LevelPrototyping/Materials/M_PrototypeGrid.M_PrototypeGrid:MaterialExpressionVectorParameter_7.ChannelNames.R
+#: /Game/LevelPrototyping/Materials/M_PrototypeGrid.M_PrototypeGrid:MaterialExpressionVectorParameter_7.ChannelNames.R
+msgctxt ",B0200BCD4D80FEF66090908737FCD942"
+msgid "Position"
+msgstr "Posição"
+
+#. Key:	MissingDefinitionFallback
+#. SourceLocation:	Source/Nevergone/Private/Actors/ContainerActor.cpp(275)
+#: Source/Nevergone/Private/Actors/ContainerActor.cpp(275)
+msgctxt "Container,MissingDefinitionFallback"
+msgid "Container"
+msgstr "Recipiente"
+
+#. Key:	FallbackLockedPrompt
+#. SourceLocation:	Source/Nevergone/Private/Actors/Door.cpp(235)
+#: Source/Nevergone/Private/Actors/Door.cpp(235)
+msgctxt "Door,FallbackLockedPrompt"
+msgid "It's locked."
+msgstr "Está trancado."
+
+#. Key:	DefaultLockedPrompt
+#. SourceLocation:	Source/Nevergone/Private/Actors/Door.cpp(86)
+#: Source/Nevergone/Private/Actors/Door.cpp(86)
+msgctxt "Door,DefaultLockedPrompt"
+msgid "It's locked."
+msgstr "Está trancado."
+
+#. Key:	HealAmountFormat
+#. SourceLocation:	Source/Nevergone/Private/GameMode/Combat/CombatEventBus.cpp(119)
+#: Source/Nevergone/Private/GameMode/Combat/CombatEventBus.cpp(119)
+msgctxt "CombatEventBus,HealAmountFormat"
+msgid "+{0}"
+msgstr "+{0}"
+
+#. Key:	AllyCountFormat
+#. SourceLocation:	Source/Nevergone/Private/Widgets/Combat/BattlePreparationWidget.cpp(100)
+#: Source/Nevergone/Private/Widgets/Combat/BattlePreparationWidget.cpp(100)
+msgctxt "BattlePreparation,AllyCountFormat"
+msgid "Your Party: {Count}"
+msgstr "Seu Grupo: {Count}"
+
+#. Key:	UnitRowFormat
+#. SourceLocation:	Source/Nevergone/Private/Widgets/Combat/BattlePreparationWidget.cpp(155)
+#: Source/Nevergone/Private/Widgets/Combat/BattlePreparationWidget.cpp(155)
+msgctxt "BattlePreparation,UnitRowFormat"
+msgid "{Name}  Lv.{Level}"
+msgstr "{Name}  Lv.{Level}"
+
+#. Key:	EnemiesCountFormat
+#. SourceLocation:	Source/Nevergone/Private/Widgets/Combat/BattlePreparationWidget.cpp(60)
+#: Source/Nevergone/Private/Widgets/Combat/BattlePreparationWidget.cpp(60)
+msgctxt "BattlePreparation,EnemiesCountFormat"
+msgid "Enemies: {Count}"
+msgstr "Inimigos: {Count}"
+
+#. Key:	UnknownUnitFallback
+#. SourceLocation:	Source/Nevergone/Private/Widgets/Combat/BattlePreparationWidget.cpp(74)
+#: Source/Nevergone/Private/Widgets/Combat/BattlePreparationWidget.cpp(74)
+msgctxt "BattlePreparation,UnknownUnitFallback"
+msgid "Unknown"
+msgstr "Desconhecido"
+
+#. Key:	VictoryHeader
+#. SourceLocation:	Source/Nevergone/Private/Widgets/Combat/BattleResultsWidget.cpp(36)
+#: Source/Nevergone/Private/Widgets/Combat/BattleResultsWidget.cpp(36)
+msgctxt "BattleResults,VictoryHeader"
+msgid "VICTORY"
+msgstr "VITÓRIA"
+
+#. Key:	DefeatHeader
+#. SourceLocation:	Source/Nevergone/Private/Widgets/Combat/BattleResultsWidget.cpp(37)
+#: Source/Nevergone/Private/Widgets/Combat/BattleResultsWidget.cpp(37)
+msgctxt "BattleResults,DefeatHeader"
+msgid "DEFEAT"
+msgstr "DERROTA"
+
+#. Key:	SurvivingAlliesFormat
+#. SourceLocation:	Source/Nevergone/Private/Widgets/Combat/BattleResultsWidget.cpp(47)
+#: Source/Nevergone/Private/Widgets/Combat/BattleResultsWidget.cpp(47)
+msgctxt "BattleResults,SurvivingAlliesFormat"
+msgid "Surviving Allies: {Count}"
+msgstr "Aliados Sobreviventes: {Count}"
+
+#. Key:	EnemiesKilledFormat
+#. SourceLocation:	Source/Nevergone/Private/Widgets/Combat/BattleResultsWidget.cpp(54)
+#: Source/Nevergone/Private/Widgets/Combat/BattleResultsWidget.cpp(54)
+msgctxt "BattleResults,EnemiesKilledFormat"
+msgid "Enemies Killed: {Count}"
+msgstr "Inimigos Mortos: {Count}"
+
+#. Key:	PlayerTurnLabel
+#. SourceLocation:	Source/Nevergone/Private/Widgets/Combat/TurnIndicatorWidget.cpp(31)
+#: Source/Nevergone/Private/Widgets/Combat/TurnIndicatorWidget.cpp(31)
+msgctxt "TurnIndicator,PlayerTurnLabel"
+msgid "PLAYER TURN"
+msgstr "TURNO DO JOGADOR"
+
+#. Key:	EnemyTurnLabel
+#. SourceLocation:	Source/Nevergone/Private/Widgets/Combat/TurnIndicatorWidget.cpp(32)
+#: Source/Nevergone/Private/Widgets/Combat/TurnIndicatorWidget.cpp(32)
+msgctxt "TurnIndicator,EnemyTurnLabel"
+msgid "ENEMY TURN"
+msgstr "TURNO INIMIGO"
+
+#. Key:	HpFormat
+#. SourceLocation:	Source/Nevergone/Private/Widgets/Combat/UnitHPBarWidget.cpp(176)
+#: Source/Nevergone/Private/Widgets/Combat/UnitHPBarWidget.cpp(176)
+msgctxt "UnitHPBar,HpFormat"
+msgid "{Current} / {Max}"
+msgstr "{Current} / {Max}"
+
+#. Key:	UnknownUnitFallback
+#. SourceLocation:	Source/Nevergone/Private/Widgets/Party/PartyMemberEntryWidget.cpp(19)
+#: Source/Nevergone/Private/Widgets/Party/PartyMemberEntryWidget.cpp(19)
+msgctxt "PartyMemberEntry,UnknownUnitFallback"
+msgid "Unknown"
+msgstr "Desconhecido"
+
+#. Key:	UnknownClassFallback
+#. SourceLocation:	Source/Nevergone/Private/Widgets/Party/PartyMemberEntryWidget.cpp(20)
+#: Source/Nevergone/Private/Widgets/Party/PartyMemberEntryWidget.cpp(20)
+msgctxt "PartyMemberEntry,UnknownClassFallback"
+msgid "—"
+msgstr "—"
+
+#. Key:	PlayerInventoryLabel
+#. SourceLocation:	Source/Nevergone/Private/World/InventorySubsystem.cpp(821)
+#: Source/Nevergone/Private/World/InventorySubsystem.cpp(821)
+msgctxt "Inventory,PlayerInventoryLabel"
+msgid "Inventory"
+msgstr "Inventário"
+

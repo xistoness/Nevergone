@@ -60,3 +60,14 @@ UE_DEFINE_GAMEPLAY_TAG(TAG_State_KNW_Up,			"State.KNW.Up")
 UE_DEFINE_GAMEPLAY_TAG(TAG_State_TEC_Up,			"State.TEC.Up")
 UE_DEFINE_GAMEPLAY_TAG(TAG_State_EVS_Up,			"State.EVS.Up")
 UE_DEFINE_GAMEPLAY_TAG(TAG_State_SPD_Up,			"State.SPD.Up")
+
+// Noise categories
+UE_DEFINE_GAMEPLAY_TAG(TAG_Noise_Footstep,			"Noise.Footstep")
+UE_DEFINE_GAMEPLAY_TAG(TAG_Noise_Door,				"Noise.Door")
+UE_DEFINE_GAMEPLAY_TAG(TAG_Noise_PropFall,			"Noise.PropFall")
+UE_DEFINE_GAMEPLAY_TAG(TAG_Noise_Distraction,		"Noise.Distraction")
+UE_DEFINE_GAMEPLAY_TAG(TAG_Noise_Panting,			"Noise.Panting")
+
+// Item roles
+UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Safeguard,			"Item.Safeguard")
+UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Distraction,		"Item.Distraction")

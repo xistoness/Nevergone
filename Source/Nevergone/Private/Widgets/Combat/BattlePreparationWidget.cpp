@@ -12,6 +12,9 @@
 #include "GameMode/BattlePreparationContext.h"
 #include "Types/BattleTypes.h"
 
+// Localization namespace for all gathered strings in this translation unit.
+#define LOCTEXT_NAMESPACE "BattlePreparation"
+
 // ---------------------------------------------------------------------------
 // UMG lifecycle
 // ---------------------------------------------------------------------------
@@ -53,8 +56,9 @@ void UBattlePreparationWidget::PopulateFromContext(UBattlePreparationContext* Co
 
 	if (EnemyCountText)
 	{
-		EnemyCountText->SetText(
-			FText::FromString(FString::Printf(TEXT("Enemies: %d"), EnemyCount)));
+		EnemyCountText->SetText(FText::Format(
+			LOCTEXT("EnemiesCountFormat", "Enemies: {Count}"),
+			FText::AsNumber(EnemyCount)));
 	}
 
 	if (EnemyListBox)
@@ -67,7 +71,7 @@ void UBattlePreparationWidget::PopulateFromContext(UBattlePreparationContext* Co
 			// The CDO (Class Default Object) is a read-only default instance of the class
 			// that UE keeps in memory — we use it here to read the UnitDefinition without
 			// spawning the actor, which would be expensive just to read a name.
-			FText DisplayName = FText::FromString(TEXT("Unknown"));
+			FText DisplayName = LOCTEXT("UnknownUnitFallback", "Unknown");
 
 			if (EnemyData.EnemyClass)
 			{
@@ -92,8 +96,9 @@ void UBattlePreparationWidget::PopulateFromContext(UBattlePreparationContext* Co
 
 	if (AllyCountText)
 	{
-		AllyCountText->SetText(
-			FText::FromString(FString::Printf(TEXT("Your Party: %d"), AllyCount)));
+		AllyCountText->SetText(FText::Format(
+			LOCTEXT("AllyCountFormat", "Your Party: {Count}"),
+			FText::AsNumber(AllyCount)));
 	}
 
 	if (AllyListBox)
@@ -102,7 +107,7 @@ void UBattlePreparationWidget::PopulateFromContext(UBattlePreparationContext* Co
 
 		for (const FGeneratedPlayerData& PlayerData : Context->PlayerParty)
 		{
-			FText DisplayName = FText::FromString(TEXT("Unknown"));
+			FText DisplayName = LOCTEXT("UnknownUnitFallback", "Unknown");
 
 			if (PlayerData.PlayerClass)
 			{
@@ -143,8 +148,15 @@ void UBattlePreparationWidget::AddUnitRow(UVerticalBox* TargetBox, const FText& 
 	UTextBlock* Row = NewObject<UTextBlock>(this);
 	if (!Row) { return; }
 
-	const FString RowString = FString::Printf(TEXT("%s  Lv.%d"), *DisplayName.ToString(), Level);
-	Row->SetText(FText::FromString(RowString));
+	// FText::Format with named arguments keeps both the unit name and the level
+	// translatable AND lets translators reorder the components freely.
+	// "Lv." abbreviation is itself localizable (some languages prefer "Nv.", "Pl." etc.).
+	const FText RowText = FText::Format(
+		LOCTEXT("UnitRowFormat", "{Name}  Lv.{Level}"),
+		DisplayName,
+		FText::AsNumber(Level));
+
+	Row->SetText(RowText);
 
 	TargetBox->AddChildToVerticalBox(Row);
 }
@@ -188,3 +200,5 @@ void UBattlePreparationWidget::HandleAbortBattleClicked()
 	// The controller drives the actual transition — the widget just fires the delegate.
 	RemoveFromParent();
 }
+
+#undef LOCTEXT_NAMESPACE

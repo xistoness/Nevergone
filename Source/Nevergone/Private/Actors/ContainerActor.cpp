@@ -1,6 +1,7 @@
 // Copyright Xyzto Works
 
 #include "Actors/ContainerActor.h"
+#include "ActorComponents/CombatPresenceComponent.h"
 #include "Data/ContainerDefinition.h"
 #include "Data/LootTable.h"
 #include "Data/ItemDefinition.h"
@@ -8,6 +9,7 @@
 #include "Interfaces/Interactable.h"
 #include "ActorComponents/InteractableComponent.h"
 #include "ActorComponents/SaveableComponent.h"
+#include "EngineTools/CollisionChannels.h"
 #include "World/InventorySubsystem.h" // For EInventoryResult enum definition
 #include "Characters/PlayerControllers/ExplorationPlayerController.h"
 #include "Components/SphereComponent.h"
@@ -40,8 +42,8 @@ AContainerActor::AContainerActor()
     InteractionSphere->SetCollisionResponseToAllChannels(ECR_Overlap);
     InteractionSphere->SetCollisionResponseToChannel(ECC_Visibility,        ECR_Ignore);
     InteractionSphere->SetCollisionResponseToChannel(ECC_Camera,            ECR_Ignore);
-    InteractionSphere->SetCollisionResponseToChannel(ECC_GameTraceChannel1, ECR_Ignore);  // GridTrace
-    InteractionSphere->SetCollisionResponseToChannel(ECC_GameTraceChannel2, ECR_Block);   // Interactable
+    InteractionSphere->SetCollisionResponseToChannel(NevergoneCollision::GridTrace,    ECR_Ignore);
+    InteractionSphere->SetCollisionResponseToChannel(NevergoneCollision::Interactable, ECR_Block);
     RootComponent = InteractionSphere;
 
     ContainerMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ContainerMesh"));
@@ -57,6 +59,15 @@ AContainerActor::AContainerActor()
     // duplicate instances from being spawned by the save system if the world-actor
     // matching ever fails.
     SaveableComponent->bPersistAcrossLoads = false;
+
+    // --- Combat presence ---
+    // Containers stay visible in combat as scenery. Interaction is implicitly
+    // disabled (the exploration interaction trace is dormant while the
+    // ExplorationModeComponent is not ticking). BecomeObstacle is the
+    // semantic policy; the cover system pass (Phase 3) will inspect this
+    // policy when populating tactical cover info.
+    auto* CombatPresence = CreateDefaultSubobject<UCombatPresenceComponent>(TEXT("CombatPresenceComponent"));
+    CombatPresence->DefaultPolicy = ECombatPresencePolicy::BecomeObstacle;
 }
 
 void AContainerActor::BeginPlay()
@@ -100,6 +111,17 @@ void AContainerActor::Interact_Implementation(AActor* Interactor)
     }
 
     ExpPC->OpenContainerInteraction(this);
+    OnContainerOpen();
+}
+
+void AContainerActor::OnContainerOpen()
+{
+    BP_ContainerOpen();
+}
+
+void AContainerActor::OnContainerClose()
+{
+    BP_ContainerClose();
 }
 
 // ===========================================================================
@@ -253,7 +275,16 @@ FText AContainerActor::GetSourceDisplayName() const
     {
         return Definition->DisplayName;
     }
-    return FText::FromString(GetName());
+
+    // Fallback used only when a level was placed without a Definition asset —
+    // legitimate gameplay never hits this branch, but we still surface a
+    // localizable header rather than the raw actor name (which may include
+    // engine-generated suffixes like "_C_42").
+    UE_LOG(LogTemp, Warning,
+        TEXT("[ContainerActor] GetSourceDisplayName: actor '%s' has no Definition — using fallback label"),
+        *GetName());
+
+    return NSLOCTEXT("Container", "MissingDefinitionFallback", "Container");
 }
 
 EInventoryResult AContainerActor::AddInternal(UItemDefinition* ItemDef, int32 Quantity)

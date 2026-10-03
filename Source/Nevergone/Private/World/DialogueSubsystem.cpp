@@ -6,7 +6,7 @@
 #include "Types/DialogueSystemTypes.h"
 #include "Types/UnitAttributeTypes.h"
 #include "Characters/DialogueNPC.h"
-#include "ActorComponents/ExplorationModeComponent.h"
+#include "Characters/ExcursionSurvivorNPC.h"
 #include "ActorComponents/UnitStatsComponent.h"
 #include "World/FlagsSubsystem.h"
 #include "World/NPCAffinitySubsystem.h"
@@ -40,14 +40,6 @@ bool UDialogueSubsystem::StartDialogue(UDialogueData* DialogueData, ADialogueNPC
     ActiveDialogueData = DialogueData;
     ActiveNPC = NPC;
     bSessionActive = true;
-
-    if (APawn* Pawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0))
-    {
-        if (UExplorationModeComponent* Explore = Pawn->FindComponentByClass<UExplorationModeComponent>())
-        {
-            Explore->ExitMode();
-        }
-    }
 
     UE_LOG(LogTemp, Log,
         TEXT("[DialogueSubsystem] StartDialogue: starting '%s' with NPC '%s' at node %d."),
@@ -122,14 +114,6 @@ void UDialogueSubsystem::EndDialogue()
     ActiveDialogueData = nullptr;
     ActiveNPC = nullptr;
     CurrentNodeIndex = INDEX_NONE;
-
-    if (APawn* Pawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0))
-    {
-        if (UExplorationModeComponent* Explore = Pawn->FindComponentByClass<UExplorationModeComponent>())
-        {
-            Explore->EnterMode();
-        }
-    }
 
     OnDialogueEnded.Broadcast();
 }
@@ -265,6 +249,21 @@ void UDialogueSubsystem::ApplyEffects(const TArray<FDialogueEffect>& Effects)
             UE_LOG(LogTemp, Log,
                 TEXT("[DialogueSubsystem] GiveItem: %s x%d (pending inventory system)"),
                 *Effect.Param.ToString(), Effect.Value);
+            break;
+
+        case EDialogueEffectType::FollowPlayer:
+            if (AExcursionSurvivorNPC* Survivor = Cast<AExcursionSurvivorNPC>(ActiveNPC))
+            {
+                UE_LOG(LogTemp, Log,
+                    TEXT("[DialogueSubsystem] FollowPlayer: recruiting '%s'."), *GetNameSafe(Survivor));
+                Survivor->Recruit();
+            }
+            else
+            {
+                UE_LOG(LogTemp, Warning,
+                    TEXT("[DialogueSubsystem] FollowPlayer: '%s' is not an excursion survivor; effect ignored."),
+                    *GetNameSafe(ActiveNPC));
+            }
             break;
 
         default:

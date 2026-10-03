@@ -13,7 +13,9 @@ class USoundAttenuation;
  * Animation notify that plays a SFX through UAudioSubsystem.
  *
  * Drop this onto any animation timeline at the exact frame where the sound
- * should fire (e.g., frame of sword impact, footstep contact, ability cast).
+ * should fire (e.g., frame of sword impact, ability cast).
+ * Footsteps use UAnimNotify_Footstep instead: they are gameplay noise, not
+ * just audio, and need the surface under the foot.
  *
  * Follows the same pattern as AnimNotify_DoAttackTrace in the project:
  *   - Lightweight notify (not a NotifyState — no duration)
@@ -61,11 +63,4 @@ public:
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound")
 	bool bAttachToOwner = false;
-
-	/**
-	 * Volume multiplier applied on top of the Sound asset's base volume.
-	 * Use this to tune individual animation events without modifying the asset.
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound", meta = (ClampMin = "0.0", ClampMax = "2.0"))
-	float VolumeMultiplier = 1.0f;
 };

@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Audio/AudioCategory.h"
 #include "Audio/AudioSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "Data/PartyData.h"
@@ -14,6 +15,7 @@
 
 class ACharacterPreviewStudio;
 class UStatusEffectDefinition;
+class USoundClass;
 struct FActorSaveData;
 class UMySaveGame;
 class ULoadingScreenWidget;
@@ -190,25 +192,24 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Audio|Mixing")
 	TObjectPtr<USoundMix> MasterSoundMix;
 
+	/**
+	 * USoundClass asset for each player-facing audio category.
+	 * Authored once in BP_MyGameInstance Class Defaults; mirrored to
+	 * UAudioSubsystem at Init time. Without these mappings, the volume
+	 * sliders in the Settings tab will not affect the live mix.
+	 *
+	 * Recommended layout:
+	 *   Master         → SC_Master  (parent of all the others)
+	 *   Music          → SC_Music   (child of SC_Master)
+	 *   SFX            → SC_SFX     (child of SC_Master)
+	 *   UI             → SC_UI      (child of SC_Master)
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Audio|Mixing")
+	TMap<ENevergoneAudioCategory, TObjectPtr<USoundClass>> CategorySoundClasses;
+
 	/** Per-event UI sound map. Assign assets once — widgets call PlayUISoundEvent() by enum. */
 	UPROPERTY(EditDefaultsOnly, Category = "Audio|UI")
 	TMap<EUISoundEvent, TObjectPtr<USoundBase>> UISoundMap;
-
-	/** Fallback SFX for a player interacting with a Locked door without the right key. */
-	UPROPERTY(EditDefaultsOnly, Category = "Audio|SFX|Door")
-	TObjectPtr<USoundBase> DefaultDoorLockedSFX;
-
-	/** Fallback SFX played the moment a door becomes unlocked (key consumed). */
-	UPROPERTY(EditDefaultsOnly, Category = "Audio|SFX|Door")
-	TObjectPtr<USoundBase> DefaultDoorUnlockSFX;
-
-	/** Fallback SFX played when a door transitions into the Open state. */
-	UPROPERTY(EditDefaultsOnly, Category = "Audio|SFX|Door")
-	TObjectPtr<USoundBase> DefaultDoorOpenSFX;
-
-	/** Fallback SFX played when a door auto-closes back to the Closed state. */
-	UPROPERTY(EditDefaultsOnly, Category = "Audio|SFX|Door")
-	TObjectPtr<USoundBase> DefaultDoorCloseSFX;
 
 	/** Status effect applied to all active party members when carrying weight exceeds MaxWeight.
 	 *  Assigned here because UGameInstanceSubsystem properties cannot be set via Class Defaults.
@@ -219,6 +220,30 @@ public:
 	
 	UPROPERTY(EditAnywhere, Category = "Preview")
 	TSubclassOf<ACharacterPreviewStudio> CharacterPreviewStudio;
+
+	// -----------------------------------------------------------------------
+	// Localization
+	// -----------------------------------------------------------------------
+	// Read by ULocalizationSubsystem during its Initialize() to know which
+	// cultures the project ships with. Assigned here (and not on the
+	// subsystem) because UGameInstanceSubsystem UPROPERTY defaults are not
+	// editable via Class Defaults — same pattern used by OverweightStatusDefinition.
+	//
+	// Use ICU/Unreal codes: "en", "pt-BR", "es", "fr", "ja", etc.
+	// To add a new language later, add the code here AND ship a compiled
+	// .locres for it via the Localization Dashboard.
+
+	/** Cultures that ship compiled .locres files. Edit in the BP class defaults of UMyGameInstance. */
+	UPROPERTY(EditDefaultsOnly, Category = "Localization")
+	TArray<FString> SupportedCultures = { TEXT("en"), TEXT("pt-BR") };
+
+	/**
+	 * Culture used when the persisted preference and the OS culture both fail
+	 * to match anything in SupportedCultures. Should always be one of the
+	 * codes listed above — typically the project's native authoring language.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Localization")
+	FString FallbackCulture = TEXT("en");
 
 protected:
 	

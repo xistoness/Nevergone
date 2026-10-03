@@ -6,6 +6,9 @@
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 
+// Localization namespace for all gathered strings in this translation unit.
+#define LOCTEXT_NAMESPACE "BattleResults"
+
 class UAudioSubsystem;
 
 void UBattleResultsWidget::NativeConstruct()
@@ -29,20 +32,27 @@ void UBattleResultsWidget::ShowResults(EBattleUnitTeam WinningTeam,
 	// Populate header
 	if (ResultHeaderText)
 	{
-		ResultHeaderText->SetText(FText::FromString(bIsVictory ? TEXT("VICTORY") : TEXT("DEFEAT")));
+		ResultHeaderText->SetText(bIsVictory
+			? LOCTEXT("VictoryHeader", "VICTORY")
+			: LOCTEXT("DefeatHeader",  "DEFEAT"));
 	}
 
-	// Populate stat lines
+	// Populate stat lines.
+	// FText::Format with a named argument keeps the placeholder localizable —
+	// translators can rearrange "{Count}" wherever the target language reads
+	// most naturally (e.g. "Inimigos abatidos: {Count}").
 	if (SurvivingAlliesText)
 	{
-		SurvivingAlliesText->SetText(FText::FromString(
-			FString::Printf(TEXT("Surviving Allies: %d"), SurvivingAllies)));
+		SurvivingAlliesText->SetText(FText::Format(
+			LOCTEXT("SurvivingAlliesFormat", "Surviving Allies: {Count}"),
+			FText::AsNumber(SurvivingAllies)));
 	}
 
 	if (EnemiesKilledText)
 	{
-		EnemiesKilledText->SetText(FText::FromString(
-			FString::Printf(TEXT("Enemies Killed: %d"), EnemiesKilled)));
+		EnemiesKilledText->SetText(FText::Format(
+			LOCTEXT("EnemiesKilledFormat", "Enemies Killed: {Count}"),
+			FText::AsNumber(EnemiesKilled)));
 	}
 
 	// Notify Blueprint to play any entry animation
@@ -71,3 +81,5 @@ void UBattleResultsWidget::HandleContinueClicked()
 	// Remove ourselves — the GameContextManager drives the actual transition
 	RemoveFromParent();
 }
+
+#undef LOCTEXT_NAMESPACE

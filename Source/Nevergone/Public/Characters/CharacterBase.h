@@ -15,6 +15,7 @@ class UInteractableComponent;
 class UCharacterModeComponent;
 class UExplorationModeComponent;
 class UBattleModeComponent;
+class UExcursionThrowComponent;
 class UUnitStatsComponent;
 class UMyAbilitySystemComponent;
 class UFloatingCombatTextWidget;
@@ -63,11 +64,15 @@ public:
 	/**
 	 * Spawns a floating text in world space above this character.
 	 *
+	 * Text is FText (not FString) so the value participates in localization
+	 * automatically: callers pass NSLOCTEXT/LOCTEXT/Format-derived FTexts and
+	 * the widget re-resolves them when the active culture changes.
+	 *
 	 * @param Text    Text to display (e.g., "42", "STUN", "MISS")
 	 * @param Type    Semantic type — controls color and icon in the Blueprint
 	 * @param Icon    Optional icon; nullptr = no icon
 	 */
-	void SpawnFloatingText(const FString& Text, EFloatingTextType Type, UTexture2D* Icon = nullptr);
+	void SpawnFloatingText(const FText& Text, EFloatingTextType Type, UTexture2D* Icon = nullptr);
 
 	/**
 	 * Called when this unit's HP reaches zero during combat.
@@ -104,6 +109,10 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Modes")
 	UBattleModeComponent* BattleMode;
+
+	// Distraction throwing during excursions. Driven by ExplorationMode.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Excursion")
+	TObjectPtr<UExcursionThrowComponent> ThrowComponent;
 	
 	UPROPERTY()
 	UCharacterModeComponent* ActiveMode;

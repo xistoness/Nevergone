@@ -3,6 +3,9 @@
 #include "Characters/PlayerControllers/ExplorationPlayerController.h"
 
 #include "EnhancedInputComponent.h"
+#include "InputAction.h"
+#include "Widgets/ExcursionResultWidget.h"
+#include "World/ExcursionSubsystem.h"
 #include "ActorComponents/ExplorationModeComponent.h"
 #include "ActorComponents/PauseMenuComponent.h"
 #include "Characters/CharacterBase.h"
@@ -33,6 +36,36 @@ void AExplorationPlayerController::SetupInputComponent()
 
     if (LookInput)
         EIC->BindAction(LookInput, ETriggerEvent::Triggered, this, &AExplorationPlayerController::OnLook);
+
+    if (MoveInput)
+        EIC->BindAction(MoveInput, ETriggerEvent::Triggered, this, &AExplorationPlayerController::OnMove);
+
+    if (JumpInput)
+    {
+        EIC->BindAction(JumpInput, ETriggerEvent::Started, this, &AExplorationPlayerController::OnJumpStart);
+        EIC->BindAction(JumpInput, ETriggerEvent::Completed, this, &AExplorationPlayerController::OnJumpStop);
+    }
+
+    if (SprintInput)
+    {
+        EIC->BindAction(SprintInput, ETriggerEvent::Started, this, &AExplorationPlayerController::OnSprintStart);
+        EIC->BindAction(SprintInput, ETriggerEvent::Completed, this, &AExplorationPlayerController::OnSprintStop);
+    }
+
+    if (CrouchInput)
+    {
+        EIC->BindAction(CrouchInput, ETriggerEvent::Started, this, &AExplorationPlayerController::OnCrouchStart);
+        EIC->BindAction(CrouchInput, ETriggerEvent::Completed, this, &AExplorationPlayerController::OnCrouchStop);
+    }
+
+    if (ThrowInput)
+    {
+        // Canceled as well as Completed: either way the button is no longer
+        // held, and the aim must not stay open.
+        EIC->BindAction(ThrowInput, ETriggerEvent::Started, this, &AExplorationPlayerController::OnThrowStart);
+        EIC->BindAction(ThrowInput, ETriggerEvent::Completed, this, &AExplorationPlayerController::OnThrowStop);
+        EIC->BindAction(ThrowInput, ETriggerEvent::Canceled, this, &AExplorationPlayerController::OnThrowStop);
+    }
 
     if (InteractionInput)
         EIC->BindAction(InteractionInput, ETriggerEvent::Triggered, this, &AExplorationPlayerController::HandleInteract);
@@ -72,6 +105,31 @@ void AExplorationPlayerController::SetupInputComponent()
 
     if (InventoryNextCharInput)
         EIC->BindAction(InventoryNextCharInput, ETriggerEvent::Triggered, this, &AExplorationPlayerController::HandleInventoryNextChar);
+
+    WarnAboutActionsNotTriggeredWhenPaused();
+}
+
+void AExplorationPlayerController::WarnAboutActionsNotTriggeredWhenPaused() const
+{
+    // Every action a screen listens to. Gameplay-only actions (look, move,
+    // jump, sprint, crouch) must stay unflagged so they do nothing while
+    // paused.
+    const UInputAction* ScreenActions[] =
+    {
+        PauseInput, InteractionInput, QuestLogInput, PartyManagerInput, InventoryInput,
+        UIConfirmInput, UICancelInput, UIUpInput, UIDownInput, UILeftInput, UIRightInput,
+        InventoryPrevCharInput, InventoryNextCharInput,
+    };
+
+    for (const UInputAction* Action : ScreenActions)
+    {
+        if (Action && !Action->bTriggerWhenPaused)
+        {
+            UE_LOG(LogTemp, Warning,
+                TEXT("[ExplorationPlayerController] %s: input action '%s' is used on screens, which pause the world, but does not have Trigger When Paused set; it will not respond while a screen is open."),
+                *GetNameSafe(this), *GetNameSafe(Action));
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -93,6 +151,8 @@ void AExplorationPlayerController::ApplyExplorationInputMode()
     SetInputMode(InputMode);
 
     UE_LOG(LogTemp, Log, TEXT("[ExplorationPlayerController] Input mode -> Gameplay"));
+
+    SyncWorldWithInputMode();
 }
 
 void AExplorationPlayerController::ApplyDialogueInputMode()
@@ -112,6 +172,8 @@ void AExplorationPlayerController::ApplyDialogueInputMode()
     SetInputMode(InputMode);
 
     UE_LOG(LogTemp, Log, TEXT("[ExplorationPlayerController] Input mode -> Dialogue"));
+
+    SyncWorldWithInputMode();
 }
 
 void AExplorationPlayerController::ApplyUIOverlayInputMode(EExplorationInputMode TargetMode)
@@ -132,6 +194,69 @@ void AExplorationPlayerController::ApplyUIOverlayInputMode(EExplorationInputMode
 
     UE_LOG(LogTemp, Log,
         TEXT("[ExplorationPlayerController] Input mode -> UIOverlay (%d)"), (int32)TargetMode);
+
+    SyncWorldWithInputMode();
+}
+
+bool AExplorationPlayerController::IsScreenMode(EExplorationInputMode Mode)
+{
+    return Mode != EExplorationInputMode::Gameplay && Mode != EExplorationInputMode::Capture;
+}
+
+void AExplorationPlayerController::ApplyCaptureInputMode()
+{
+    CurrentInputMode = EExplorationInputMode::Capture;
+
+    SetIgnoreMoveInput(true);
+    SetIgnoreLookInput(true);
+
+    bShowMouseCursor       = false;
+    bEnableClickEvents     = false;
+    bEnableMouseOverEvents = false;
+
+    FInputModeGameOnly InputMode;
+    SetInputMode(InputMode);
+
+    UE_LOG(LogTemp, Log, TEXT("[ExplorationPlayerController] %s input mode -> Capture"), *GetNameSafe(GetPawn()));
+
+    SyncWorldWithInputMode();
+}
+
+void AExplorationPlayerController::EnterCaptureInputMode() { ApplyCaptureInputMode();     }
+void AExplorationPlayerController::ExitCaptureInputMode()  { ApplyExplorationInputMode(); }
+
+void AExplorationPlayerController::SyncWorldWithInputMode()
+{
+    // Pause and suspension are derived from the mode instead of being
+    // toggled by each screen. That is what lets the pause menu open over a
+    // dialogue and close back into a still-paused dialogue with no
+    // bookkeeping: HandlePauseClosed restores the mode, and the mode decides.
+    const bool bScreenOpen = IsScreenMode(CurrentInputMode);
+
+    // Releases never reach the pawn outside Gameplay (see GetInputReceiver),
+    // so the pawn drops its held sprint itself.
+    if (UExplorationModeComponent* Mode = GetExplorationMode())
+    {
+        Mode->SetInputSuspended(CurrentInputMode != EExplorationInputMode::Gameplay);
+    }
+
+    if (IsPaused() == bScreenOpen)
+    {
+        return;
+    }
+
+    if (SetPause(bScreenOpen))
+    {
+        UE_LOG(LogTemp, Log,
+            TEXT("[ExplorationPlayerController] %s world %s"),
+            *GetNameSafe(GetPawn()), bScreenOpen ? TEXT("paused") : TEXT("resumed"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning,
+            TEXT("[ExplorationPlayerController] %s: the game mode refused to %s the world"),
+            *GetNameSafe(GetPawn()), bScreenOpen ? TEXT("pause") : TEXT("resume"));
+    }
 }
 
 void AExplorationPlayerController::EnterDialogueInputMode()  { ApplyDialogueInputMode();    }
@@ -162,10 +287,14 @@ void AExplorationPlayerController::HandlePauseClosed()
     case EExplorationInputMode::Dialogue:
         ApplyDialogueInputMode();
         break;
+    case EExplorationInputMode::Capture:
+        ApplyCaptureInputMode();
+        break;
     case EExplorationInputMode::QuestLog:
     case EExplorationInputMode::PartyManager:
     case EExplorationInputMode::Inventory:
     case EExplorationInputMode::Container:
+    case EExplorationInputMode::Result:
         ApplyUIOverlayInputMode(PrePauseInputMode);
         break;
     default:
@@ -191,6 +320,94 @@ void AExplorationPlayerController::OnLook(const FInputActionValue& Value)
     AddPitchInput(LookAxis.Y * MouseSensitivity);
 }
 
+IExplorationInputReceiver* AExplorationPlayerController::GetInputReceiver() const
+{
+    // Outside gameplay the UI owns the input, so no action reaches the pawn.
+    if (CurrentInputMode != EExplorationInputMode::Gameplay) { return nullptr; }
+
+    return GetExplorationMode();
+}
+
+UExplorationModeComponent* AExplorationPlayerController::GetExplorationMode() const
+{
+    APawn* MyPawn = GetPawn();
+
+    return MyPawn ? MyPawn->FindComponentByClass<UExplorationModeComponent>() : nullptr;
+}
+
+void AExplorationPlayerController::OnMove(const FInputActionValue& Value)
+{
+    if (IExplorationInputReceiver* Actions = GetInputReceiver())
+    {
+        const FVector2D MoveAxis = Value.Get<FVector2D>();
+        Actions->Input_Move(MoveAxis.X, MoveAxis.Y);
+    }
+}
+
+void AExplorationPlayerController::OnJumpStart()
+{
+    if (IExplorationInputReceiver* Actions = GetInputReceiver())
+    {
+        Actions->Input_JumpStart();
+    }
+}
+
+void AExplorationPlayerController::OnJumpStop()
+{
+    if (IExplorationInputReceiver* Actions = GetInputReceiver())
+    {
+        Actions->Input_JumpStop();
+    }
+}
+
+void AExplorationPlayerController::OnThrowStart()
+{
+    if (IExplorationInputReceiver* Actions = GetInputReceiver())
+    {
+        Actions->Input_ThrowPressed();
+    }
+}
+
+void AExplorationPlayerController::OnThrowStop()
+{
+    if (IExplorationInputReceiver* Actions = GetInputReceiver())
+    {
+        Actions->Input_ThrowReleased();
+    }
+}
+
+void AExplorationPlayerController::OnSprintStart()
+{
+    if (IExplorationInputReceiver* Actions = GetInputReceiver())
+    {
+        Actions->Input_SprintPressed();
+    }
+}
+
+void AExplorationPlayerController::OnSprintStop()
+{
+    if (IExplorationInputReceiver* Actions = GetInputReceiver())
+    {
+        Actions->Input_SprintReleased();
+    }
+}
+
+void AExplorationPlayerController::OnCrouchStart()
+{
+    if (IExplorationInputReceiver* Actions = GetInputReceiver())
+    {
+        Actions->Input_CrouchPressed();
+    }
+}
+
+void AExplorationPlayerController::OnCrouchStop()
+{
+    if (IExplorationInputReceiver* Actions = GetInputReceiver())
+    {
+        Actions->Input_CrouchReleased();
+    }
+}
+
 void AExplorationPlayerController::HandleInteract()
 {
     switch (CurrentInputMode)
@@ -198,16 +415,14 @@ void AExplorationPlayerController::HandleInteract()
     case EExplorationInputMode::Dialogue:
     case EExplorationInputMode::PartyManager:
     case EExplorationInputMode::QuestLog:
+    case EExplorationInputMode::Result:
         HandleUIConfirm();
         break;
 
     case EExplorationInputMode::Gameplay:
-        if (APawn* MyPawn = GetPawn())
+        if (IExplorationInputReceiver* Actions = GetInputReceiver())
         {
-            if (IExplorationInputReceiver* Actions = MyPawn->FindComponentByClass<UExplorationModeComponent>())
-            {
-                Actions->Input_Interact();
-            }
+            Actions->Input_Interact();
         }
         break;
 
@@ -223,7 +438,9 @@ void AExplorationPlayerController::HandleInteract()
 void AExplorationPlayerController::HandleQuestLog()
 {
     if (CurrentInputMode == EExplorationInputMode::Dialogue ||
-        CurrentInputMode == EExplorationInputMode::PauseMenu)
+        CurrentInputMode == EExplorationInputMode::PauseMenu ||
+        CurrentInputMode == EExplorationInputMode::Capture ||
+        CurrentInputMode == EExplorationInputMode::Result)
     {
         return;
     }
@@ -253,7 +470,9 @@ void AExplorationPlayerController::HandleQuestLog()
 void AExplorationPlayerController::HandlePartyManager()
 {
     if (CurrentInputMode == EExplorationInputMode::Dialogue ||
-        CurrentInputMode == EExplorationInputMode::PauseMenu)
+        CurrentInputMode == EExplorationInputMode::PauseMenu ||
+        CurrentInputMode == EExplorationInputMode::Capture ||
+        CurrentInputMode == EExplorationInputMode::Result)
     {
         return;
     }
@@ -283,7 +502,9 @@ void AExplorationPlayerController::HandlePartyManager()
 void AExplorationPlayerController::HandleInventory()
 {
     if (CurrentInputMode == EExplorationInputMode::Dialogue ||
-        CurrentInputMode == EExplorationInputMode::PauseMenu)
+        CurrentInputMode == EExplorationInputMode::PauseMenu ||
+        CurrentInputMode == EExplorationInputMode::Capture ||
+        CurrentInputMode == EExplorationInputMode::Result)
     {
         return;
     }
@@ -346,6 +567,9 @@ void AExplorationPlayerController::HandleUIConfirm()
         break;
     case EExplorationInputMode::PauseMenu:
         PauseMenuComponent->ConfirmSelection();
+        break;
+    case EExplorationInputMode::Result:
+        if (ExcursionResultWidget) { ExcursionResultWidget->Confirm(); }
         break;
     default:
         break;
@@ -718,6 +942,7 @@ void AExplorationPlayerController::BeginPlay()
 
     BindDialogueSubsystem();
     BindQuestSubsystem();
+    BindExcursionSubsystem();
 
     PauseMenuComponent->OnPauseOpened.AddUObject(this, &AExplorationPlayerController::HandlePauseOpened);
     PauseMenuComponent->OnPauseClosed.AddUObject(this, &AExplorationPlayerController::HandlePauseClosed);
@@ -734,7 +959,6 @@ void AExplorationPlayerController::OnPossess(APawn* InPawn)
 
     if (ACharacterBase* PossessedCharacter = Cast<ACharacterBase>(InPawn))
     {
-        PossessedCharacter->ApplyCharacterInputMapping();
         PossessedCharacter->EnableExplorationMode();
     }
 
@@ -768,6 +992,15 @@ void AExplorationPlayerController::OnUnPossess()
 {
     UE_LOG(LogTemp, Warning,
         TEXT("[ExplorationPlayerController] OnUnPossess -> %s"), *GetNameSafe(GetPawn()));
+
+    // The pawn must not keep this controller's screen state. Possessed again
+    // in the same mode, ACharacterBase::SetMode skips EnterMode, so nothing
+    // else would clear the suspension.
+    if (UExplorationModeComponent* Mode = GetExplorationMode())
+    {
+        Mode->SetInputSuspended(false);
+    }
+
     Super::OnUnPossess();
 }
 
@@ -777,6 +1010,22 @@ void AExplorationPlayerController::EndPlay(const EEndPlayReason::Type EndPlayRea
     {
         DialogueSubsystem->OnDialogueStarted.RemoveAll(this);
         DialogueSubsystem->OnDialogueEnded.RemoveAll(this);
+    }
+
+    if (UExcursionSubsystem* Excursion = UExcursionSubsystem::Get(this))
+    {
+        Excursion->OnExcursionEnded.RemoveAll(this);
+    }
+
+    // A controller destroyed with a screen open (a controller swap mid
+    // menu) would otherwise leave the world paused with nobody to resume it.
+    if (IsPaused())
+    {
+        SetPause(false);
+
+        UE_LOG(LogTemp, Log,
+            TEXT("[ExplorationPlayerController] %s ended play while paused; world resumed"),
+            *GetNameSafe(this));
     }
 
     Super::EndPlay(EndPlayReason);
@@ -817,6 +1066,65 @@ void AExplorationPlayerController::BindQuestSubsystem()
     }
 
     UE_LOG(LogTemp, Log, TEXT("[ExplorationPlayerController] QuestSubsystem bound."));
+}
+
+void AExplorationPlayerController::BindExcursionSubsystem()
+{
+    UExcursionSubsystem* Excursion = UExcursionSubsystem::Get(this);
+
+    if (!Excursion)
+    {
+        return;
+    }
+
+    Excursion->OnExcursionEnded.RemoveAll(this);
+    Excursion->OnExcursionEnded.AddUObject(this, &AExplorationPlayerController::HandleExcursionEnded);
+}
+
+void AExplorationPlayerController::HandleExcursionEnded(const FExcursionResult& Result)
+{
+    if (!ExcursionResultWidget && ExcursionResultWidgetClass)
+    {
+        ExcursionResultWidget = CreateWidget<UExcursionResultWidget>(this, ExcursionResultWidgetClass);
+
+        if (ExcursionResultWidget)
+        {
+            ExcursionResultWidget->OnContinue.AddUObject(this, &AExplorationPlayerController::HandleExcursionResultContinue);
+        }
+    }
+
+    if (!ExcursionResultWidget)
+    {
+        UE_LOG(LogTemp, Error,
+            TEXT("[ExplorationPlayerController] %s: ExcursionResultWidgetClass not set; the excursion ended with no result screen"),
+            *GetNameSafe(this));
+
+        return;
+    }
+
+    CloseActiveOverlay();
+
+    if (!ExcursionResultWidget->IsInViewport())
+    {
+        ExcursionResultWidget->AddToViewport();
+    }
+
+    ExcursionResultWidget->ShowResult(Result);
+
+    // A screen like any other overlay: it pauses the world.
+    ApplyUIOverlayInputMode(EExplorationInputMode::Result);
+}
+
+void AExplorationPlayerController::HandleExcursionResultContinue()
+{
+    UE_LOG(LogTemp, Log,
+        TEXT("[ExplorationPlayerController] %s: result confirmed, restarting the excursion"),
+        *GetNameSafe(this));
+
+    if (UExcursionSubsystem* Excursion = UExcursionSubsystem::Get(this))
+    {
+        Excursion->RestartExcursion();
+    }
 }
 
 void AExplorationPlayerController::HandleDialogueStarted() { EnterDialogueInputMode(); }

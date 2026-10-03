@@ -1,0 +1,650 @@
+// Copyright Xyzto Works
+
+#include "World/ExcursionEncounterSubsystem.h"
+
+#include "Nevergone.h"
+#include "ActorComponents/UnitStatsComponent.h"
+#include "Characters/CharacterBase.h"
+#include "Characters/ExcursionSurvivorNPC.h"
+#include "Characters/ExplorationEnemyCharacter.h"
+#include "Characters/PlayerControllers/ExplorationEnemyController.h"
+#include "Characters/PlayerControllers/ExplorationPlayerController.h"
+#include "Data/ExplorationEnemyDefinition.h"
+#include "Data/ItemDefinition.h"
+#include "World/ExcursionEncounterSettings.h"
+#include "World/ExcursionNoiseSubsystem.h"
+#include "World/InventorySubsystem.h"
+
+#include "Animation/AnimMontage.h"
+#include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/GameInstance.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "PhysicsEngine/PhysicsAsset.h"
+
+UExcursionEncounterSubsystem* UExcursionEncounterSubsystem::Get(const UObject* WorldContextObject)
+{
+	const UWorld* World = WorldContextObject ? WorldContextObject->GetWorld() : nullptr;
+
+	return World ? World->GetSubsystem<UExcursionEncounterSubsystem>() : nullptr;
+}
+
+bool UExcursionEncounterSubsystem::DoesSupportWorldType(const EWorldType::Type WorldType) const
+{
+	return WorldType == EWorldType::Game || WorldType == EWorldType::PIE;
+}
+
+TStatId UExcursionEncounterSubsystem::GetStatId() const
+{
+	RETURN_QUICK_DECLARE_CYCLE_STAT(UExcursionEncounterSubsystem, STATGROUP_Tickables);
+}
+
+// ---------------------------------------------------------------------------
+// Catch
+// ---------------------------------------------------------------------------
+
+bool UExcursionEncounterSubsystem::ReportCatch(AExplorationEnemyCharacter* Enemy, ACharacter* Victim)
+{
+	if (!IsValid(Enemy) || !IsValid(Victim))
+	{
+		return false;
+	}
+
+	// The player's death ends the excursion; nothing is resolved after it.
+	if (bPlayerDied)
+	{
+		return false;
+	}
+
+	if (IsInCapture(Enemy) || IsInCapture(Victim))
+	{
+		return false;
+	}
+
+	const UExplorationEnemyDefinition* Definition = Enemy->GetDefinition();
+
+	if (!Definition)
+	{
+		UE_LOG(LogNevergone, Warning,
+			TEXT("[ExcursionEncounterSubsystem] %s has no definition; capture of %s refused"),
+			*GetNameSafe(Enemy), *GetNameSafe(Victim));
+
+		return false;
+	}
+
+	if (AExcursionSurvivorNPC* Follower = Cast<AExcursionSurvivorNPC>(Victim))
+	{
+		if (!Follower->IsRecruited())
+		{
+			return false;
+		}
+
+		StartFollowerCapture(Enemy, Follower, *Definition);
+
+		return true;
+	}
+
+	if (Victim->IsPlayerControlled())
+	{
+		StartPlayerCapture(Enemy, Victim, *Definition);
+
+		return true;
+	}
+
+	UE_LOG(LogNevergone, Warning,
+		TEXT("[ExcursionEncounterSubsystem] %s caught %s, which is neither the player nor a follower; refused"),
+		*GetNameSafe(Enemy), *GetNameSafe(Victim));
+
+	return false;
+}
+
+void UExcursionEncounterSubsystem::StartFollowerCapture(AExplorationEnemyCharacter* Enemy,
+	AExcursionSurvivorNPC* Follower, const UExplorationEnemyDefinition& Definition)
+{
+	// Dead from the first frame: other enemies drop him as a target and the
+	// excursion stops counting him while the animation still plays.
+	Follower->MarkDead();
+
+	if (UCharacterMovementComponent* Movement = Follower->GetCharacterMovement())
+	{
+		Movement->StopMovementImmediately();
+	}
+
+	AlignForCapture(Enemy, Follower, Definition.CaptureStandOffDistance);
+
+	PlayPairedAnimation(Enemy, Follower, Definition.DevourFollowerAnimation);
+
+	FExcursionCaptureSequence Capture;
+	Capture.Enemy = Enemy;
+	Capture.Victim = Follower;
+	Capture.Outcome = EExcursionCaptureOutcome::Killed;
+	Capture.TimeLeft = Definition.DevourFollowerSeconds;
+	Capture.bVictimIsPlayer = false;
+
+	Captures.Add(Capture);
+
+	UE_LOG(LogNevergone, Log,
+		TEXT("[ExcursionEncounterSubsystem] %s caught follower %s; devouring for %.1fs"),
+		*GetNameSafe(Enemy), *GetNameSafe(Follower), Definition.DevourFollowerSeconds);
+}
+
+void UExcursionEncounterSubsystem::StartPlayerCapture(AExplorationEnemyCharacter* Enemy, ACharacter* Player,
+	const UExplorationEnemyDefinition& Definition)
+{
+	FreezeWorldExcept(Enemy, Player);
+
+	if (AExplorationPlayerController* PlayerController = GetPlayerController(Player))
+	{
+		PlayerController->EnterCaptureInputMode();
+	}
+
+	if (UCharacterMovementComponent* Movement = Player->GetCharacterMovement())
+	{
+		Movement->StopMovementImmediately();
+	}
+
+	AlignForCapture(Enemy, Player, Definition.CaptureStandOffDistance);
+
+	if (Definition.CaptureNoise)
+	{
+		if (UExcursionNoiseSubsystem* Noise = UExcursionNoiseSubsystem::Get(this))
+		{
+			Noise->EmitNoise(Definition.CaptureNoise, Player->GetActorLocation(), Player);
+		}
+	}
+
+	FExcursionCaptureSequence Capture;
+	Capture.Enemy = Enemy;
+	Capture.Victim = Player;
+	Capture.bVictimIsPlayer = true;
+
+	const FExcursionCaptureAnimation* Animation = nullptr;
+
+	if (TryConsumeSafeguard())
+	{
+		Capture.Outcome = EExcursionCaptureOutcome::Unharmed;
+
+		Animation = &Definition.SafeguardAnimation;
+	}
+	else
+	{
+		const float DeathChance = ComputeDeathChance(Definition, Player);
+
+		const float Roll = FMath::FRandRange(0.0f, 100.0f);
+
+		Capture.Outcome = Roll < DeathChance ? EExcursionCaptureOutcome::Killed : EExcursionCaptureOutcome::Infected;
+
+		Animation = Capture.Outcome == EExcursionCaptureOutcome::Killed
+			? &Definition.KillAnimation
+			: &Definition.BiteAnimation;
+
+		UE_LOG(LogNevergone, Log,
+			TEXT("[ExcursionEncounterSubsystem] %s rolled %.1f against a death chance of %.1f"),
+			*GetNameSafe(Player), Roll, DeathChance);
+	}
+
+	Capture.TimeLeft = PlayPairedAnimation(Enemy, Player, *Animation);
+
+	Captures.Add(Capture);
+
+	UE_LOG(LogNevergone, Log,
+		TEXT("[ExcursionEncounterSubsystem] %s caught %s; outcome %s, sequence %.1fs"),
+		*GetNameSafe(Enemy), *GetNameSafe(Player),
+		*UEnum::GetValueAsString(Capture.Outcome), Capture.TimeLeft);
+}
+
+// ---------------------------------------------------------------------------
+// Sequence
+// ---------------------------------------------------------------------------
+
+void UExcursionEncounterSubsystem::Tick(float DeltaTime)
+{
+	WatchRagdolls();
+
+	if (Captures.IsEmpty())
+	{
+		return;
+	}
+
+	TArray<FExcursionCaptureSequence> Finished;
+
+	for (int32 Index = Captures.Num() - 1; Index >= 0; --Index)
+	{
+		FExcursionCaptureSequence& Capture = Captures[Index];
+
+		const AExplorationEnemyCharacter* Enemy = Capture.Enemy.Get();
+
+		const float Dilation = Enemy ? Enemy->CustomTimeDilation : 1.0f;
+
+		Capture.TimeLeft -= DeltaTime * Dilation;
+
+		if (Capture.TimeLeft <= 0.0f || !Enemy || !Capture.Victim.IsValid())
+		{
+			Finished.Add(Capture);
+
+			Captures.RemoveAt(Index);
+		}
+	}
+
+	// Finished outside the loop: finishing unfreezes the world and calls back
+	// into controllers, and none of that may touch the array being walked.
+	for (const FExcursionCaptureSequence& Capture : Finished)
+	{
+		FinishCapture(Capture);
+	}
+}
+
+void UExcursionEncounterSubsystem::FinishCapture(const FExcursionCaptureSequence& Capture)
+{
+	AExplorationEnemyCharacter* Enemy = Capture.Enemy.Get();
+
+	ACharacter* Victim = Capture.Victim.Get();
+
+	AExplorationEnemyController* EnemyController =
+		Enemy ? Cast<AExplorationEnemyController>(Enemy->GetController()) : nullptr;
+
+	if (!Capture.bVictimIsPlayer)
+	{
+		if (Enemy)
+		{
+			// The devour montage loops; the time decides when it ends.
+			Enemy->StopAnimMontage();
+		}
+
+		BecomeCorpse(Victim);
+
+		if (EnemyController)
+		{
+			EnemyController->FinishFeeding();
+		}
+	}
+	else
+	{
+		AExplorationPlayerController* PlayerController = GetPlayerController(Victim);
+
+		switch (Capture.Outcome)
+		{
+		case EExcursionCaptureOutcome::Unharmed:
+			if (EnemyController)
+			{
+				EnemyController->Kill();
+			}
+
+			BecomeCorpse(Enemy);
+
+			UnfreezeWorld();
+
+			if (PlayerController)
+			{
+				PlayerController->ExitCaptureInputMode();
+			}
+			break;
+
+		case EExcursionCaptureOutcome::Infected:
+			if (Victim)
+			{
+				++BitesBySurvivor.FindOrAdd(Victim);
+			}
+
+			if (EnemyController && Enemy && Enemy->GetDefinition())
+			{
+				EnemyController->BeginKnockdown(Enemy->GetDefinition()->KnockdownSeconds, Victim);
+			}
+
+			UnfreezeWorld();
+
+			if (PlayerController)
+			{
+				PlayerController->ExitCaptureInputMode();
+			}
+			break;
+
+		case EExcursionCaptureOutcome::Killed:
+			// The excursion is over. The world stays frozen and the input
+			// stays blocked until the excursion result takes over.
+			bPlayerDied = true;
+
+			BecomeCorpse(Victim);
+
+			KillRecruitedSurvivors();
+			break;
+
+		default:
+			break;
+		}
+	}
+
+	UE_LOG(LogNevergone, Log,
+		TEXT("[ExcursionEncounterSubsystem] capture of %s by %s resolved: %s"),
+		*GetNameSafe(Victim), *GetNameSafe(Enemy), *UEnum::GetValueAsString(Capture.Outcome));
+
+	OnCaptureResolved.Broadcast(Victim, Enemy, Capture.Outcome);
+}
+
+bool UExcursionEncounterSubsystem::IsInCapture(const AActor* Actor) const
+{
+	for (const FExcursionCaptureSequence& Capture : Captures)
+	{
+		if (Capture.Enemy.Get() == Actor || Capture.Victim.Get() == Actor)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// ---------------------------------------------------------------------------
+// Resolution
+// ---------------------------------------------------------------------------
+
+bool UExcursionEncounterSubsystem::TryConsumeSafeguard() const
+{
+	const UGameInstance* GameInstance = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
+
+	UInventorySubsystem* Inventory = GameInstance ? GameInstance->GetSubsystem<UInventorySubsystem>() : nullptr;
+
+	if (!Inventory)
+	{
+		return false;
+	}
+
+	UItemDefinition* Safeguard = nullptr;
+
+	for (const FInventoryEntry& Entry : Inventory->GetInventory())
+	{
+		UItemDefinition* Item = Entry.Definition.LoadSynchronous();
+
+		if (Item && Item->ItemTags.HasTag(TAG_Item_Safeguard))
+		{
+			Safeguard = Item;
+
+			break;
+		}
+	}
+
+	if (!Safeguard)
+	{
+		return false;
+	}
+
+	// Removed outside the loop above: removing reshapes the array it walks.
+	if (Inventory->RemoveItem(Safeguard, 1) != EInventoryResult::Success)
+	{
+		UE_LOG(LogNevergone, Warning,
+			TEXT("[ExcursionEncounterSubsystem] found safeguard %s but could not remove it; rolling instead"),
+			*GetNameSafe(Safeguard));
+
+		return false;
+	}
+
+	UE_LOG(LogNevergone, Log,
+		TEXT("[ExcursionEncounterSubsystem] safeguard %s used and broken"),
+		*GetNameSafe(Safeguard));
+
+	return true;
+}
+
+float UExcursionEncounterSubsystem::ComputeDeathChance(const UExplorationEnemyDefinition& Definition,
+	ACharacter* Survivor) const
+{
+	const UExcursionEncounterSettings* Settings = GetDefault<UExcursionEncounterSettings>();
+
+	const int32 Strength = GetStrength(Survivor);
+
+	const int32 PriorBites = BitesBySurvivor.FindRef(Survivor);
+
+	const float Chance = Definition.BaseDeathChance
+		- Strength * Settings->DeathChanceReductionPerStrength
+		+ PriorBites * Settings->DeathChanceBonusPerPriorBite;
+
+	UE_LOG(LogNevergone, Verbose,
+		TEXT("[ExcursionEncounterSubsystem] %s death chance: base %.1f, Strength %d, earlier bites %d -> %.1f"),
+		*GetNameSafe(Survivor), Definition.BaseDeathChance, Strength, PriorBites, Chance);
+
+	return FMath::Clamp(Chance, 0.0f, 100.0f);
+}
+
+int32 UExcursionEncounterSubsystem::GetStrength(const ACharacter* Survivor)
+{
+	// Outside combat the live pawn's stats are the authority, bonuses
+	// included; FPartyMemberData carries no attributes.
+	const ACharacterBase* Character = Cast<ACharacterBase>(Survivor);
+
+	const UUnitStatsComponent* Stats = Character ? Character->GetUnitStats() : nullptr;
+
+	if (!Stats)
+	{
+		UE_LOG(LogNevergone, Warning,
+			TEXT("[ExcursionEncounterSubsystem] %s has no UUnitStatsComponent; rolling with Strength 0"),
+			*GetNameSafe(Survivor));
+
+		return 0;
+	}
+
+	return Stats->Attributes.Strength + Stats->TemporaryAttributeBonuses.Strength;
+}
+
+// ---------------------------------------------------------------------------
+// Presentation
+// ---------------------------------------------------------------------------
+
+void UExcursionEncounterSubsystem::AlignForCapture(AExplorationEnemyCharacter* Enemy, ACharacter* Victim,
+	float StandOffDistance)
+{
+	if (!Enemy || !Victim)
+	{
+		return;
+	}
+
+	FVector ToEnemy = Enemy->GetActorLocation() - Victim->GetActorLocation();
+	ToEnemy.Z = 0.0f;
+
+	if (!ToEnemy.Normalize())
+	{
+		ToEnemy = Victim->GetActorForwardVector();
+	}
+
+	FVector EnemyLocation = Victim->GetActorLocation() + ToEnemy * StandOffDistance;
+	EnemyLocation.Z = Enemy->GetActorLocation().Z;
+
+	// Teleport rather than sweep: the pair is authored at this distance, and
+	// a sweep would stop the enemy on the victim's capsule.
+	Enemy->SetActorLocationAndRotation(EnemyLocation, (-ToEnemy).Rotation(), false, nullptr,
+		ETeleportType::TeleportPhysics);
+
+	Victim->SetActorRotation(ToEnemy.Rotation());
+}
+
+float UExcursionEncounterSubsystem::PlayPairedAnimation(AExplorationEnemyCharacter* Enemy, ACharacter* Victim,
+	const FExcursionCaptureAnimation& Animation)
+{
+	float Length = 0.0f;
+
+	if (Enemy && Animation.EnemyMontage)
+	{
+		Length = FMath::Max(Length, Enemy->PlayAnimMontage(Animation.EnemyMontage));
+	}
+
+	if (Victim && Animation.VictimMontage)
+	{
+		Length = FMath::Max(Length, Victim->PlayAnimMontage(Animation.VictimMontage));
+	}
+
+	if (Length <= 0.0f)
+	{
+		UE_LOG(LogNevergone, Verbose,
+			TEXT("[ExcursionEncounterSubsystem] %s has no capture animation for this outcome; resolving at once"),
+			*GetNameSafe(Enemy));
+	}
+
+	return Length;
+}
+
+void UExcursionEncounterSubsystem::BecomeCorpse(ACharacter* Character)
+{
+	if (!Character)
+	{
+		return;
+	}
+
+	// Physics takes over from the pose the body has now; a montage still
+	// playing (or blending out) would keep pulling the bones.
+	Character->StopAnimMontage();
+
+	if (UCharacterMovementComponent* Movement = Character->GetCharacterMovement())
+	{
+		Movement->StopMovementImmediately();
+		Movement->DisableMovement();
+		Movement->SetComponentTickEnabled(false);
+	}
+
+	if (UCapsuleComponent* Capsule = Character->GetCapsuleComponent())
+	{
+		Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
+	USkeletalMeshComponent* Mesh = Character->GetMesh();
+
+	if (!Mesh)
+	{
+		return;
+	}
+
+	if (!Mesh->GetPhysicsAsset())
+	{
+		UE_LOG(LogNevergone, Warning,
+			TEXT("[ExcursionEncounterSubsystem] %s has no physics asset; the body keeps its animated pose instead of falling"),
+			*GetNameSafe(Character));
+
+		return;
+	}
+
+	Mesh->SetCollisionProfileName(TEXT("Ragdoll"));
+	Mesh->SetAllBodiesSimulatePhysics(true);
+	Mesh->SetSimulatePhysics(true);
+	Mesh->WakeAllRigidBodies();
+	Mesh->bBlendPhysics = true;
+
+	ActiveRagdolls.Add(Mesh);
+}
+
+void UExcursionEncounterSubsystem::WatchRagdolls()
+{
+	for (int32 Index = ActiveRagdolls.Num() - 1; Index >= 0; --Index)
+	{
+		USkeletalMeshComponent* Mesh = ActiveRagdolls[Index].Get();
+
+		if (!Mesh)
+		{
+			ActiveRagdolls.RemoveAt(Index);
+
+			continue;
+		}
+
+		if (Mesh->Bounds.ContainsNaN())
+		{
+			UE_LOG(LogNevergone, Error,
+				TEXT("[ExcursionEncounterSubsystem] ragdoll of %s blew up (NaN); removed from physics and hidden. Check physics asset %s: tiny bodies (fingers, toes) or overlapping bodies with collision between them are the usual cause"),
+				*GetNameSafe(Mesh->GetOwner()), *GetNameSafe(Mesh->GetPhysicsAsset()));
+
+			Mesh->SetSimulatePhysics(false);
+			Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Mesh->SetVisibility(false);
+
+			ActiveRagdolls.RemoveAt(Index);
+
+			continue;
+		}
+
+		// Settled bodies do not go NaN anymore.
+		if (!Mesh->IsAnyRigidBodyAwake())
+		{
+			ActiveRagdolls.RemoveAt(Index);
+		}
+	}
+}
+
+void UExcursionEncounterSubsystem::KillRecruitedSurvivors()
+{
+	for (TActorIterator<AExcursionSurvivorNPC> It(GetWorld()); It; ++It)
+	{
+		AExcursionSurvivorNPC* Survivor = *It;
+
+		if (!Survivor->IsRecruited())
+		{
+			continue;
+		}
+
+		Survivor->MarkDead();
+
+		BecomeCorpse(Survivor);
+
+		UE_LOG(LogNevergone, Log,
+			TEXT("[ExcursionEncounterSubsystem] %s dies with the player"),
+			*GetNameSafe(Survivor));
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Freeze
+// ---------------------------------------------------------------------------
+
+void UExcursionEncounterSubsystem::FreezeWorldExcept(const AActor* KeepA, const AActor* KeepB)
+{
+	auto Freeze = [this](AActor* Actor)
+	{
+		if (Actor && Actor->CustomTimeDilation > 0.0f)
+		{
+			Actor->CustomTimeDilation = 0.0f;
+
+			FrozenActors.Add(Actor);
+		}
+	};
+
+	// Every character and its controller: enemies, followers, idle NPCs.
+	// The controller matters as much as the body, or its brain would keep
+	// issuing orders.
+	for (TActorIterator<ACharacter> It(GetWorld()); It; ++It)
+	{
+		ACharacter* Character = *It;
+
+		if (Character == KeepA || Character == KeepB)
+		{
+			continue;
+		}
+
+		Freeze(Character);
+		Freeze(Character->GetController());
+	}
+
+	UE_LOG(LogNevergone, Log,
+		TEXT("[ExcursionEncounterSubsystem] world frozen around %s and %s (%d actors)"),
+		*GetNameSafe(KeepA), *GetNameSafe(KeepB), FrozenActors.Num());
+}
+
+void UExcursionEncounterSubsystem::UnfreezeWorld()
+{
+	// Everything frozen here ran at normal speed before: nothing else in the
+	// excursion changes time dilation.
+	for (const TWeakObjectPtr<AActor>& Actor : FrozenActors)
+	{
+		if (Actor.IsValid())
+		{
+			Actor->CustomTimeDilation = 1.0f;
+		}
+	}
+
+	UE_LOG(LogNevergone, Log,
+		TEXT("[ExcursionEncounterSubsystem] world resumed (%d actors)"),
+		FrozenActors.Num());
+
+	FrozenActors.Reset();
+}
+
+AExplorationPlayerController* UExcursionEncounterSubsystem::GetPlayerController(const ACharacter* Player)
+{
+	return Player ? Cast<AExplorationPlayerController>(Player->GetController()) : nullptr;
+}

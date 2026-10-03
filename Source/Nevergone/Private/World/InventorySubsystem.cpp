@@ -405,40 +405,47 @@ EInventoryResult UInventorySubsystem::DropItem(UItemDefinition* ItemDef, const F
     EInventoryResult RemoveResult = RemoveItem(ItemDef, 1);
     if (RemoveResult != EInventoryResult::Success) return RemoveResult;
 
-    // Spawn the pickup actor in the current world.
-    // Use ItemDefinition::WorldActorClass (the BP subclass with mesh assigned).
-    // If not set, fall back to the base C++ class — actor will be invisible.
-    UWorld* World = GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr;
-    if (World)
-    {
-        FActorSpawnParameters Params;
-        Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-
-        TSubclassOf<AWorldItemActor> SpawnClass = nullptr;
-        if (!ItemDef->WorldActorClass.IsNull())
-        {
-            SpawnClass = ItemDef->WorldActorClass.LoadSynchronous();
-        }
-        if (!SpawnClass)
-        {
-            UE_LOG(LogTemp, Warning,
-                TEXT("[InventorySubsystem] DropItem: '%s' has no WorldActorClass set — spawning base C++ class (no mesh). Assign WorldActorClass on the ItemDefinition DataAsset."),
-                *ItemDef->DisplayName.ToString());
-            SpawnClass = AWorldItemActor::StaticClass();
-        }
-
-        AWorldItemActor* Dropped = World->SpawnActor<AWorldItemActor>(
-            SpawnClass, SpawnLocation, FRotator::ZeroRotator, Params);
-
-        if (Dropped)
-        {
-            Dropped->InitializeAsDroppedItem(ItemDef);
-            UE_LOG(LogTemp, Log, TEXT("[InventorySubsystem] DropItem: spawned '%s' (%s) at %s."),
-                *ItemDef->DisplayName.ToString(), *GetNameSafe(SpawnClass), *SpawnLocation.ToString());
-        }
-    }
+    SpawnWorldItem(ItemDef, SpawnLocation);
 
     return EInventoryResult::Success;
+}
+
+AWorldItemActor* UInventorySubsystem::SpawnWorldItem(UItemDefinition* ItemDef, const FVector& Location,
+    const FRotator& Rotation)
+{
+    if (!ItemDef) return nullptr;
+
+    UWorld* World = GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr;
+    if (!World) return nullptr;
+
+    // Use ItemDefinition::WorldActorClass (the BP subclass with mesh assigned).
+    // If not set, fall back to the base C++ class — actor will be invisible.
+    TSubclassOf<AWorldItemActor> SpawnClass = nullptr;
+    if (!ItemDef->WorldActorClass.IsNull())
+    {
+        SpawnClass = ItemDef->WorldActorClass.LoadSynchronous();
+    }
+    if (!SpawnClass)
+    {
+        UE_LOG(LogTemp, Warning,
+            TEXT("[InventorySubsystem] SpawnWorldItem: '%s' has no WorldActorClass set — spawning base C++ class (no mesh). Assign WorldActorClass on the ItemDefinition DataAsset."),
+            *ItemDef->DisplayName.ToString());
+        SpawnClass = AWorldItemActor::StaticClass();
+    }
+
+    FActorSpawnParameters Params;
+    Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+    AWorldItemActor* Spawned = World->SpawnActor<AWorldItemActor>(SpawnClass, Location, Rotation, Params);
+
+    if (Spawned)
+    {
+        Spawned->InitializeAsDroppedItem(ItemDef);
+        UE_LOG(LogTemp, Log, TEXT("[InventorySubsystem] SpawnWorldItem: spawned '%s' (%s) at %s."),
+            *ItemDef->DisplayName.ToString(), *GetNameSafe(SpawnClass), *Location.ToString());
+    }
+
+    return Spawned;
 }
 
 // ---------------------------------------------------------------------------

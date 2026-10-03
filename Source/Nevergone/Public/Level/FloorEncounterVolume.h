@@ -118,6 +118,21 @@ private:
 	// precision loss in very long sessions.
 	float BobTime = 0.f;
 
+	// Re-trigger guard.
+	//
+	// When the prep is canceled or the encounter is deactivated, the player
+	// pawn is destroyed and respawned at the same world position by
+	// GameContextManager::ReturnToExploration. The new pawn is born already
+	// overlapping our TriggerBox, which would re-fire BeginOverlap and
+	// immediately re-enter BattlePreparation in a loop.
+	//
+	// We require a clean Exit -> Enter cycle: this flag is set when the
+	// encounter goes back to a re-triggerable state with the player still
+	// presumed inside the trigger, and is cleared by OnTriggerEndOverlap when
+	// the player physically leaves. BeginOverlap early-outs while the flag
+	// is set.
+	bool bWaitingForExitBeforeRetrigger = false;
+
 protected:
 	UFUNCTION()
 	void OnTriggerBeginOverlap(
@@ -127,5 +142,13 @@ protected:
 		int32 OtherBodyIndex,
 		bool bFromSweep,
 		const FHitResult& SweepResult
+	);
+
+	UFUNCTION()
+	void OnTriggerEndOverlap(
+		UPrimitiveComponent* OverlappedComponent,
+		AActor* OtherActor,
+		UPrimitiveComponent* OtherComp,
+		int32 OtherBodyIndex
 	);
 };

@@ -50,7 +50,10 @@ public:
     // IInteractable
     // -----------------------------------------------------------------------
     virtual void Interact_Implementation(AActor* Interactor) override;
-
+    
+    void OnContainerOpen();
+    void OnContainerClose();
+    
     // -----------------------------------------------------------------------
     // ISaveParticipant
     // -----------------------------------------------------------------------
@@ -92,6 +95,15 @@ public:
 protected:
 
     virtual void BeginPlay() override;
+    
+    // -----------------------------------------------------------------------
+    // Blueprint functions for opening/closing the container if applicable
+    // -----------------------------------------------------------------------
+    UFUNCTION(BlueprintImplementableEvent, Category = "Quest Log")
+    void BP_ContainerOpen();
+    
+    UFUNCTION(BlueprintImplementableEvent, Category = "Quest Log")
+    void BP_ContainerClose();
 
     // Archetype reference. Required.
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Container")

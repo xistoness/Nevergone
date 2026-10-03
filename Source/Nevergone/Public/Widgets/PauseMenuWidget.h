@@ -8,6 +8,7 @@
 
 class UWidgetSwitcher;
 class UMenuPanelBase;
+class USettingsPanelBase;
 class UMyGameInstance;
 
 DECLARE_MULTICAST_DELEGATE(FOnResumeRequested);
@@ -82,8 +83,10 @@ protected:
     UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
     UMenuPanelBase* Panel_Load;
 
+    // Settings panel — typed to USettingsPanelBase so the menu widget can
+    // reach the tab API directly if it ever needs to drive tabs from outside.
     UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
-    UMenuPanelBase* Panel_Settings;
+    USettingsPanelBase* Panel_Settings;
 
     UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
     UMenuPanelBase* Panel_Quit;
