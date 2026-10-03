@@ -61,8 +61,8 @@ void ATowerFloorGameMode::BeginPlay()
 		this,
 		&ATowerFloorGameMode::HandleGameContextChanged
 	);
-	UE_LOG(LogTemp, Warning, TEXT("Bind -> Manager: %p"), ContextManager);
-	UE_LOG(LogTemp, Error,
+	UE_LOG(LogTemp, Verbose, TEXT("Bind -> Manager: %p"), ContextManager);
+	UE_LOG(LogTemp, Verbose,
 		TEXT("[TowerFloorGameMode] BeginPlay: subscribed to OnGameContextChanged. this=%s | IsBound=%d"),
 		*GetNameSafe(this), ContextManager->OnGameContextChanged.IsBound() ? 1 : 0);
 

@@ -60,9 +60,11 @@ Tarefa de Análise: só leitura. Responda no Relatório e passe para Aguardando 
 
 Preenchidos na sessão de calibração com a forma exata que funcionou no shell:
 
-- Build: `<preencher>` (alvo `NevergoneEditor Win64 Development`)
-- Testes: `<preencher>`
-- Smoke test: `<preencher>`
+- Build: `bash Scripts/build.sh` (alvo `NevergoneEditor Win64 Development`; recusa rodar com o editor aberto; ~25 s incremental, ~3 min completo)
+- Testes: `bash Scripts/test.sh` (todos os `Nevergone.*`, smoke incluído; ~50 s)
+- Smoke test: `bash Scripts/smoke.sh` (só `Nevergone.Smoke.*`)
+
+Rode-os da raiz do projeto, nessa forma exata (é a que está no allow). Os testes rodam em `UnrealEditor-Cmd.exe -game -nullrhi`, sem janela; exit code ≠ 0 em falha. Log completo em `Saved/Automation/<Tests|Smoke>/run.log`. Não use `-nosound`: sem dispositivo de áudio, a música loga `Error`.
 
 Com o editor aberto e Live Coding ativo, o build externo falha: verifique antes e peça para fechá-lo.
 

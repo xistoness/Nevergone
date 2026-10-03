@@ -396,13 +396,22 @@ float UExcursionEncounterSubsystem::ComputeDeathChance(const UExplorationEnemyDe
 
 	const int32 PriorBites = BitesBySurvivor.FindRef(Survivor);
 
-	const float Chance = Definition.BaseDeathChance
-		- Strength * Settings->DeathChanceReductionPerStrength
-		+ PriorBites * Settings->DeathChanceBonusPerPriorBite;
+	const float Chance = CalculateDeathChance(Definition.BaseDeathChance, Strength, PriorBites,
+		Settings->DeathChanceReductionPerStrength, Settings->DeathChanceBonusPerPriorBite);
 
 	UE_LOG(LogNevergone, Verbose,
 		TEXT("[ExcursionEncounterSubsystem] %s death chance: base %.1f, Strength %d, earlier bites %d -> %.1f"),
 		*GetNameSafe(Survivor), Definition.BaseDeathChance, Strength, PriorBites, Chance);
+
+	return Chance;
+}
+
+float UExcursionEncounterSubsystem::CalculateDeathChance(float BaseDeathChance, int32 Strength, int32 PriorBites,
+	float ReductionPerStrength, float BonusPerPriorBite)
+{
+	const float Chance = BaseDeathChance
+		- Strength * ReductionPerStrength
+		+ PriorBites * BonusPerPriorBite;
 
 	return FMath::Clamp(Chance, 0.0f, 100.0f);
 }

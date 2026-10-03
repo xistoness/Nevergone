@@ -97,6 +97,11 @@ public:
 
 	FOnCaptureResolved OnCaptureResolved;
 
+	// The death chance formula from the class comment, in percent, clamped
+	// to 0-100. Pure, so it can be tested without a world.
+	static float CalculateDeathChance(float BaseDeathChance, int32 Strength, int32 PriorBites,
+		float ReductionPerStrength, float BonusPerPriorBite);
+
 	// --- UTickableWorldSubsystem ---
 
 	virtual void Tick(float DeltaTime) override;

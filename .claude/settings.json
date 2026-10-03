@@ -5,7 +5,10 @@
       "Bash(git commit *)",
       "Bash(git status)",
       "Bash(git diff *)",
-      "Bash(git log *)"
+      "Bash(git log *)",
+      "Bash(bash Scripts/build.sh)",
+      "Bash(bash Scripts/test.sh)",
+      "Bash(bash Scripts/smoke.sh)"
     ],
     "ask": [
       "Edit(./Config/**)"
