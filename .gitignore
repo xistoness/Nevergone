@@ -4,6 +4,13 @@ Intermediate
 Saved
 Build
 
+# Assets live outside Git: the repository versions code only
+Content/*
+!Content/Localization/
+*.uasset
+*.umap
+*.fbx
+
 .vscode
 .vs
 .idea/

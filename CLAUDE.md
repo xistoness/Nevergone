@@ -16,6 +16,7 @@ https://app.notion.com/p/239f79615b964b0b8746433839c3bd60
 
 - Cada tarefa é uma página com três seções: **Briefing** (do chat; nunca edite), **Relatório** e **Para o chat** (suas).
 - Status: A fazer → Fazendo → Aguardando teste → Aguardando chat → Feito. "Feito" é do chat.
+- Ordem de execução: pegar a tarefa com Status "A fazer" de menor Ordem. Tarefas sem Ordem não têm sequência fixa e só entram se o Cristopher pedir.
 - No Notion você só escreve em páginas do banco Tarefas: Relatório, Para o chat, Status, e páginas novas de tarefas expressas. Qualquer outra mudança de documentação vai descrita em "Para o chat".
 - Não abra outras páginas do Notion sem necessidade: as decisões que importam vêm resumidas no Briefing. Abra uma página de decisão só se o resumo não bastar.
 
@@ -84,14 +85,14 @@ Lembre das tarefas manuais dele sem esperar que pergunte:
 
 ## Limites
 
-- Não editar `Content/`, `Binaries/`, `Intermediate/`, `DerivedDataCache/` e `Saved/` (em `Saved/`, só ler logs). `Config/*.ini` só com pedido explícito.
+- Não editar `Content/`, `Binaries/`, `Intermediate/`, `DerivedDataCache/` e `Saved/` (em `Saved/`, só ler logs; exceção: `Saved/Automation/`, onde os scripts escrevem os relatórios de teste e o `build.log`). `Config/*.ini` só com pedido explícito.
 - Não apagar arquivos sem pedir. Não fazer push nem reescrever histórico.
 - Não abrir o editor nem cookar o jogo.
 
 ## Início de sessão
 
 - O hook de checkpoint commita o que estiver pendente e informa o resultado. Se ele disser que não houve checkpoint, avise antes de mexer em arquivos.
-- Peça o link ou o título da tarefa.
+- Peça o link ou o título da tarefa; se o Cristopher não indicar uma, siga a ordem de execução (seção Canal).
 
 ## Respostas
 
