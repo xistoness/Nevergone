@@ -19,8 +19,11 @@
       "Edit(./Intermediate/**)",
       "Edit(./DerivedDataCache/**)",
       "Edit(./Saved/**)",
-      "Bash(git push)",
-      "Bash(git push *)",
+      "Bash(git push *--force*)",
+      "Bash(git push *-f*)",
+      "Bash(git push *+*)",
+      "Bash(git push *--delete*)",
+      "Bash(git push *--mirror*)",
       "Bash(git reset --hard *)"
     ]
   },
