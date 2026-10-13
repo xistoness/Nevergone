@@ -36,7 +36,7 @@ Se um ajuste ou uma tarefa expressa exigir decisão de design, pare: escreva a p
 4. Implementar, sem sair do escopo do Briefing.
 5. Verificar (seção Verificação) até passar em tudo.
 6. Preencher Relatório e, se houver, Para o chat. Status → Aguardando teste. Na conversa: resumo, o que configurar no editor e o roteiro de teste.
-7. Depois do OK do Cristopher: commit (inglês, prefixado pelo sistema, ex.: `Excursion: ...`), hash no Relatório, Status → Aguardando chat. Não peça permissão para esse commit.
+7. Depois do OK do Cristopher: commit (inglês, prefixado pelo sistema, ex.: `Excursion: ...`), push, hash no Relatório, Status → Aguardando chat. Não peça permissão para esse commit nem para o push.
 
 Tarefa de Análise: só leitura. Responda no Relatório e passe para Aguardando chat.
 
@@ -79,14 +79,14 @@ Lembre das tarefas manuais dele sem esperar que pergunte:
 
 - **Modelo**: o Briefing traz o modelo recomendado. Se a sessão estiver em outro, diga antes de começar. Se a tarefa travar (três tentativas sem compilar, ou o mesmo teste falhando), sugira subir para o Opus.
 - **/clear**: depois do commit de uma tarefa, lembre de rodar `/clear` ou abrir uma sessão nova antes da próxima.
-- **Push**: depois de cada commit, conte os commits não enviados (`git rev-list --count @{u}..HEAD`). A partir de 3, ou no fim da sessão, lembre de fazer push. Se não houver remoto configurado, avise uma vez por sessão.
+- **Push**: você mesmo faz o push (`git push`) depois de cada commit de tarefa. Se o push falhar ou não houver remoto configurado, avise.
 - **Editor**: lembre de fechar o editor antes do build e de reabri-lo para testar, com a lista do que configurar.
 - **Chat**: quando uma tarefa for para Aguardando chat, lembre de levá-la ao chat. Várias podem ir juntas.
 
 ## Limites
 
 - Não editar `Content/`, `Binaries/`, `Intermediate/`, `DerivedDataCache/` e `Saved/` (em `Saved/`, só ler logs; exceção: `Saved/Automation/`, onde os scripts escrevem os relatórios de teste e o `build.log`). `Config/*.ini` só com pedido explícito.
-- Não apagar arquivos sem pedir. Não fazer push nem reescrever histórico.
+- Não apagar arquivos sem pedir. Push comum é livre; reescrever histórico ou forçar push, só com Briefing que peça e confirmação do Cristopher.
 - Não abrir o editor nem cookar o jogo.
 
 ## Início de sessão
