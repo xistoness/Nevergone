@@ -64,6 +64,9 @@ Preenchidos na sessão de calibração com a forma exata que funcionou no shell:
 - Build: `bash Scripts/build.sh` (alvo `NevergoneEditor Win64 Development`; recusa rodar com o editor aberto; ~25 s incremental, ~3 min completo)
 - Testes: `bash Scripts/test.sh` (todos os `Nevergone.*`, smoke incluído; ~50 s)
 - Smoke test: `bash Scripts/smoke.sh` (só `Nevergone.Smoke.*`)
+- Snapshot manual (Kopia, pasta do projeto inteira para o disco externo `G:`): `powershell -NoProfile -ExecutionPolicy Bypass -File Scripts/kopia-snapshot.ps1`. Pula sem erro se o `G:` estiver desconectado; log em `C:\Users\Public\kopia-snapshot.log`. Um snapshot agendado (elevado, com VSS) roda aos domingos às 12:00; o manual roda sem VSS, o que é aceitável.
+
+Antes de reescrever histórico ou de uma tarefa que muda campos de data assets, rodar o snapshot manual.
 
 Rode-os da raiz do projeto, nessa forma exata (é a que está no allow). Os testes rodam em `UnrealEditor-Cmd.exe -game -nullrhi`, sem janela; exit code ≠ 0 em falha. Log completo em `Saved/Automation/<Tests|Smoke>/run.log`. Não use `-nosound`: sem dispositivo de áudio, a música loga `Error`.
 
