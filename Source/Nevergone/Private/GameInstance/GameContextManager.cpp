@@ -410,7 +410,7 @@ void UGameContextManager::EnterState(EGameContextState NewState)
 	ExitState(OldState);
 	CurrentState = NewState;
 
-	UE_LOG(LogTemp, Warning, TEXT("Broadcast -> Manager: %p"), this);
+	UE_LOG(LogTemp, Verbose, TEXT("Broadcast -> Manager: %p"), this);
 	UE_LOG(LogTemp, Warning, 
 		TEXT("[GameContextManager]: Broadcasting GameContextChanged! State=%d | HasListeners=%d"),
 		(int32)NewState, OnGameContextChanged.IsBound() ? 1 : 0);

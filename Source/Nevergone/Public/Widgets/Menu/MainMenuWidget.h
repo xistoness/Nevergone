@@ -34,6 +34,11 @@ public:
 
 	virtual void NativeOnInitialized() override;
 
+	// BP_MainMenuGameMode hands this widget to SetInputMode(UIOnly) as the widget
+	// to focus. A UserWidget only accepts focus when it says so; without this the
+	// player controller logs "Attempting to focus Non-Focusable widget".
+	virtual bool NativeSupportsKeyboardFocus() const override { return true; }
+
 	// Navigate to a panel by its registered ID.
 	// IDs match the FName keys in NavigationMap ("NewGame", "Continue", etc.)
 	UFUNCTION(BlueprintCallable, Category = "Menu")

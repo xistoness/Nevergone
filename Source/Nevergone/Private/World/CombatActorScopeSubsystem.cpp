@@ -9,6 +9,23 @@
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 
+bool UCombatActorScopeSubsystem::ShouldCreateSubsystem(UObject* Outer) const
+{
+    if (!Super::ShouldCreateSubsystem(Outer))
+    {
+        return false;
+    }
+
+    // UGameContextManager is a GameInstanceSubsystem and a world subsystem cannot
+    // declare a dependency across collections. Instead, only exist in worlds the
+    // GameInstance already owns: UGameInstance::InitializeStandalone() builds the
+    // placeholder "Untitled" world (and its subsystems) before calling Init(),
+    // i.e. before the GameInstance subsystems exist. Editor worlds have no
+    // GameInstance either and never need combat presence policies.
+    const UWorld* World = Cast<UWorld>(Outer);
+    return World && World->IsGameWorld() && World->GetGameInstance() != nullptr;
+}
+
 void UCombatActorScopeSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
     Super::Initialize(Collection);

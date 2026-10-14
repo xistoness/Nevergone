@@ -54,7 +54,7 @@ Tarefa de Análise: só leitura. Responda no Relatório e passe para Aguardando 
 
 1. **Build** sem erros e sem warnings novos.
 2. **Testes de automação**: lógica pura nova ou alterada ganha teste em `Source/Nevergone/Private/Tests/`, com nome começando por `Nevergone.`. Rode todos pela linha de comando, sem abrir a janela do editor.
-3. **Smoke test**: um teste que abre a fase de teste da excursão (hoje `Level_01`), roda alguns segundos e falha com qualquer `Error` ou `ensure` no log.
+3. **Smoke test**: dois testes `Nevergone.Smoke.*`, ambos falham com qualquer `Error` ou `ensure` no log. `BootToLevel01` cobre o boot do jogo, o menu principal e a travessia Novo Jogo → `Level_01` (captura os Errors desde o carregamento do módulo, antes do teste começar; escreve em slots de save reais, que são só de teste). `Level01` abre a fase de teste da excursão (hoje `Level_01`) direto e roda alguns segundos.
 4. **Revisão**: um subagente revisa o diff contra o Briefing e o `docs/Conventions.md`. Corrija o que ele apontar antes do Relatório.
 
 ## Comandos
@@ -63,7 +63,7 @@ Preenchidos na sessão de calibração com a forma exata que funcionou no shell:
 
 - Build: `bash Scripts/build.sh` (alvo `NevergoneEditor Win64 Development`; recusa rodar com o editor aberto; ~25 s incremental, ~3 min completo)
 - Testes: `bash Scripts/test.sh` (todos os `Nevergone.*`, smoke incluído; ~50 s)
-- Smoke test: `bash Scripts/smoke.sh` (só `Nevergone.Smoke.*`)
+- Smoke test: `bash Scripts/smoke.sh` (só `Nevergone.Smoke.*`: boot + menu + Level_01, e Level_01 direto)
 - Snapshot manual (Kopia, pasta do projeto inteira para o disco externo `G:`): `powershell -NoProfile -ExecutionPolicy Bypass -File Scripts/kopia-snapshot.ps1`. Pula sem erro se o `G:` estiver desconectado; log em `C:\Users\Public\kopia-snapshot.log`. Um snapshot agendado (elevado, com VSS) roda aos domingos às 12:00; o manual roda sem VSS, o que é aceitável.
 
 Antes de reescrever histórico ou de uma tarefa que muda campos de data assets, rodar o snapshot manual.

@@ -133,7 +133,7 @@ void ATowerFloorGameMode::HandleGameContextChanged(EGameContextState NewState)
     UMyGameInstance* MyGI = GetGameInstance<UMyGameInstance>();
     if (!MyGI) { return; }
 
-	UE_LOG(LogTemp, Warning, TEXT("GameMode %p received state %d"), this, (int)NewState);
+	UE_LOG(LogTemp, Verbose, TEXT("GameMode %p received state %d"), this, (int)NewState);
 	
     UAudioSubsystem* Audio = MyGI->GetSubsystem<UAudioSubsystem>();
     UGameContextManager* ContextManager = MyGI->GetSubsystem<UGameContextManager>();

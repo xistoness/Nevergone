@@ -71,7 +71,7 @@ ACharacterBase::ACharacterBase()
 
 void ACharacterBase::EnableExplorationMode()
 {
-	UE_LOG(LogTemp, Warning, TEXT("Setting exploration mode..."));
+	UE_LOG(LogTemp, Verbose, TEXT("Setting exploration mode..."));
 	SetMode(ExplorationMode);
 }
 
@@ -197,7 +197,7 @@ void ACharacterBase::WriteSaveData_Implementation(FActorSaveData& OutData) const
 		TempArmLength = Arm->TargetArmLength;
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("[BaseCharacter]: Saving BoomTargetArm=%s"),
+	UE_LOG(LogTemp, Verbose, TEXT("[BaseCharacter]: Saving BoomTargetArm=%s"),
 		*FString::SanitizeFloat(TempArmLength));
 
 	FMemoryWriter Writer(Payload.Data, true);
