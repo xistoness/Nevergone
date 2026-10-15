@@ -21,11 +21,24 @@ if [ -z "$(git status --porcelain)" ]; then
   exit 0
 fi
 
+# main only receives approved work: never checkpoint onto it (or onto a
+# detached HEAD); park the pending changes on their own branch instead.
+branch="$(git branch --show-current)"
+if [ -z "$branch" ] || [ "$branch" = "main" ] || [ "$branch" = "master" ]; then
+  stamp="$(date '+%Y%m%d-%H%M')"
+  if ! git switch -c "checkpoint/$stamp" >/dev/null 2>&1; then
+    echo "checkpoint: could not create branch checkpoint/$stamp; no checkpoint was made"
+    exit 0
+  fi
+  echo "checkpoint: session started on '${branch:-detached HEAD}' with pending changes; moved them to branch checkpoint/$stamp"
+  branch="checkpoint/$stamp"
+fi
+
 git add -A
 if git commit -q -m "Checkpoint: before Claude Code session $(date '+%Y-%m-%d %H:%M')"; then
-  echo "checkpoint: pending changes committed as $(git rev-parse --short HEAD)"
+  echo "checkpoint: pending changes committed as $(git rev-parse --short HEAD) on $branch"
 else
-  echo "checkpoint: commit failed; no checkpoint was made"
+  echo "checkpoint: commit failed on $branch; no checkpoint was made"
 fi
 
 exit 0

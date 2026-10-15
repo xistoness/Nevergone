@@ -26,6 +26,8 @@ https://app.notion.com/p/239f79615b964b0b8746433839c3bd60
 2. **Ajuste dentro de uma tarefa** (bug achado no teste, polimento, número a mexer): resolva na mesma sessão, sem novo Briefing, e registre no Relatório da mesma tarefa.
 3. **Tarefa expressa** (correção trivial pedida direto): crie a página (Tipo Bug), resolva e relate.
 
+Os três níveis seguem o fluxo de branch abaixo, e em todos o merge em `main` espera o OK do Cristopher. Ajuste dentro de uma tarefa vai na branch da própria tarefa.
+
 Se um ajuste ou uma tarefa expressa exigir decisão de design, pare: escreva a pergunta em "Para o chat", Status → Aguardando chat, e avise.
 
 ## Fluxo de uma tarefa com Briefing
@@ -33,12 +35,25 @@ Se um ajuste ou uma tarefa expressa exigir decisão de design, pare: escreva a p
 1. Ler o Briefing e conferir o modelo pedido (seção Lembretes). Status → Fazendo.
 2. Ler o código envolvido, buscando no repositório. Nunca assumir que uma correção anterior está presente.
 3. Propor um plano curto (arquivos, mudanças, riscos) e esperar aprovação, a menos que o Briefing dispense.
-4. Implementar, sem sair do escopo do Briefing.
+4. Criar a branch da tarefa (seção Branches) e implementar nela, sem sair do escopo do Briefing.
 5. Verificar (seção Verificação) até passar em tudo.
-6. Preencher Relatório e, se houver, Para o chat. Status → Aguardando teste. Na conversa: resumo, o que configurar no editor e o roteiro de teste.
-7. Depois do OK do Cristopher: commit (inglês, prefixado pelo sistema, ex.: `Excursion: ...`), push, hash no Relatório, Status → Aguardando chat. Não peça permissão para esse commit nem para o push.
+6. Commit na branch (inglês, prefixado pelo sistema, ex.: `Excursion: ...`) e push da branch. Preencher Relatório (com a linha Branch) e, se houver, Para o chat. Status → Aguardando teste. Na conversa: resumo, o que configurar no editor e o roteiro de teste. Não peça permissão para esse commit nem para o push.
+7. Teste reprovado: a correção vai na mesma branch (novo commit e push), e o Relatório é atualizado.
+8. Depois do OK do Cristopher: merge em `main` (seção Branches), push de `main`, branch local removida, hash do merge no Relatório, Status → Aguardando chat. Não peça permissão para o merge nem para o push.
 
-Tarefa de Análise: só leitura. Responda no Relatório e passe para Aguardando chat.
+Tarefa de Análise: só leitura, não cria branch. Responda no Relatório e passe para Aguardando chat.
+
+## Branches
+
+`main` só recebe código que o Cristopher aprovou. Toda mudança no repositório (tarefa com Briefing, ajuste, tarefa expressa, mudança do próprio `CLAUDE.md`) nasce numa branch.
+
+- **Nome**: `task/<Ordem com 2 dígitos>-<slug>` para tarefa com Briefing (ex.: `task/04-branch-flow`); `task/fix-<slug>` para tarefa expressa; `task/misc-<slug>` para mudança sem Ordem que não seja correção (ex.: só o `CLAUDE.md`). Slug em inglês, minúsculas, com hifens.
+- **Criar**: `git switch main`, `git pull --ff-only`, `git switch -c <branch>`. Começa sempre de `main` atualizada.
+- **Publicar**: `git push -u origin <branch>` no primeiro push; depois `git push`. O push é a cópia do código fora da máquina.
+- **Merge** (só depois do OK do Cristopher): `git switch main`, `git pull --ff-only`, `git merge --ff-only <branch>`. Se `main` andou e o ff falhar, `git merge --no-ff --no-edit <branch>`. Nunca rebase de branch já publicada, porque exigiria push forçado. Depois: `git push` de `main`, `git branch -d <branch>` e `git push origin --delete <branch>`. Depois de um `--no-ff`, rode build e testes de novo, porque a árvore mesclada nunca foi verificada.
+- **`Content/` fora do Git**: trocar de branch não troca os assets. Um campo preenchido num data asset que só existe no código da branch se perde se o editor salvar o asset com `main` compilada. Por isso, não troque de branch enquanto houver tarefa em teste; se for inevitável, peça ao Cristopher que feche o editor antes.
+- **Uma tarefa aberta por vez**: só comece a próxima depois do merge da que está em teste.
+- **Nunca commite direto em `main`.** Se estiver em `main` com mudanças pendentes, crie a branch antes de commitar.
 
 ## Relatório (curto: o chat lê isto para continuar)
 
@@ -48,7 +63,7 @@ Tarefa de Análise: só leitura. Responda no Relatório e passe para Aguardando 
 - O que configurar no editor (assets, Blueprints, Input Actions, data assets).
 - Roteiro de teste: 3 a 5 passos, cada um com o resultado esperado.
 - Verificação: build, testes, smoke test, revisão.
-- Commit.
+- Branch (nome) e commit.
 
 ## Verificação (antes de chamar o Cristopher)
 
@@ -81,20 +96,20 @@ O mais recente em `Saved/Logs/` é o arquivo sem data no nome. Categoria `LogNev
 Lembre das tarefas manuais dele sem esperar que pergunte:
 
 - **Modelo**: o Briefing traz o modelo recomendado. Se a sessão estiver em outro, diga antes de começar. Se a tarefa travar (três tentativas sem compilar, ou o mesmo teste falhando), sugira subir para o Opus.
-- **/clear**: depois do commit de uma tarefa, lembre de rodar `/clear` ou abrir uma sessão nova antes da próxima.
-- **Push**: você mesmo faz o push (`git push`) depois de cada commit de tarefa. Se o push falhar ou não houver remoto configurado, avise.
-- **Editor**: lembre de fechar o editor antes do build e de reabri-lo para testar, com a lista do que configurar.
+- **/clear**: depois do merge de uma tarefa (não antes: correção de teste reprovado precisa do contexto), lembre de rodar `/clear` ou abrir uma sessão nova antes da próxima.
+- **Push**: você mesmo faz o push da branch depois de cada commit de tarefa e o de `main` depois do merge. Se o push falhar ou não houver remoto configurado, avise.
+- **Editor**: lembre de fechar o editor antes do build e de reabri-lo para testar, com a lista do que configurar. Com tarefa em teste, avise que ele não deve trocar de branch (seção Branches).
 - **Chat**: quando uma tarefa for para Aguardando chat, lembre de levá-la ao chat. Várias podem ir juntas.
 
 ## Limites
 
 - Não editar `Content/`, `Binaries/`, `Intermediate/`, `DerivedDataCache/` e `Saved/` (em `Saved/`, só ler logs; exceção: `Saved/Automation/`, onde os scripts escrevem os relatórios de teste e o `build.log`). `Config/*.ini` só com pedido explícito.
-- Não apagar arquivos sem pedir. Push comum é livre; reescrever histórico ou forçar push, só com Briefing que peça e confirmação do Cristopher.
+- Não apagar arquivos sem pedir. Push comum é livre; reescrever histórico, forçar push ou apagar `main` (local ou remota), só com Briefing que peça e confirmação do Cristopher. Apagar a branch da tarefa depois do merge é parte do fluxo.
 - Não abrir o editor nem cookar o jogo.
 
 ## Início de sessão
 
-- O hook de checkpoint commita o que estiver pendente e informa o resultado. Se ele disser que não houve checkpoint, avise antes de mexer em arquivos.
+- O hook de checkpoint commita o que estiver pendente e informa o resultado. Em `main` (ou HEAD solto) ele nunca commita: cria antes uma branch `checkpoint/<data-hora>` e commita lá; avise o Cristopher, porque esse trabalho não aprovado fica fora de `main` até ele decidir; se ele mandar adotar o trabalho, renomeie com `git branch -m task/...` e trate como tarefa normal (esses comandos pedem permissão). Se o hook disser que não houve checkpoint, avise antes de mexer em arquivos.
 - Peça o link ou o título da tarefa; se o Cristopher não indicar uma, siga a ordem de execução (seção Canal).
 
 ## Respostas
