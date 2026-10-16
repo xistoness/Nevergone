@@ -39,7 +39,7 @@ Se um ajuste ou uma tarefa expressa exigir decisão de design, pare: escreva a p
 5. Verificar (seção Verificação) até passar em tudo.
 6. Commit na branch (inglês, prefixado pelo sistema, ex.: `Excursion: ...`) e push da branch. Preencher Relatório (com a linha Branch) e, se houver, Para o chat. Status → Aguardando teste. Na conversa: resumo, o que configurar no editor e o roteiro de teste. Não peça permissão para esse commit nem para o push.
 7. Teste reprovado: a correção vai na mesma branch (novo commit e push), e o Relatório é atualizado.
-8. Depois do OK do Cristopher: merge em `main` (seção Branches), push de `main`, branch local removida, hash do merge no Relatório, Status → Aguardando chat. Não peça permissão para o merge nem para o push.
+8. Depois do OK do Cristopher: merge em `main` (seção Branches), push de `main`, branch local removida, hash final em `main` no Relatório, Status → Aguardando chat. Não peça permissão para o merge nem para o push.
 
 Tarefa de Análise: só leitura, não cria branch. Responda no Relatório e passe para Aguardando chat.
 
@@ -63,7 +63,7 @@ Tarefa de Análise: só leitura, não cria branch. Responda no Relatório e pass
 - O que configurar no editor (assets, Blueprints, Input Actions, data assets).
 - Roteiro de teste: 3 a 5 passos, cada um com o resultado esperado.
 - Verificação: build, testes, smoke test, revisão.
-- Branch (nome) e commit.
+- Branch (nome) e hash final em `main`, atualizado por você no merge (fast-forward: último commit da branch; `--no-ff`: commit de merge). Antes do merge, o hash do último commit da branch.
 
 ## Verificação (antes de chamar o Cristopher)
 
@@ -79,7 +79,7 @@ Preenchidos na sessão de calibração com a forma exata que funcionou no shell:
 - Build: `bash Scripts/build.sh` (alvo `NevergoneEditor Win64 Development`; recusa rodar com o editor aberto; ~25 s incremental, ~3 min completo)
 - Testes: `bash Scripts/test.sh` (todos os `Nevergone.*`, smoke incluído; ~50 s)
 - Smoke test: `bash Scripts/smoke.sh` (só `Nevergone.Smoke.*`: boot + menu + Level_01, e Level_01 direto)
-- Snapshot manual (Kopia, pasta do projeto inteira para o disco externo `G:`): `powershell -NoProfile -ExecutionPolicy Bypass -File Scripts/kopia-snapshot.ps1`. Pula sem erro se o `G:` estiver desconectado; log em `C:\Users\Public\kopia-snapshot.log`. Um snapshot agendado (elevado, com VSS) roda aos domingos às 12:00; o manual roda sem VSS, o que é aceitável.
+- Snapshot manual (Kopia, pasta do projeto inteira para o repositório no disco externo `G:`): `powershell -NoProfile -ExecutionPolicy Bypass -File Scripts/kopia-snapshot-manual.ps1`. Inicia a tarefa agendada `Nevergone Kopia Snapshot` (elevada, com VSS), espera o fim e imprime `SNAPSHOT RECORDED` (exit 0), `SKIPPED` (exit 2, repositório inacessível) ou `FAILED` (exit 1). **Se pulou por falta do HD, pare e peça ao Cristopher que conecte o HD antes de seguir.** A tarefa também roda sozinha quando o HD é conectado e aos domingos às 12:00; log em `C:\Users\Public\kopia-snapshot.log`. Registrar a tarefa de novo exige PowerShell de administrador: `powershell -NoProfile -ExecutionPolicy Bypass -File Scripts/kopia-register-task.ps1`.
 
 Antes de reescrever histórico ou de uma tarefa que muda campos de data assets, rodar o snapshot manual.
 
