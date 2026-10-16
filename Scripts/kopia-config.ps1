@@ -5,10 +5,11 @@ $LogFile = Join-Path $env:PUBLIC 'kopia-snapshot.log'
 $TaskName = 'Nevergone Kopia Snapshot'
 
 # The drive letter alone proves nothing: another USB device can take G:.
-# A filesystem Kopia repository always holds a kopia.repository blob in its root.
+# A filesystem Kopia repository holds a kopia.repository blob in its root; the filesystem
+# backend stores it with a shard extension (kopia.repository.f), hence the wildcard.
 function Test-KopiaRepo {
     # String concatenation, not Join-Path: Join-Path throws when the drive letter does not exist.
-    Test-Path -LiteralPath "$RepoPath\kopia.repository"
+    Test-Path -Path "$RepoPath\kopia.repository*" -PathType Leaf
 }
 
 function Write-Log($Message) {
