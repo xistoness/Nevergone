@@ -89,8 +89,6 @@ private:
      */
     void RequestBattleCombatRestore(const FSavedCombatSession& SavedSession);
 	
-	void SyncExplorationActorHP(ACharacterBase* ExplorationActor);
-	
 	// Spawns a fresh exploration actor from the saved session data.
 	// Used by ReturnToExploration after combat ends.
 	ACharacterBase* SpawnExplorationActor();

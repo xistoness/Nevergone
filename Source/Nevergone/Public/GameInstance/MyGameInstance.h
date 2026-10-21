@@ -126,6 +126,18 @@ public:
 	// Delete a specific slot by index
 	UFUNCTION(BlueprintCallable, Category = "Save")
 	void DeleteSlotByIndex(int32 SlotIndex);
+
+	// Automation only. While set, RequestNewGame writes to this slot name instead of a
+	// numbered campaign slot, so test runs never show up in the player's slot list.
+	// An empty name (the default) restores the normal behaviour.
+	void SetAutomationSlotName(const FString& SlotName) { AutomationSlotName = SlotName; }
+
+	// Automation only. Ends the test session: drops the active save, clears the slot
+	// name and deletes the test slot's file.
+	void EndAutomationSession();
+
+	// Automation only. Deletes the save file of the given slot name, if any.
+	static void DeleteAutomationSlot(const FString& SlotName);
  
 	// Returns the slot name string for a given index
 	UFUNCTION(BlueprintCallable, Category = "Save")
@@ -283,6 +295,9 @@ private:
 	
 	UPROPERTY()
 	FString ActiveSlotName;
+
+	// Set only by automation; see SetAutomationSlotName.
+	FString AutomationSlotName;
 
 	UPROPERTY()
 	FPartyData PartyData;

@@ -60,7 +60,7 @@ int32 UPartyManagerSubsystem::GetActiveMemberCount() const
 
 void UPartyManagerSubsystem::AddPartyMember(const FPartyMemberData& NewMember)
 {
-    UE_LOG(LogTemp, Warning,
+    UE_LOG(LogTemp, Verbose,
         TEXT("[PartyManagerSubsystem] AddPartyMember: %s"),
         *NewMember.CharacterClass->GetName());
 

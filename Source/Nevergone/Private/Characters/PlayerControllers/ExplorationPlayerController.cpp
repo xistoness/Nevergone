@@ -952,7 +952,7 @@ void AExplorationPlayerController::OnPossess(APawn* InPawn)
 {
     Super::OnPossess(InPawn);
 
-    UE_LOG(LogTemp, Warning,
+    UE_LOG(LogTemp, Verbose,
         TEXT("[ExplorationPlayerController] OnPossess -> %s"), *GetNameSafe(InPawn));
 
     ApplyDefaultInputMappings();

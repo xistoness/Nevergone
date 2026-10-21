@@ -20,9 +20,6 @@ AExplorationEnemyCharacter::AExplorationEnemyCharacter()
 	// Placed enemies must be possessed in the level, not only when spawned.
 	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
 
-	// TODO: point at AExplorationEnemyController once it lands.
-	// AIControllerClass = AExplorationEnemyController::StaticClass();
-
 	bUseControllerRotationYaw = false;
 
 	if (UCharacterMovementComponent* Movement = GetCharacterMovement())
@@ -50,6 +47,13 @@ void AExplorationEnemyCharacter::BeginPlay()
 	Super::BeginPlay();
 
 	HomeLocation = GetActorLocation();
+
+	// The navigation agent has to cover the biggest capsule that walks the navmesh,
+	// and Blueprints and the definition can override the C++ default.
+	UE_LOG(LogNevergone, Verbose,
+		TEXT("[ExplorationEnemyCharacter] %s capsule: radius %.1f, half height %.1f"),
+		*GetNameSafe(this),
+		GetCapsuleComponent()->GetScaledCapsuleRadius(), GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
 
 	if (!Definition)
 	{

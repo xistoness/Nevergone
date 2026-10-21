@@ -31,7 +31,7 @@ void UMyGameInstance::Init()
 	FCoreUObjectDelegates::PostLoadMapWithWorld.AddUObject(
 		this, &UMyGameInstance::HandlePostLoadMapWithWorld);
 	
-	UE_LOG(LogTemp, Warning,
+	UE_LOG(LogTemp, Verbose,
 		TEXT("[MyGameInstance] Init: this=%s | class=%s | CharacterPreviewStudio=%s"),
 		*GetName(), *GetClass()->GetName(),
 		CharacterPreviewStudio ? *CharacterPreviewStudio->GetName() : TEXT("NULL"));
@@ -85,8 +85,9 @@ bool UMyGameInstance::HasSaveGame() const
  
 void UMyGameInstance::RequestNewGame()
 {
-	const int32 TargetSlot = AllocateNewSlotIndex();
-	const FString SlotName = GetSlotNameForIndex(TargetSlot);
+	const bool bAutomationSlot = !AutomationSlotName.IsEmpty();
+	const int32 TargetSlot = bAutomationSlot ? INDEX_NONE : AllocateNewSlotIndex();
+	const FString SlotName = bAutomationSlot ? AutomationSlotName : GetSlotNameForIndex(TargetSlot);
 
 	// Flush subsystems to clean state BEFORE CreateNewSave commits to disk.
 	// Without this, CommitSave inside CreateNewSave would bake stale subsystem
@@ -433,6 +434,31 @@ void UMyGameInstance::DeleteSlotByIndex(int32 SlotIndex)
     UGameplayStatics::DeleteGameInSlot(SlotName, 0);
     UE_LOG(LogTemp, Log, TEXT("[MyGameInstance] DeleteSlotByIndex: deleted slot %d ('%s')"), SlotIndex, *SlotName);
 }
+
+void UMyGameInstance::EndAutomationSession()
+{
+	const FString SlotName = AutomationSlotName;
+
+	// Dropped first: a map change afterwards would autosave into the slot again.
+	ClearActiveSave();
+	AutomationSlotName.Empty();
+
+	// Subsystems cache their own copy; bring them back in line with the cleared state.
+	if (UPartyManagerSubsystem* S = GetSubsystem<UPartyManagerSubsystem>())  S->SyncFromGameInstance();
+	if (UFlagsSubsystem* S = GetSubsystem<UFlagsSubsystem>())                S->Reset();
+	if (UNPCAffinitySubsystem* S = GetSubsystem<UNPCAffinitySubsystem>())    S->Reset();
+	if (UQuestSubsystem* S = GetSubsystem<UQuestSubsystem>())                S->Reset();
+
+	DeleteAutomationSlot(SlotName);
+}
+
+void UMyGameInstance::DeleteAutomationSlot(const FString& SlotName)
+{
+	if (!SlotName.IsEmpty() && UGameplayStatics::DoesSaveGameExist(SlotName, 0))
+	{
+		UGameplayStatics::DeleteGameInSlot(SlotName, 0);
+	}
+}
  
 void UMyGameInstance::UpdateSaveMetadata(const FString& DisplayName, FName CurrentLevelName)
 {
@@ -713,11 +739,11 @@ void UMyGameInstance::AutoSaveBeforeTravel(UWorld* WorldToSave)
             *WorldToSave->GetName(), *ActiveSave->SavedLevelName.ToString());
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("[AutoSave] Collecting from world: %s"), *WorldToSave->GetName());
+    UE_LOG(LogTemp, Verbose, TEXT("[AutoSave] Collecting from world: %s"), *WorldToSave->GetName());
 
     if (UWorldManagerSubsystem* WorldMgr = WorldToSave->GetSubsystem<UWorldManagerSubsystem>())
     {
-        UE_LOG(LogTemp, Warning, TEXT("[AutoSave] Got subsystem, calling CollectWorldSaveData"));
+        UE_LOG(LogTemp, Verbose, TEXT("[AutoSave] Got subsystem, calling CollectWorldSaveData"));
         WorldMgr->CollectWorldSaveData();
     }
     else

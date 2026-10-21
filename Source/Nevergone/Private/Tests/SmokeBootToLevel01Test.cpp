@@ -14,6 +14,8 @@
 #include "Widgets/Menu/MainMenuWidget.h"
 #include "Widgets/Menu/MenuPanelBase.h"
 
+#include "Tests/SmokeSaveSlot.h"
+
 #if WITH_DEV_AUTOMATION_TESTS
 
 namespace NevergoneSmokeBoot
@@ -21,7 +23,8 @@ namespace NevergoneSmokeBoot
 	// The automation framework only fails a test for Errors logged while it runs,
 	// and the boot (engine startup, main menu load) happens before any test starts.
 	// This device is created when the module loads, so it also sees the boot.
-	// Automation's own reports (LogAutomation*) are not game errors and are skipped.
+	// The controller's own relay of the run's log lines is not a game error and is
+	// skipped. The rest of the LogAutomation* family is not: an Error there counts.
 	class FErrorCapture : public FOutputDevice
 	{
 	public:
@@ -43,7 +46,7 @@ namespace NevergoneSmokeBoot
 
 		virtual void Serialize(const TCHAR* Message, ELogVerbosity::Type Verbosity, const FName& Category) override
 		{
-			if (Verbosity > ELogVerbosity::Error || Category.ToString().StartsWith(TEXT("LogAutomation")))
+			if (Verbosity > ELogVerbosity::Error || Category == TEXT("LogAutomationController"))
 			{
 				return;
 			}
@@ -173,8 +176,8 @@ namespace NevergoneSmokeBoot
 	};
 }
 
-// Boot -> main menu -> New Game -> Level_01. Writes real save slots: the saves
-// are test data and may be overwritten (project decision).
+// Boot -> main menu -> New Game -> Level_01. New Game saves to the test slot
+// (see SmokeSaveSlot.h), which is deleted at the end, pass or fail.
 // Meant to run with -game: in the editor the maps would load without playing.
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FNevergoneSmokeBootToLevel01Test, "Nevergone.Smoke.BootToLevel01",
 	EAutomationTestFlags::ClientContext | EAutomationTestFlags::ProductFilter)
@@ -191,11 +194,13 @@ bool FNevergoneSmokeBootToLevel01Test::RunTest(const FString& Parameters)
 
 	using namespace NevergoneSmokeBoot;
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitForMainMenuCommand());
+	ADD_LATENT_AUTOMATION_COMMAND(NevergoneSmokeSave::FUseTestSlotCommand());
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FConfirmNewGameCommand());
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitForMapCommand(TEXT("Level_01")));
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(10.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FAssertNoBootErrorsCommand());
+	ADD_LATENT_AUTOMATION_COMMAND(NevergoneSmokeSave::FCleanTestSlotCommand());
 
 	return true;
 }

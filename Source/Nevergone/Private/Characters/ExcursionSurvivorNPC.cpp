@@ -5,6 +5,7 @@
 #include "Nevergone.h"
 #include "Characters/PlayerControllers/ExcursionSurvivorController.h"
 
+#include "Components/CapsuleComponent.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
 
@@ -24,6 +25,13 @@ void AExcursionSurvivorNPC::BeginPlay()
 	// the movement component and starts stamina full, exactly as it does for
 	// the player's survivor.
 	EnableExplorationMode();
+
+	// The navigation agent has to cover the biggest capsule that walks the navmesh,
+	// and Blueprints can override the C++ default.
+	UE_LOG(LogNevergone, Verbose,
+		TEXT("[ExcursionSurvivorNPC] %s capsule: radius %.1f, half height %.1f"),
+		*GetNameSafe(this),
+		GetCapsuleComponent()->GetScaledCapsuleRadius(), GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
 
 	UE_LOG(LogNevergone, Log,
 		TEXT("[ExcursionSurvivorNPC] %s ready, waiting to be recruited"),

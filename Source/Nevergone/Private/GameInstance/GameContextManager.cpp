@@ -3,7 +3,6 @@
 
 #include "GameInstance/GameContextManager.h"
 
-#include "ActorComponents/UnitStatsComponent.h"
 #include "Characters/CharacterBase.h"
 #include "GameMode/TowerFloorGameMode.h"
 #include "GameMode/CombatManager.h"
@@ -297,46 +296,6 @@ void UGameContextManager::ReturnToExploration(bool bForce)
 	}
 }
 
-void UGameContextManager::SyncExplorationActorHP(ACharacterBase* ExplorationActor)
-{
-	if (!IsValid(ExplorationActor)) { return; }
-
-	UUnitStatsComponent* Stats = ExplorationActor->GetUnitStats();
-	if (!Stats) { return; }
-
-	UGameInstance* GI = GetGameInstance();
-	if (!GI) { return; }
-
-	UPartyManagerSubsystem* PartyMgr = GI->GetSubsystem<UPartyManagerSubsystem>();
-	if (!PartyMgr) { return; }
-
-	// The exploration character represents the player's lead unit — conventionally
-	// the first active member. Match by CharacterClass since the exploration actor
-	// is not associated with a CharacterID directly.
-	const TSubclassOf<ACharacter> ActorClass = ExplorationActor->GetClass();
-
-	const FPartyData& Data = PartyMgr->GetPartyData();
-	for (const FPartyMemberData& Member : Data.Members)
-	{
-		if (Member.CharacterClass != ActorClass) { continue; }
-
-		// Apply the post-battle HP from FPartyMemberData to the freshly spawned actor.
-		// This keeps the exploration actor's UnitStatsComponent in sync with the
-		// authoritative party data so world saves serialize the correct value.
-		const int32 SyncedHP = FMath::RoundToInt(Member.CurrentHP);
-		Stats->SetCurrentHP(SyncedHP);
-
-		UE_LOG(LogTemp, Log,
-			TEXT("[GameContextManager] SyncExplorationActorHP: %s -> PersistentHP set to %d"),
-			*GetNameSafe(ExplorationActor), SyncedHP);
-		return;
-	}
-
-	UE_LOG(LogTemp, Warning,
-		TEXT("[GameContextManager] SyncExplorationActorHP: no matching FPartyMemberData for class %s"),
-		*GetNameSafe(ActorClass));
-}
-
 ACharacterBase* UGameContextManager::SpawnExplorationActor()
 {
 	UWorld* World = GetWorld();
@@ -373,7 +332,6 @@ ACharacterBase* UGameContextManager::SpawnExplorationActor()
 		return nullptr;
 	}
 
-	SyncExplorationActorHP(NewCharacter);
 	return NewCharacter;
 }
 
@@ -411,7 +369,7 @@ void UGameContextManager::EnterState(EGameContextState NewState)
 	CurrentState = NewState;
 
 	UE_LOG(LogTemp, Verbose, TEXT("Broadcast -> Manager: %p"), this);
-	UE_LOG(LogTemp, Warning, 
+	UE_LOG(LogTemp, Verbose, 
 		TEXT("[GameContextManager]: Broadcasting GameContextChanged! State=%d | HasListeners=%d"),
 		(int32)NewState, OnGameContextChanged.IsBound() ? 1 : 0);
 	OnGameContextChanged.Broadcast(NewState);
@@ -587,8 +545,6 @@ ACharacterBase* UGameContextManager::SpawnExplorationActorFromClass(
 	{
 		ActiveBattleSession.ExplorationCharacter      = NewCharacter;
 		ActiveBattleSession.ExplorationCharacterClass = CharacterClass;
-
-		SyncExplorationActorHP(NewCharacter);
 
 		UE_LOG(LogTemp, Log,
 			TEXT("[GameContextManager] SpawnExplorationActorFromClass: spawned %s."),

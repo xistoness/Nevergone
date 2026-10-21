@@ -104,7 +104,7 @@ void ACharacterBase::SetMode(UCharacterModeComponent* NewMode)
 
 	if (ActiveMode)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Character entering new mode: %s"), *ActiveMode->GetName());
+		UE_LOG(LogTemp, Verbose, TEXT("Character entering new mode: %s"), *ActiveMode->GetName());
 		ActiveMode->EnterMode();
 	}
 }

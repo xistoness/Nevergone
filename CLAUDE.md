@@ -69,7 +69,7 @@ Tarefa de Análise: só leitura, não cria branch. Responda no Relatório e pass
 
 1. **Build** sem erros e sem warnings novos.
 2. **Testes de automação**: lógica pura nova ou alterada ganha teste em `Source/Nevergone/Private/Tests/`, com nome começando por `Nevergone.`. Rode todos pela linha de comando, sem abrir a janela do editor.
-3. **Smoke test**: dois testes `Nevergone.Smoke.*`, ambos falham com qualquer `Error` ou `ensure` no log. `BootToLevel01` cobre o boot do jogo, o menu principal e a travessia Novo Jogo → `Level_01` (captura os Errors desde o carregamento do módulo, antes do teste começar; escreve em slots de save reais, que são só de teste). `Level01` abre a fase de teste da excursão (hoje `Level_01`) direto e roda alguns segundos.
+3. **Smoke test**: dois testes `Nevergone.Smoke.*`, ambos falham com qualquer `Error` ou `ensure` no log. `BootToLevel01` cobre o boot do jogo, o menu principal e a travessia Novo Jogo → `Level_01` (captura os Errors desde o carregamento do módulo, antes do teste começar; grava só no slot de teste `Automation_Smoke`, apagado no fim, nunca num slot do jogador). `Level01` abre a fase de teste da excursão (hoje `Level_01`) direto e roda alguns segundos.
 4. **Revisão**: um subagente revisa o diff contra o Briefing e o `docs/Conventions.md`. Corrija o que ele apontar antes do Relatório.
 
 ## Comandos
@@ -79,9 +79,9 @@ Preenchidos na sessão de calibração com a forma exata que funcionou no shell:
 - Build: `bash Scripts/build.sh` (alvo `NevergoneEditor Win64 Development`; recusa rodar com o editor aberto; ~25 s incremental, ~3 min completo)
 - Testes: `bash Scripts/test.sh` (todos os `Nevergone.*`, smoke incluído; ~50 s)
 - Smoke test: `bash Scripts/smoke.sh` (só `Nevergone.Smoke.*`: boot + menu + Level_01, e Level_01 direto)
-- Snapshot manual (Kopia, pasta do projeto inteira para o repositório no disco externo `G:`): `powershell -NoProfile -ExecutionPolicy Bypass -File Scripts/kopia-snapshot-manual.ps1`. Inicia a tarefa agendada `Nevergone Kopia Snapshot` (elevada, com VSS), espera o fim e imprime `SNAPSHOT RECORDED` (exit 0), `SKIPPED` (exit 2, repositório inacessível) ou `FAILED` (exit 1). **Se pulou por falta do HD, pare e peça ao Cristopher que conecte o HD antes de seguir.** A tarefa também roda sozinha quando o HD é conectado e aos domingos às 12:00; log em `C:\Users\Public\kopia-snapshot.log`. Registrar a tarefa de novo exige PowerShell de administrador: `powershell -NoProfile -ExecutionPolicy Bypass -File Scripts/kopia-register-task.ps1`.
+- Snapshot manual (Kopia, pasta do projeto inteira para o repositório no disco externo `G:`): `powershell -NoProfile -ExecutionPolicy Bypass -File Scripts/kopia-snapshot-manual.ps1`. Inicia a tarefa agendada `Nevergone Kopia Snapshot` (elevada, com VSS), espera o fim e imprime `SNAPSHOT RECORDED` (exit 0), `SKIPPED` (exit 2, repositório inacessível) ou `FAILED` (exit 1). Se pulou por falta do HD, siga em frente: não pare nem peça o HD. A tarefa também roda sozinha quando o HD é conectado e aos domingos às 12:00; log em `C:\Users\Public\kopia-snapshot.log`. Registrar a tarefa de novo exige PowerShell de administrador: `powershell -NoProfile -ExecutionPolicy Bypass -File Scripts/kopia-register-task.ps1`.
 
-Antes de reescrever histórico ou de uma tarefa que muda campos de data assets, rodar o snapshot manual.
+Nenhum snapshot do Kopia é obrigatório para concluir tarefa, nem antes de reescrever histórico ou de mexer em campos de data assets, até o Cristopher avisar (por ora o que se mexe são assets free de loja que serão descartados, e os saves também). O Code não roda o snapshot manual por conta própria; o script e o snapshot ao conectar o HD continuam como estão.
 
 Rode-os da raiz do projeto, nessa forma exata (é a que está no allow). Os testes rodam em `UnrealEditor-Cmd.exe -game -nullrhi`, sem janela; exit code ≠ 0 em falha. Log completo em `Saved/Automation/<Tests|Smoke>/run.log`. Não use `-nosound`: sem dispositivo de áudio, a música loga `Error`.
 

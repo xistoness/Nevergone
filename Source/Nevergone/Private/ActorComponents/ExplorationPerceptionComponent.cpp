@@ -59,6 +59,11 @@ void UExplorationPerceptionComponent::InitializeFromDefinition(const UExploratio
 
 	Definition = InDefinition;
 
+	// ConfigureSense updates the listener right away, and a listener only has an id
+	// once it is registered. Registering first silences "Listener must have a valid
+	// id"; the call after the senses are configured applies the final config.
+	RequestStimuliListenerUpdate();
+
 	// --- Sight ---
 
 	UAISenseConfig_Sight* SightConfig = NewObject<UAISenseConfig_Sight>(this, TEXT("ExplorationSightConfig"));

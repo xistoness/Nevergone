@@ -7,6 +7,9 @@ ENGINE_DIR="${UE_ENGINE_DIR:-/e/Game Dev/UE_5.7}"
 UBT="$ENGINE_DIR/Engine/Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe"
 EDITOR_CMD="$ENGINE_DIR/Engine/Binaries/Win64/UnrealEditor-Cmd.exe"
 
+# Save file of the slot the smoke tests use (see Tests/SmokeSaveSlot.h).
+TEST_SLOT_FILE="$PROJECT_DIR/Saved/SaveGames/Automation_Smoke.sav"
+
 # Windows form of a path, for the engine executables.
 winpath() { cygpath -w "$1"; }
 
@@ -31,16 +34,21 @@ run_automation() {
 
   rm -rf "$out_dir"
   mkdir -p "$out_dir"
+  rm -f "$TEST_SLOT_FILE"
 
   require_exe "$EDITOR_CMD" || return 1
 
   # A hung instance (a dialog, a stuck load) would otherwise block forever.
-  timeout 600 "$EDITOR_CMD" "$(winpath "$UPROJECT")" -game -nullrhi -unattended -nosplash -nopause \
+  # -culture=en: engine tests compare formatted text and fail under other locales.
+  timeout 600 "$EDITOR_CMD" "$(winpath "$UPROJECT")" -game -nullrhi -unattended -nosplash -nopause -culture=en \
     -ExecCmds="Automation RunTests $filter" \
     -TestExit="Automation Test Queue Empty" \
     -ReportExportPath="$(winpath "$out_dir")" \
     -abslog="$(winpath "$log")" >/dev/null 2>&1
-  if [ $? -eq 124 ]; then
+  local exit_code=$?
+  # The smoke tests delete their own slot; a killed run (timeout) leaves it behind.
+  rm -f "$TEST_SLOT_FILE"
+  if [ $exit_code -eq 124 ]; then
     echo "FAIL: $name timed out after 600 s (log: $log)"
     return 1
   fi

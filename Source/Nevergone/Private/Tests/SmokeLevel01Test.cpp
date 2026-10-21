@@ -3,6 +3,8 @@
 #include "Misc/AutomationTest.h"
 #include "Tests/AutomationCommon.h"
 
+#include "Tests/SmokeSaveSlot.h"
+
 #if WITH_DEV_AUTOMATION_TESTS
 
 // Opens the excursion test level and lets it run. Any Error or ensure logged
@@ -22,7 +24,10 @@ bool FNevergoneSmokeLevel01Test::RunTest(const FString& Parameters)
 		return false;
 	}
 
+	// Like the boot smoke, this one never touches a player slot.
+	ADD_LATENT_AUTOMATION_COMMAND(NevergoneSmokeSave::FUseTestSlotCommand());
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(10.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(NevergoneSmokeSave::FCleanTestSlotCommand());
 
 	return true;
 }

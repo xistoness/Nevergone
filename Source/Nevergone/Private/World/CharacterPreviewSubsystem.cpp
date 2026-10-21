@@ -15,7 +15,7 @@ void UCharacterPreviewSubsystem::Deinitialize()
 
 void UCharacterPreviewSubsystem::SetStudioClass(TSubclassOf<ACharacterPreviewStudio> InClass)
 {
-    UE_LOG(LogTemp, Warning,
+    UE_LOG(LogTemp, Verbose,
         TEXT("[CharacterPreviewSubsystem] SetStudioClass called with: %s (current: %s)"),
         InClass ? *InClass->GetName() : TEXT("NULL"),
         StudioClass ? *StudioClass->GetName() : TEXT("NULL"));
