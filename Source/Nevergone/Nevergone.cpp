@@ -67,6 +67,7 @@ UE_DEFINE_GAMEPLAY_TAG(TAG_Noise_Door,				"Noise.Door")
 UE_DEFINE_GAMEPLAY_TAG(TAG_Noise_PropFall,			"Noise.PropFall")
 UE_DEFINE_GAMEPLAY_TAG(TAG_Noise_Distraction,		"Noise.Distraction")
 UE_DEFINE_GAMEPLAY_TAG(TAG_Noise_Panting,			"Noise.Panting")
+UE_DEFINE_GAMEPLAY_TAG(TAG_Noise_Scream,			"Noise.Scream")
 
 // Item roles
 UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Safeguard,			"Item.Safeguard")

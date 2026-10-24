@@ -7,7 +7,9 @@
 
 class UAnimInstance;
 class UAnimMontage;
+class UNoiseDefinition;
 class USkeletalMesh;
+class USoundBase;
 
 // ---------------------------------------------------------------------------
 // EExplorationPatrolMode
@@ -44,6 +46,10 @@ enum class EExplorationEnemyState : uint8
 
 	// Executing the patrol mode of its definition. Nothing noticed.
 	Patrol,
+
+	// A survivor is in view but not confirmed yet: the confirmation window is
+	// open. Stands still and turns towards them until the window closes.
+	Suspicious,
 
 	// Something was sensed but not confirmed. Moves to the stimulus location.
 	Investigate,
@@ -120,4 +126,78 @@ struct FExcursionCaptureAnimation
 	// Must match the survivors' skeleton.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Capture")
 	TObjectPtr<UAnimMontage> VictimMontage = nullptr;
+};
+
+// ---------------------------------------------------------------------------
+// EExplorationEnemySignalMoment
+//
+// The four moments in which an enemy tells the player, through its own body
+// and voice, what it is doing. There is no UI for enemy awareness: these are
+// the whole read. Derived from a state transition by
+// UExplorationEnemySignalComponent::GetSignalMoment.
+// ---------------------------------------------------------------------------
+UENUM()
+enum class EExplorationEnemySignalMoment : uint8
+{
+	None,
+
+	// Entered Suspicious: something is in view and the enemy turns to it.
+	Suspicion,
+
+	// Entered Investigate: walking to a stimulus and searching around it.
+	Investigation,
+
+	// Entered Chase: the scream.
+	Chase,
+
+	// Back to Patrol after suspicion, investigation or a chase.
+	GiveUp,
+};
+
+// ---------------------------------------------------------------------------
+// FExplorationEnemySignal
+//
+// What an enemy plays at one signal moment. Both fields are optional: an
+// empty one plays nothing.
+//
+// The sound is played attached to the enemy and spatialized through the
+// attenuation settings of the sound asset itself. Off camera or behind a
+// wall the sound is the only warning, so that attenuation must stay audible
+// through walls.
+// ---------------------------------------------------------------------------
+USTRUCT(BlueprintType)
+struct FExplorationEnemySignal
+{
+	GENERATED_BODY()
+
+	// Must match the skeleton of every visual variant of the type.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Signal")
+	TObjectPtr<UAnimMontage> Montage = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Signal")
+	TObjectPtr<USoundBase> Sound = nullptr;
+};
+
+// ---------------------------------------------------------------------------
+// FExplorationEnemyScreamSignal
+//
+// The chase signal. Its sound is the scream noise's own sound: the scream is
+// emitted through UExcursionNoiseSubsystem so other enemies hear it, and
+// playing a separate sound on top would play it twice.
+// ---------------------------------------------------------------------------
+USTRUCT(BlueprintType)
+struct FExplorationEnemyScreamSignal
+{
+	GENERATED_BODY()
+
+	// Must match the skeleton of every visual variant of the type. The chase
+	// starts on the same frame, so a full-body montage slides along the floor.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Signal")
+	TObjectPtr<UAnimMontage> Montage = nullptr;
+
+	// Emitted at the enemy with the enemy as instigator. Must be tagged
+	// Noise.Scream: enemies within reach investigate the point, and ignore
+	// any other enemy-made noise. The screamer does not hear itself.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Signal")
+	TObjectPtr<UNoiseDefinition> Noise = nullptr;
 };

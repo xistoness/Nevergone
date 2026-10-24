@@ -24,6 +24,9 @@ DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnSurvivorSensed,
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnSurvivorLost, AActor* /*Survivor*/);
 
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnEnemyNoiseHeard,
+	AActor* /*Enemy*/, const FVector& /*NoiseLocation*/);
+
 // What one enemy currently knows about one survivor. Plain struct, never
 // reflected: it only lives inside the perception component.
 struct FExplorationSensedSurvivor
@@ -53,6 +56,11 @@ struct FExplorationSensedSurvivor
 // distance against HearingRange x Loudness, so walls (occlusion) and
 // ambient noise (mask volumes) are applied on top before a noise counts.
 //
+// Another enemy's chase scream (tagged Noise.Scream) is heard too, through
+// the same occlusion and masking, and reported on its own delegate: it
+// points at a place, not at a survivor. Any other enemy-made noise is
+// ignored, and an enemy never hears its own scream.
+//
 // Every survivor body is tracked separately: the survivor the player
 // controls and any recruited follower (AExcursionSurvivorNPC::IsSurvivorBody).
 // Sight is recorded for unrecruited survivors too and filtered when asked,
@@ -79,6 +87,11 @@ public:
 	// Fired when a sense that was tracking a survivor body drops it. Sight
 	// and smell report loss; hearing does not, because a noise is an instant.
 	FOnSurvivorLost OnSurvivorLost;
+
+	// Fired when another exploration enemy's scream is heard.
+	// Not recorded as a stimulus: the listener decides whether it reacts,
+	// and records it with SetMostRecentStimulus when it does.
+	FOnEnemyNoiseHeard OnEnemyNoiseHeard;
 
 	// Builds the sense configurations from the type. Must run before the
 	// component is useful; the controller calls it on possess.
@@ -107,6 +120,11 @@ public:
 	// Records where a survivor is. Used by the controller while the tracking
 	// grace window is open, since that knowledge does not come from any sense.
 	void SetLastKnownLocation(AActor* Survivor, const FVector& Location);
+
+	// Makes a place the most recent stimulus without tying it to a survivor.
+	// Used for another enemy's scream: it points at a place, nobody was
+	// sensed there.
+	void SetMostRecentStimulus(const FVector& Location);
 
 	// Forgets the search once the enemy gives up: only the most recent
 	// stimulus. Where each survivor was last sensed is kept for the whole

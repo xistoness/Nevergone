@@ -4,6 +4,8 @@
 #include "Data/ExplorationEnemyDefinition.h"
 
 #if WITH_EDITOR
+#include "Nevergone.h"
+#include "Data/NoiseDefinition.h"
 #include "Misc/DataValidation.h"
 
 #define LOCTEXT_NAMESPACE "ExplorationEnemyDefinition"
@@ -42,6 +44,18 @@ EDataValidationResult UExplorationEnemyDefinition::IsDataValid(FDataValidationCo
 
 			Result = EDataValidationResult::Invalid;
 		}
+	}
+
+	if (ChaseSignal.Noise && !ChaseSignal.Noise->ReportsToAI())
+	{
+		Context.AddWarning(LOCTEXT("SilentScream",
+			"ChaseSignal.Noise has zero Loudness. The scream is heard by the player but by no other enemy."));
+	}
+
+	if (ChaseSignal.Noise && ChaseSignal.Noise->NoiseTag != TAG_Noise_Scream.GetTag())
+	{
+		Context.AddWarning(LOCTEXT("ScreamWithoutTag",
+			"ChaseSignal.Noise is not tagged Noise.Scream. Other enemies only react to enemy noise with that tag."));
 	}
 
 	return Result;

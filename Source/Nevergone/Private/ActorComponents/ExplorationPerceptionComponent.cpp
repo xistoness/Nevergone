@@ -5,6 +5,7 @@
 
 #include "Nevergone.h"
 #include "Characters/ExcursionSurvivorNPC.h"
+#include "Characters/ExplorationEnemyCharacter.h"
 #include "Data/ExplorationEnemyDefinition.h"
 #include "EngineTools/CollisionChannels.h"
 #include "World/ExcursionNoiseSubsystem.h"
@@ -160,11 +161,39 @@ void UExplorationPerceptionComponent::HandleTargetPerceptionUpdated(AActor* Acto
 	if (Stimulus.Type == UAISense::GetSenseID<UAISense_Hearing>())
 	{
 		// A noise is an instant, not a state: only the positive edge matters.
-		if (bIsBody && bSensed && IsNoiseAudible(Actor, Stimulus))
+		if (!bSensed)
 		{
-			RecordStimulus(Actor, Stimulus.StimulusLocation);
+			return;
+		}
 
-			OnSurvivorSensed.Broadcast(Actor, Stimulus.StimulusLocation, EExplorationSenseChannel::Hearing);
+		if (bIsBody)
+		{
+			if (IsNoiseAudible(Actor, Stimulus))
+			{
+				RecordStimulus(Actor, Stimulus.StimulusLocation);
+
+				OnSurvivorSensed.Broadcast(Actor, Stimulus.StimulusLocation, EExplorationSenseChannel::Hearing);
+			}
+
+			return;
+		}
+
+		// Another enemy's scream. Only the scream tag counts: an enemy whose
+		// footsteps were ever made audible to AI would otherwise drag every
+		// enemy nearby after it. The engine does not filter the listener's
+		// own noises, so the screamer would also answer its own scream.
+		if (Stimulus.Tag == TAG_Noise_Scream.GetTag().GetTagName() &&
+			Actor->IsA<AExplorationEnemyCharacter>() && Actor != GetListenerPawn() &&
+			IsNoiseAudible(Actor, Stimulus))
+		{
+			// Not recorded as the most recent stimulus here: a chasing enemy
+			// ignores the scream and must keep its own trail. The controller
+			// records it when it reacts.
+			UE_LOG(LogNevergone, Verbose,
+				TEXT("[ExplorationPerceptionComponent] %s heard %s from %s"),
+				*GetNameSafe(GetListenerPawn()), *Stimulus.Tag.ToString(), *GetNameSafe(Actor));
+
+			OnEnemyNoiseHeard.Broadcast(Actor, Stimulus.StimulusLocation);
 		}
 	}
 }
@@ -463,6 +492,12 @@ void UExplorationPerceptionComponent::RecordStimulus(AActor* Survivor, const FVe
 void UExplorationPerceptionComponent::SetLastKnownLocation(AActor* Survivor, const FVector& Location)
 {
 	RecordStimulus(Survivor, Location);
+}
+
+void UExplorationPerceptionComponent::SetMostRecentStimulus(const FVector& Location)
+{
+	LastKnownLocation = Location;
+	bHasLastKnownLocation = true;
 }
 
 void UExplorationPerceptionComponent::ForgetLastKnownLocation()

@@ -61,6 +61,7 @@ void AExplorationEnemyController::OnPossess(APawn* InPawn)
 
 		EnemyPerceptionComponent->OnSurvivorSensed.AddUObject(this, &AExplorationEnemyController::HandleSurvivorSensed);
 		EnemyPerceptionComponent->OnSurvivorLost.AddUObject(this, &AExplorationEnemyController::HandleSurvivorLost);
+		EnemyPerceptionComponent->OnEnemyNoiseHeard.AddUObject(this, &AExplorationEnemyController::HandleEnemyNoiseHeard);
 	}
 
 	// Placed pawns are possessed inside PostInitializeComponents, before any
@@ -75,6 +76,7 @@ void AExplorationEnemyController::OnUnPossess()
 	{
 		EnemyPerceptionComponent->OnSurvivorSensed.RemoveAll(this);
 		EnemyPerceptionComponent->OnSurvivorLost.RemoveAll(this);
+		EnemyPerceptionComponent->OnEnemyNoiseHeard.RemoveAll(this);
 	}
 
 	ControlledEnemy = nullptr;
@@ -113,6 +115,11 @@ void AExplorationEnemyController::EnterState(EExplorationEnemyState NewState)
 		SightContactSeconds = 0.0f;
 		TimeSinceLastContact = 0.0f;
 		StartPatrol();
+		break;
+
+	case EExplorationEnemyState::Suspicious:
+		// Stand still: the turn towards the survivor is the whole beat.
+		StopMovement();
 		break;
 
 	case EExplorationEnemyState::Investigate:
@@ -226,6 +233,20 @@ void AExplorationEnemyController::Tick(float DeltaTime)
 
 			EnterState(EExplorationEnemyState::Chase);
 		}
+		else if (CurrentState == EExplorationEnemyState::Idle ||
+			CurrentState == EExplorationEnemyState::Patrol ||
+			CurrentState == EExplorationEnemyState::Investigate)
+		{
+			// The confirmation window is open: stop and look. Decided here
+			// rather than in the sight handler for the same reason as the
+			// escalation: a survivor recruited while already in view fires
+			// no new sight event.
+			UE_LOG(LogNevergone, Log,
+				TEXT("[ExplorationEnemyController] %s is suspicious of %s"),
+				*GetNameSafe(ControlledEnemy.Get()), *GetNameSafe(Focus));
+
+			EnterState(EExplorationEnemyState::Suspicious);
+		}
 	}
 	else
 	{
@@ -237,6 +258,10 @@ void AExplorationEnemyController::Tick(float DeltaTime)
 	case EExplorationEnemyState::Idle:
 	case EExplorationEnemyState::Patrol:
 		TickPatrol(DeltaTime);
+		break;
+
+	case EExplorationEnemyState::Suspicious:
+		TickSuspicious(DeltaTime, Focus);
 		break;
 
 	case EExplorationEnemyState::Investigate:
@@ -262,6 +287,8 @@ void AExplorationEnemyController::StartPatrol()
 	WaitRemaining = 0.0f;
 	ScanOffsetDegrees = 0.0f;
 	ScanDirection = 1.0f;
+	bReturningToPost = false;
+	bRestoringHomeRotation = false;
 
 	if (!ControlledEnemy.IsValid())
 	{
@@ -280,8 +307,36 @@ void AExplorationEnemyController::StartPatrol()
 
 	case EExplorationPatrolMode::Stationary:
 	default:
+	{
 		StopMovement();
+
+		// Back to the post it was placed at, facing the way it was placed:
+		// a guard that gave up resumes guarding the same spot. On the first
+		// patrol it is already there and both steps finish at once.
+		bRestoringHomeRotation = true;
+
+		const float DistanceFromPost =
+			FVector::Dist2D(ControlledEnemy->GetActorLocation(), ControlledEnemy->GetHomeLocation());
+
+		if (DistanceFromPost > MoveAcceptanceRadius)
+		{
+			if (MoveToLocation(ControlledEnemy->GetHomeLocation(), MoveAcceptanceRadius) == EPathFollowingRequestResult::Failed)
+			{
+				UE_LOG(LogNevergone, Warning,
+					TEXT("[ExplorationEnemyController] %s could not path back to its post; guarding from where it stands"),
+					*GetNameSafe(ControlledEnemy.Get()));
+			}
+			else
+			{
+				bReturningToPost = true;
+
+				UE_LOG(LogNevergone, Verbose,
+					TEXT("[ExplorationEnemyController] %s is returning to its post (%.0f away)"),
+					*GetNameSafe(ControlledEnemy.Get()), DistanceFromPost);
+			}
+		}
 		break;
+	}
 	}
 }
 
@@ -325,9 +380,41 @@ void AExplorationEnemyController::TickPatrol(float DeltaTime)
 	}
 }
 
+bool AExplorationEnemyController::UpdateReturnToPost(float DeltaTime)
+{
+	if (bReturningToPost)
+	{
+		if (!HasReachedDestination())
+		{
+			return false;
+		}
+
+		bReturningToPost = false;
+	}
+
+	if (bRestoringHomeRotation)
+	{
+		// A tight tolerance: the scan sweeps around HomeRotation and snaps
+		// the rest of the way on its first frame, so the gap must not show.
+		if (!TurnTowardsYaw(HomeRotation.Yaw, 0.5f, DeltaTime))
+		{
+			return false;
+		}
+
+		bRestoringHomeRotation = false;
+	}
+
+	return true;
+}
+
 void AExplorationEnemyController::TickStationaryScan(float DeltaTime)
 {
-	if (!Definition || !Definition->bScanWhileStationary || !ControlledEnemy.IsValid())
+	if (!Definition || !ControlledEnemy.IsValid())
+	{
+		return;
+	}
+
+	if (!UpdateReturnToPost(DeltaTime) || !Definition->bScanWhileStationary)
 	{
 		return;
 	}
@@ -449,6 +536,71 @@ bool AExplorationEnemyController::HasReachedDestination() const
 	return PathFollowing->GetStatus() == EPathFollowingStatus::Idle;
 }
 
+bool AExplorationEnemyController::TurnTowardsYaw(float TargetYaw, float ToleranceDegrees, float DeltaTime)
+{
+	AExplorationEnemyCharacter* Enemy = ControlledEnemy.Get();
+
+	if (!Enemy || !Definition)
+	{
+		return true;
+	}
+
+	const FRotator CurrentRotation = Enemy->GetActorRotation();
+
+	const float DeltaYaw = FMath::FindDeltaAngleDegrees(CurrentRotation.Yaw, TargetYaw);
+
+	if (FMath::Abs(DeltaYaw) <= ToleranceDegrees)
+	{
+		return true;
+	}
+
+	// Same turn rate everywhere, so an enemy turns at one speed.
+	const float Step = FMath::Min(Definition->TurnRateDegrees * DeltaTime, FMath::Abs(DeltaYaw));
+
+	FRotator NewRotation = CurrentRotation;
+	NewRotation.Yaw += FMath::Sign(DeltaYaw) * Step;
+
+	Enemy->SetActorRotation(NewRotation);
+
+	return false;
+}
+
+// ---------------------------------------------------------------------------
+// Suspicious
+// ---------------------------------------------------------------------------
+
+void AExplorationEnemyController::TickSuspicious(float DeltaTime, const AActor* Focus)
+{
+	AExplorationEnemyCharacter* Enemy = ControlledEnemy.Get();
+
+	if (!Enemy)
+	{
+		return;
+	}
+
+	// The window closed without a confirmation. The sight loss already
+	// recorded where the survivor was, which is what Investigate goes to.
+	if (!Focus)
+	{
+		UE_LOG(LogNevergone, Log,
+			TEXT("[ExplorationEnemyController] %s lost sight before confirming and is investigating"),
+			*GetNameSafe(Enemy));
+
+		EnterState(EExplorationEnemyState::Investigate);
+
+		return;
+	}
+
+	FVector ToFocus = Focus->GetActorLocation() - Enemy->GetActorLocation();
+	ToFocus.Z = 0.0f;
+
+	if (!ToFocus.IsNearlyZero())
+	{
+		// Keeps tracking a survivor who moves while being watched.
+		TurnTowardsYaw(ToFocus.Rotation().Yaw, 1.0f, DeltaTime);
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Investigate
 //
@@ -507,11 +659,7 @@ bool AExplorationEnemyController::UpdateStimulusFacing(float DeltaTime)
 		return true;
 	}
 
-	const FRotator CurrentRotation = Enemy->GetActorRotation();
-
-	const float DeltaYaw = FMath::FindDeltaAngleDegrees(CurrentRotation.Yaw, ToTarget.Rotation().Yaw);
-
-	if (FMath::Abs(DeltaYaw) <= Definition->FaceStimulusToleranceDegrees)
+	if (TurnTowardsYaw(ToTarget.Rotation().Yaw, Definition->FaceStimulusToleranceDegrees, DeltaTime))
 	{
 		bFacingStimulus = false;
 
@@ -521,14 +669,6 @@ bool AExplorationEnemyController::UpdateStimulusFacing(float DeltaTime)
 
 		return true;
 	}
-
-	// Same turn rate the stationary scan uses, so an enemy turns at one speed.
-	const float Step = FMath::Min(Definition->TurnRateDegrees * DeltaTime, FMath::Abs(DeltaYaw));
-
-	FRotator NewRotation = CurrentRotation;
-	NewRotation.Yaw += FMath::Sign(DeltaYaw) * Step;
-
-	Enemy->SetActorRotation(NewRotation);
 
 	return false;
 }
@@ -869,30 +1009,12 @@ void AExplorationEnemyController::HandleSurvivorSensed(AActor* Survivor, const F
 		break;
 
 	case EExplorationSenseChannel::Hearing:
-		// A noise never confirms a target, it only moves the enemy to look.
-		// A new noise mid-search re-targets the investigation to it.
-		if (CurrentState == EExplorationEnemyState::Investigate)
-		{
-			BeginInvestigation();
-		}
-		else if (CurrentState != EExplorationEnemyState::Chase)
-		{
-			EnterState(EExplorationEnemyState::Investigate);
-		}
+		ReactToNoise();
 		break;
 
 	case EExplorationSenseChannel::Sight:
-		// Escalation is timed in Tick. Seeing something is enough to start
-		// walking toward it in the meantime.
-		if (CurrentState == EExplorationEnemyState::Patrol ||
-			CurrentState == EExplorationEnemyState::Idle)
-		{
-			EnterState(EExplorationEnemyState::Investigate);
-		}
-		else if (CurrentState == EExplorationEnemyState::Investigate)
-		{
-			BeginInvestigation();
-		}
+		// Suspicion and escalation are both decided in Tick, which sees a
+		// survivor standing still in view too.
 		break;
 
 	default:
@@ -907,4 +1029,64 @@ void AExplorationEnemyController::HandleSurvivorLost(AActor* Survivor)
 	UE_LOG(LogNevergone, Verbose,
 		TEXT("[ExplorationEnemyController] %s lost direct contact with %s"),
 		*GetNameSafe(ControlledEnemy.Get()), *GetNameSafe(Survivor));
+}
+
+void AExplorationEnemyController::HandleEnemyNoiseHeard(AActor* Enemy, const FVector& NoiseLocation)
+{
+	if (!ControlledEnemy.IsValid())
+	{
+		return;
+	}
+
+	if (!CanReactToNoise())
+	{
+		return;
+	}
+
+	UE_LOG(LogNevergone, Log,
+		TEXT("[ExplorationEnemyController] %s heard %s and is investigating %s"),
+		*GetNameSafe(ControlledEnemy.Get()), *GetNameSafe(Enemy), *NoiseLocation.ToCompactString());
+
+	// Recorded only now: an enemy that ignores the scream keeps its own trail.
+	if (EnemyPerceptionComponent)
+	{
+		EnemyPerceptionComponent->SetMostRecentStimulus(NoiseLocation);
+	}
+
+	ReactToNoise();
+}
+
+bool AExplorationEnemyController::CanReactToNoise() const
+{
+	if (!ControlledEnemy.IsValid())
+	{
+		return false;
+	}
+
+	// A noise never confirms a target, it only moves the enemy to look. A
+	// chase keeps its target, a suspicious enemy is already looking at one,
+	// and a captured, downed or dead one cannot react.
+	const EExplorationEnemyState State = ControlledEnemy->GetBehaviorState();
+
+	return State == EExplorationEnemyState::Idle ||
+		State == EExplorationEnemyState::Patrol ||
+		State == EExplorationEnemyState::Investigate;
+}
+
+void AExplorationEnemyController::ReactToNoise()
+{
+	if (!CanReactToNoise())
+	{
+		return;
+	}
+
+	if (ControlledEnemy->GetBehaviorState() == EExplorationEnemyState::Investigate)
+	{
+		// A new noise mid-search re-targets the investigation to it.
+		BeginInvestigation();
+	}
+	else
+	{
+		EnterState(EExplorationEnemyState::Investigate);
+	}
 }

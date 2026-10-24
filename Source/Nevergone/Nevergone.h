@@ -68,6 +68,8 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Noise_Door)
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Noise_PropFall)
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Noise_Distraction)
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Noise_Panting)
+// The only enemy-made noise other enemies react to.
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Noise_Scream)
 
 // Item roles
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Safeguard)

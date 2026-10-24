@@ -8,6 +8,7 @@
 #include "ExplorationEnemyCharacter.generated.h"
 
 class UExplorationEnemyDefinition;
+class UExplorationEnemySignalComponent;
 
 DECLARE_MULTICAST_DELEGATE_TwoParams(FOnExplorationEnemyStateChanged,
 	EExplorationEnemyState /*OldState*/, EExplorationEnemyState /*NewState*/);
@@ -18,7 +19,8 @@ DECLARE_MULTICAST_DELEGATE_TwoParams(FOnExplorationEnemyStateChanged,
 // The body of a daytime enemy. Holds no decision logic: it applies its
 // UExplorationEnemyDefinition, resolves one visual variant, exposes its
 // behaviour state, and answers proximity questions. All decisions belong to
-// AExplorationEnemyController.
+// AExplorationEnemyController; turning state changes into animation and sound
+// belongs to UExplorationEnemySignalComponent.
 //
 // Deliberately derives from ACharacter and NOT from ACharacterBase: that class
 // carries a spring arm and camera, the exploration/battle mode components, an
@@ -88,6 +90,10 @@ protected:
 	// definition uses EExplorationPatrolMode::Route.
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Enemy|Patrol")
 	TArray<TObjectPtr<AActor>> PatrolWaypoints;
+
+	// Plays the montage and sound of each state change.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy")
+	TObjectPtr<UExplorationEnemySignalComponent> SignalComponent = nullptr;
 
 private:
 

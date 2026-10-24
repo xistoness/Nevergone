@@ -226,6 +226,31 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Capture|Animation")
 	FExcursionCaptureAnimation DevourFollowerAnimation;
 
+	// --- Signals ---
+	//
+	// How the enemy shows its state with no UI, played by
+	// UExplorationEnemySignalComponent. They read the same whoever the target
+	// is, the player's survivor or a follower. Every field is optional.
+
+	// A survivor came into view: the enemy stops and turns towards them while
+	// the confirmation window is open.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Signals")
+	FExplorationEnemySignal SuspicionSignal;
+
+	// Walking to a stimulus and searching. The sound loops for as long as the
+	// investigation lasts, whether or not the asset itself loops, and pauses
+	// with the world.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Signals")
+	FExplorationEnemySignal InvestigationSignal;
+
+	// The chase starts: a scream that other enemies hear as a noise.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Signals")
+	FExplorationEnemyScreamSignal ChaseSignal;
+
+	// Back to patrol after a suspicion, an investigation or a chase.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Signals")
+	FExplorationEnemySignal GiveUpSignal;
+
 #if WITH_EDITOR
 	// Catches the two configuration mistakes that produce silent, hard-to-debug
 	// behaviour: a lose-sight radius inside the sight radius (state flicker),

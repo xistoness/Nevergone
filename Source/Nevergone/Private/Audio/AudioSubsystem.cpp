@@ -237,23 +237,23 @@ void UAudioSubsystem::PlaySFXAtLocation(USoundBase* Sound, FVector Location,
 	UGameplayStatics::PlaySoundAtLocation(World, Sound, Location, VolumeMultiplier, PitchMultiplier);
 }
 
-void UAudioSubsystem::PlaySFXAttached(USoundBase* Sound, USceneComponent* AttachTo,
+UAudioComponent* UAudioSubsystem::PlaySFXAttached(USoundBase* Sound, USceneComponent* AttachTo,
 	float VolumeMultiplier, float PitchMultiplier)
 {
 	if (!Sound)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[Audio] PlaySFXAttached: null sound."));
-		return;
+		return nullptr;
 	}
 
 	if (!AttachTo)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[Audio] PlaySFXAttached: null component — falling back to world origin."));
 		PlaySFXAtLocation(Sound, FVector::ZeroVector, VolumeMultiplier, PitchMultiplier);
-		return;
+		return nullptr;
 	}
 
-	UGameplayStatics::SpawnSoundAttached(Sound, AttachTo, NAME_None, FVector(ForceInit),
+	return UGameplayStatics::SpawnSoundAttached(Sound, AttachTo, NAME_None, FVector(ForceInit),
 		EAttachLocation::KeepRelativeOffset, /*bStopWhenAttachedToDestroyed=*/false,
 		VolumeMultiplier, PitchMultiplier);
 }

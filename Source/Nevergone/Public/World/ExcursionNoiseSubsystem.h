@@ -47,8 +47,10 @@ public:
 	//
 	// Instigator must be the survivor who caused the noise (the one walking,
 	// opening the door, bumping the prop, throwing the item). Enemy hearing
-	// only accepts stimuli attributed to a survivor body: the player's
-	// survivor or a recruited follower (AExcursionSurvivorNPC::IsSurvivorBody).
+	// accepts stimuli attributed to a survivor body: the player's survivor or
+	// a recruited follower (AExcursionSurvivorNPC::IsSurvivorBody). The one
+	// exception is an enemy's chase scream, tagged Noise.Scream, instigated
+	// by the screaming enemy and heard by every other enemy.
 	//
 	// Surface is optional: when known it selects the sound variant and
 	// scales the AI loudness.

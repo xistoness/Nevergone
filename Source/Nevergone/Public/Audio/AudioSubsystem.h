@@ -128,9 +128,11 @@ public:
 	/**
 	 * Plays a one-shot SFX attached to a scene component.
 	 * Use for: character-bound loops, projectiles that follow their owner.
+	 * Returns the playing component (auto-destroyed when it finishes) so the
+	 * caller can stop or pause a loop, or null when nothing played.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Audio|SFX")
-	void PlaySFXAttached(USoundBase* Sound, USceneComponent* AttachTo,
+	UAudioComponent* PlaySFXAttached(USoundBase* Sound, USceneComponent* AttachTo,
 		float VolumeMultiplier = 1.0f, float PitchMultiplier = 1.0f);
 
 	// -----------------------------------------------------------------------

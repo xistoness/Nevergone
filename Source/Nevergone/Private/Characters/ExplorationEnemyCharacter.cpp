@@ -4,6 +4,7 @@
 #include "Characters/ExplorationEnemyCharacter.h"
 
 #include "Nevergone.h"
+#include "ActorComponents/ExplorationEnemySignalComponent.h"
 #include "Data/ExplorationEnemyDefinition.h"
 
 #include "Animation/AnimInstance.h"
@@ -31,6 +32,8 @@ AExplorationEnemyCharacter::AExplorationEnemyCharacter()
 		// gives the player a moment to break line of sight after a corner.
 		Movement->BrakingDecelerationWalking = 800.0f;
 	}
+
+	SignalComponent = CreateDefaultSubobject<UExplorationEnemySignalComponent>(TEXT("Signals"));
 }
 
 void AExplorationEnemyCharacter::PostInitializeComponents()

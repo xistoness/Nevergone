@@ -22,7 +22,13 @@ enum class EExplorationSenseChannel : uint8;
 //
 // State rules:
 //   Patrol      Stationary scans in place, Route walks its waypoints, Wander
-//               picks random reachable points around home.
+//               picks random reachable points around home. A Stationary
+//               enemy that left its post walks back to it and turns to its
+//               placed rotation before scanning again.
+//   Suspicious  A survivor is in view and the confirmation window is open.
+//               Stands still and keeps turning towards them. Confirmed, it
+//               chases; out of view first, it investigates where they were.
+//               Noise does not interrupt it: it is already looking.
 //   Investigate Something was heard, or the survivor was seen and then lost.
 //               Turns to face the stimulus first, then walks to the last
 //               known location, looks around, gives up. Facing first matters
@@ -43,9 +49,14 @@ enum class EExplorationSenseChannel : uint8;
 // is zero and Tick does nothing.
 //
 // Escalation differs per sense: hearing only ever causes Investigate, sight
-// needs TimeToConfirmSeconds of continuous contact before it becomes a chase,
-// and smell escalates immediately because by then the survivor is already
-// close enough to touch.
+// needs TimeToConfirmSeconds of continuous contact (spent in Suspicious)
+// before it becomes a chase, and smell escalates immediately because by then
+// the survivor is already close enough to touch. Another enemy's chase
+// scream is heard like any noise: the listener investigates where it came
+// from.
+//
+// The controller only changes state. What the player sees and hears of it
+// is played by UExplorationEnemySignalComponent on the body.
 //
 // Targets: every survivor body counts (the player's survivor and recruited
 // followers), but the enemy works on one at a time. Sight confirms the
@@ -104,6 +115,10 @@ private:
 	void EnterState(EExplorationEnemyState NewState);
 
 	void TickPatrol(float DeltaTime);
+
+	// Focus is the survivor sight is confirming, or null once out of view.
+	void TickSuspicious(float DeltaTime, const AActor* Focus);
+
 	void TickInvestigate(float DeltaTime);
 	void TickChase(float DeltaTime);
 	void TickKnockdown(float DeltaTime);
@@ -115,9 +130,17 @@ private:
 	void AdvanceRoute();
 	void PickWanderDestination();
 
+	// Walks a Stationary enemy back to its post and turns it to its placed
+	// rotation. Returns true once it is there and the scan may run.
+	bool UpdateReturnToPost(float DeltaTime);
+
 	// True once the pawn is within MoveAcceptanceRadius of its current goal, or
 	// once the move request has finished for any reason.
 	bool HasReachedDestination() const;
+
+	// Turns the pawn towards TargetYaw at the type's turn rate. Returns true
+	// when it already is within ToleranceDegrees.
+	bool TurnTowardsYaw(float TargetYaw, float ToleranceDegrees, float DeltaTime);
 
 	// --- Investigate ---
 
@@ -137,6 +160,15 @@ private:
 
 	void HandleSurvivorSensed(AActor* Survivor, const FVector& StimulusLocation, EExplorationSenseChannel Channel);
 	void HandleSurvivorLost(AActor* Survivor);
+	void HandleEnemyNoiseHeard(AActor* Enemy, const FVector& NoiseLocation);
+
+	// True in the states a noise can move: Idle, Patrol and Investigate.
+	bool CanReactToNoise() const;
+
+	// Shared by every heard noise: investigate the most recent stimulus, or
+	// re-target the investigation in progress. Ignored outside the states
+	// CanReactToNoise accepts.
+	void ReactToNoise();
 
 	// --- Cached context ---
 
@@ -191,6 +223,12 @@ private:
 	// BeginPlay has run. Patrol waits for the first tick so the pawn's home
 	// location and the navigation system are both ready.
 	bool bPatrolStartPending = false;
+
+	// A Stationary enemy walking back to its post after giving up.
+	bool bReturningToPost = false;
+
+	// A Stationary enemy turning back to HomeRotation before its scan resumes.
+	bool bRestoringHomeRotation = false;
 
 	// Point the search is centred on: the last known location at the moment
 	// the investigation began.
