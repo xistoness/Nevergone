@@ -150,7 +150,8 @@ enum class EExplorationEnemySignalMoment : uint8
 	// Entered Chase: the scream.
 	Chase,
 
-	// Back to Patrol after suspicion, investigation or a chase.
+	// Back to Patrol after an investigation or a chase. A suspicion never
+	// ends in a patrol: it ends in a chase or an investigation.
 	GiveUp,
 };
 

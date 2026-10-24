@@ -35,8 +35,11 @@ bool FNevergoneExplorationEnemySignalTest::RunTest(const FString& Parameters)
 
 	// Giving up only after having noticed something.
 	TestTrue(TEXT("Investigate -> Patrol"), Moment(EState::Investigate, EState::Patrol) == EMoment::GiveUp);
-	TestTrue(TEXT("Suspicious -> Patrol"), Moment(EState::Suspicious, EState::Patrol) == EMoment::GiveUp);
 	TestTrue(TEXT("Chase -> Patrol"), Moment(EState::Chase, EState::Patrol) == EMoment::GiveUp);
+
+	// Suspicion always ends in a chase or an investigation, so its patrol
+	// transition carries no give-up.
+	TestTrue(TEXT("Suspicious -> Patrol (unreachable)"), Moment(EState::Suspicious, EState::Patrol) == EMoment::None);
 	TestTrue(TEXT("Idle -> Patrol (first patrol)"), Moment(EState::Idle, EState::Patrol) == EMoment::None);
 	TestTrue(TEXT("KnockedDown -> Patrol"), Moment(EState::KnockedDown, EState::Patrol) == EMoment::None);
 	TestTrue(TEXT("Catch -> Patrol (after feeding)"), Moment(EState::Catch, EState::Patrol) == EMoment::None);

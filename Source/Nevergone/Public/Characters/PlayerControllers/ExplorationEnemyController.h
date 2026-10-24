@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "AIController.h"
 #include "Types/ExplorationEnemyTypes.h"
+#include "Types/ExplorationSuspicion.h"
 #include "ExplorationEnemyController.generated.h"
 
 class AExplorationEnemyCharacter;
@@ -27,8 +28,14 @@ enum class EExplorationSenseChannel : uint8;
 //               placed rotation before scanning again.
 //   Suspicious  A survivor is in view and the confirmation window is open.
 //               Stands still and keeps turning towards them. Confirmed, it
-//               chases; out of view first, it investigates where they were.
-//               Noise does not interrupt it: it is already looking.
+//               chases. Out of view for less than the type's
+//               SuspicionSightLossToleranceSeconds, it holds still facing the
+//               last seen point and the confirmation pauses; out of view for
+//               longer, it investigates. Noise does not interrupt it: the
+//               most recent noise is held, and an unconfirmed window
+//               investigates it instead of the last seen point when it was
+//               heard after the survivor was last acquired (see
+//               FExplorationSuspicion). Never returns to Patrol directly.
 //   Investigate Something was heard, or the survivor was seen and then lost.
 //               Turns to face the stimulus first, then walks to the last
 //               known location, looks around, gives up. Facing first matters
@@ -49,19 +56,22 @@ enum class EExplorationSenseChannel : uint8;
 // is zero and Tick does nothing.
 //
 // Escalation differs per sense: hearing only ever causes Investigate, sight
-// needs TimeToConfirmSeconds of continuous contact (spent in Suspicious)
-// before it becomes a chase, and smell escalates immediately because by then
-// the survivor is already close enough to touch. Another enemy's chase
-// scream is heard like any noise: the listener investigates where it came
-// from.
+// needs TimeToConfirmSeconds of contact (spent in Suspicious, short losses
+// inside the tolerance paused rather than reset) before it becomes a chase,
+// and smell escalates immediately because by then the survivor is already
+// close enough to touch. Another enemy's chase scream is heard like any
+// noise: the listener investigates where it came from, or holds it while
+// Suspicious.
 //
 // The controller only changes state. What the player sees and hears of it
 // is played by UExplorationEnemySignalComponent on the body.
 //
 // Targets: every survivor body counts (the player's survivor and recruited
 // followers), but the enemy works on one at a time. Sight confirms the
-// closest survivor in view and sticks with it while it stays in view; a
-// chase sticks with its target until it is lost, whoever else shows up.
+// closest survivor in view and sticks with it while it stays in view (or,
+// while Suspicious, inside the sight loss tolerance, unless another survivor
+// is in view); a chase sticks with its target until it is lost, whoever else
+// shows up.
 //
 // The controller never resolves a capture. It reports the catch to
 // UExcursionEncounterSubsystem, which decides the outcome and calls back.
@@ -116,8 +126,13 @@ private:
 
 	void TickPatrol(float DeltaTime);
 
-	// Focus is the survivor sight is confirming, or null once out of view.
-	void TickSuspicious(float DeltaTime, const AActor* Focus);
+	// Focus is the survivor sight is confirming, or null while it is out of
+	// view. Advances the window: confirms, tolerates the loss, or gives up
+	// on it and investigates.
+	void TickSuspicious(float DeltaTime, AActor* Focus);
+
+	// Sight confirmed Target: chase it.
+	void ChaseConfirmedTarget(AActor* Target);
 
 	void TickInvestigate(float DeltaTime);
 	void TickChase(float DeltaTime);
@@ -165,6 +180,10 @@ private:
 	// True in the states a noise can move: Idle, Patrol and Investigate.
 	bool CanReactToNoise() const;
 
+	// A suspicious enemy does not move for a noise: it keeps the most recent
+	// one for when the window ends unconfirmed. Source is for the log only.
+	void HoldNoise(const FVector& NoiseLocation, const AActor* Source);
+
 	// Shared by every heard noise: investigate the most recent stimulus, or
 	// re-target the investigation in progress. Ignored outside the states
 	// CanReactToNoise accepts.
@@ -185,9 +204,10 @@ private:
 
 	// --- Timers ---
 
-	// Continuous seconds of sight contact with ConfirmTarget, reset whenever
-	// sight drops or the enemy starts confirming someone else.
-	float SightContactSeconds = 0.0f;
+	// Sight contact with ConfirmTarget, and while Suspicious the sight loss
+	// tolerance and the held noise. Contact resets whenever sight drops
+	// outside the tolerance or the enemy starts confirming someone else.
+	FExplorationSuspicion Suspicion;
 
 	// Survivor whose sight contact is being accumulated.
 	TWeakObjectPtr<AActor> ConfirmTarget;

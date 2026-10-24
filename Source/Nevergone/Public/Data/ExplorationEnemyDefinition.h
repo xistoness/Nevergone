@@ -113,6 +113,13 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Perception|Timing", meta = (ClampMin = "0.0"))
 	float TimeToConfirmSeconds = 1.5f;
 
+	// How long the survivor being confirmed may stay out of view without
+	// ending the suspicion. Covers a survivor flickering at a corner or at the
+	// edge of the cone: meanwhile the enemy holds still facing the last seen
+	// point, and the confirmation neither grows nor resets.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Perception|Timing", meta = (ClampMin = "0.0"))
+	float SuspicionSightLossToleranceSeconds = 0.75f;
+
 	// Longest the enemy keeps running toward the last known location after
 	// losing the survivor. Arriving there ends the chase earlier.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Perception|Timing", meta = (ClampMin = "0.0"))
@@ -247,7 +254,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Signals")
 	FExplorationEnemyScreamSignal ChaseSignal;
 
-	// Back to patrol after a suspicion, an investigation or a chase.
+	// Back to patrol after an investigation or a chase.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Signals")
 	FExplorationEnemySignal GiveUpSignal;
 

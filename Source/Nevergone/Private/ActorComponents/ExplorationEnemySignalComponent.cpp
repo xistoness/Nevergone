@@ -51,9 +51,9 @@ EExplorationEnemySignalMoment UExplorationEnemySignalComponent::GetSignalMoment(
 
 	case EExplorationEnemyState::Patrol:
 		// Giving up only after noticing something. The first patrol after
-		// spawn, getting up and finishing a meal are not a give-up.
-		return OldState == EExplorationEnemyState::Suspicious ||
-			OldState == EExplorationEnemyState::Investigate ||
+		// spawn, getting up and finishing a meal are not a give-up. Suspicion
+		// never returns to patrol: it ends in a chase or an investigation.
+		return OldState == EExplorationEnemyState::Investigate ||
 			OldState == EExplorationEnemyState::Chase
 			? EExplorationEnemySignalMoment::GiveUp
 			: EExplorationEnemySignalMoment::None;

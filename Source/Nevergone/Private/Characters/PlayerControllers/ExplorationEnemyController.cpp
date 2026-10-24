@@ -83,6 +83,7 @@ void AExplorationEnemyController::OnUnPossess()
 	Definition = nullptr;
 	ChaseTarget = nullptr;
 	ConfirmTarget = nullptr;
+	Suspicion.Reset();
 
 	bPatrolStartPending = false;
 
@@ -112,7 +113,7 @@ void AExplorationEnemyController::EnterState(EExplorationEnemyState NewState)
 	switch (NewState)
 	{
 	case EExplorationEnemyState::Patrol:
-		SightContactSeconds = 0.0f;
+		Suspicion.Reset();
 		TimeSinceLastContact = 0.0f;
 		StartPatrol();
 		break;
@@ -201,41 +202,59 @@ void AExplorationEnemyController::Tick(float DeltaTime)
 	// The survivor being confirmed is kept while it stays in view. Picking
 	// the closest one every frame would restart the window each time two
 	// survivors trade places, and the confirmation would never complete.
+	const EExplorationEnemyState StateBeforeSight = ControlledEnemy->GetBehaviorState();
+
+	const bool bWasSuspicious = StateBeforeSight == EExplorationEnemyState::Suspicious;
+
 	AActor* Focus = ConfirmTarget.Get();
 
 	if (EnemyPerceptionComponent && (!Focus || !EnemyPerceptionComponent->HasSightOf(Focus)))
 	{
-		Focus = EnemyPerceptionComponent->GetClosestSightedSurvivor();
+		AActor* Sighted = EnemyPerceptionComponent->GetClosestSightedSurvivor();
 
-		if (Focus != ConfirmTarget.Get())
+		if (bWasSuspicious && Focus && !Sighted)
 		{
-			ConfirmTarget = Focus;
+			// A suspicious enemy keeps its target through a short loss of
+			// sight. TickSuspicious decides when the loss is too long.
+			Focus = nullptr;
+		}
+		else
+		{
+			if (Sighted != ConfirmTarget.Get())
+			{
+				if (bWasSuspicious && Sighted)
+				{
+					UE_LOG(LogNevergone, Verbose,
+						TEXT("[ExplorationEnemyController] %s lost sight of %s and is now suspicious of %s"),
+						*GetNameSafe(ControlledEnemy.Get()), *GetNameSafe(ConfirmTarget.Get()), *GetNameSafe(Sighted));
+				}
 
-			SightContactSeconds = 0.0f;
+				ConfirmTarget = Sighted;
+
+				Suspicion.RestartContact();
+			}
+
+			Focus = Sighted;
 		}
 	}
 
-	if (Focus)
+	if (bWasSuspicious)
 	{
-		SightContactSeconds += DeltaTime;
+		// The open window advances in TickSuspicious, which also confirms.
+	}
+	else if (Focus)
+	{
+		Suspicion.AddContact(DeltaTime);
 
-		const EExplorationEnemyState CurrentState = ControlledEnemy->GetBehaviorState();
-
-		if (SightContactSeconds >= Definition->TimeToConfirmSeconds &&
-			CurrentState != EExplorationEnemyState::Chase &&
-			CurrentState != EExplorationEnemyState::Catch)
+		if (Suspicion.GetContactSeconds() >= Definition->TimeToConfirmSeconds &&
+			StateBeforeSight != EExplorationEnemyState::Chase &&
+			StateBeforeSight != EExplorationEnemyState::Catch)
 		{
-			ChaseTarget = Focus;
-
-			UE_LOG(LogNevergone, Log,
-				TEXT("[ExplorationEnemyController] %s confirmed %s and is chasing"),
-				*GetNameSafe(ControlledEnemy.Get()), *GetNameSafe(Focus));
-
-			EnterState(EExplorationEnemyState::Chase);
+			ChaseConfirmedTarget(Focus);
 		}
-		else if (CurrentState == EExplorationEnemyState::Idle ||
-			CurrentState == EExplorationEnemyState::Patrol ||
-			CurrentState == EExplorationEnemyState::Investigate)
+		else if (StateBeforeSight == EExplorationEnemyState::Idle ||
+			StateBeforeSight == EExplorationEnemyState::Patrol ||
+			StateBeforeSight == EExplorationEnemyState::Investigate)
 		{
 			// The confirmation window is open: stop and look. Decided here
 			// rather than in the sight handler for the same reason as the
@@ -245,12 +264,14 @@ void AExplorationEnemyController::Tick(float DeltaTime)
 				TEXT("[ExplorationEnemyController] %s is suspicious of %s"),
 				*GetNameSafe(ControlledEnemy.Get()), *GetNameSafe(Focus));
 
+			Suspicion.Open(Focus->GetActorLocation());
+
 			EnterState(EExplorationEnemyState::Suspicious);
 		}
 	}
 	else
 	{
-		SightContactSeconds = 0.0f;
+		Suspicion.Reset();
 	}
 
 	switch (ControlledEnemy->GetBehaviorState())
@@ -261,7 +282,11 @@ void AExplorationEnemyController::Tick(float DeltaTime)
 		break;
 
 	case EExplorationEnemyState::Suspicious:
-		TickSuspicious(DeltaTime, Focus);
+		// A window opened this tick already counted this tick's contact.
+		if (bWasSuspicious)
+		{
+			TickSuspicious(DeltaTime, Focus);
+		}
 		break;
 
 	case EExplorationEnemyState::Investigate:
@@ -569,36 +594,115 @@ bool AExplorationEnemyController::TurnTowardsYaw(float TargetYaw, float Toleranc
 // Suspicious
 // ---------------------------------------------------------------------------
 
-void AExplorationEnemyController::TickSuspicious(float DeltaTime, const AActor* Focus)
+void AExplorationEnemyController::TickSuspicious(float DeltaTime, AActor* Focus)
 {
 	AExplorationEnemyCharacter* Enemy = ControlledEnemy.Get();
 
-	if (!Enemy)
+	if (!Enemy || !Definition)
 	{
 		return;
 	}
 
-	// The window closed without a confirmation. The sight loss already
-	// recorded where the survivor was, which is what Investigate goes to.
-	if (!Focus)
+	const FVector FocusLocation = Focus ? Focus->GetActorLocation() : FVector::ZeroVector;
+
+	const bool bHadHeldNoise = Suspicion.HasHeldNoise();
+
+	const EExplorationSuspicionStep Step = Suspicion.Advance(Focus != nullptr, FocusLocation,
+		DeltaTime, Definition->SuspicionSightLossToleranceSeconds);
+
+	switch (Step)
 	{
+	case EExplorationSuspicionStep::LostSight:
+		UE_LOG(LogNevergone, Verbose,
+			TEXT("[ExplorationEnemyController] %s lost sight of %s while suspicious; tolerating up to %.2fs (confirmation paused at %.2fs)"),
+			*GetNameSafe(Enemy), *GetNameSafe(ConfirmTarget.Get()),
+			Definition->SuspicionSightLossToleranceSeconds, Suspicion.GetContactSeconds());
+		break;
+
+	case EExplorationSuspicionStep::Regained:
+		UE_LOG(LogNevergone, Verbose,
+			TEXT("[ExplorationEnemyController] %s saw %s again within the tolerance; confirmation resumes at %.2fs%s"),
+			*GetNameSafe(Enemy), *GetNameSafe(Focus), Suspicion.GetContactSeconds(),
+			bHadHeldNoise ? TEXT(", the held noise is superseded") : TEXT(""));
+		break;
+
+	case EExplorationSuspicionStep::Expired:
+	{
+		// The window closed without a confirmation. Investigate goes to the
+		// most recent stimulus, made current here.
+		const bool bUsesHeldNoise = Suspicion.HasHeldNoise();
+
+		const FVector Stimulus = Suspicion.ResolveStimulus();
+
+		UE_LOG(LogNevergone, Verbose,
+			TEXT("[ExplorationEnemyController] %s left the tolerance: %s out of view for %.2fs"),
+			*GetNameSafe(Enemy), *GetNameSafe(ConfirmTarget.Get()), Suspicion.GetSightLossSeconds());
+
+		if (bUsesHeldNoise)
+		{
+			UE_LOG(LogNevergone, Verbose,
+				TEXT("[ExplorationEnemyController] %s uses the held noise at %s"),
+				*GetNameSafe(Enemy), *Stimulus.ToCompactString());
+		}
+
 		UE_LOG(LogNevergone, Log,
-			TEXT("[ExplorationEnemyController] %s lost sight before confirming and is investigating"),
-			*GetNameSafe(Enemy));
+			TEXT("[ExplorationEnemyController] %s lost sight before confirming and is investigating the %s"),
+			*GetNameSafe(Enemy), bUsesHeldNoise ? TEXT("held noise") : TEXT("last seen point"));
+
+		if (EnemyPerceptionComponent)
+		{
+			EnemyPerceptionComponent->SetMostRecentStimulus(Stimulus);
+		}
+
+		ConfirmTarget = nullptr;
+
+		Suspicion.Reset();
 
 		EnterState(EExplorationEnemyState::Investigate);
 
 		return;
 	}
 
-	FVector ToFocus = Focus->GetActorLocation() - Enemy->GetActorLocation();
-	ToFocus.Z = 0.0f;
-
-	if (!ToFocus.IsNearlyZero())
-	{
-		// Keeps tracking a survivor who moves while being watched.
-		TurnTowardsYaw(ToFocus.Rotation().Yaw, 1.0f, DeltaTime);
+	default:
+		break;
 	}
+
+	if (Focus && Suspicion.GetContactSeconds() >= Definition->TimeToConfirmSeconds)
+	{
+		if (Suspicion.HasHeldNoise())
+		{
+			UE_LOG(LogNevergone, Verbose,
+				TEXT("[ExplorationEnemyController] %s discards the held noise at %s"),
+				*GetNameSafe(Enemy), *Suspicion.GetHeldNoiseLocation().ToCompactString());
+
+			Suspicion.DiscardHeldNoise();
+		}
+
+		ChaseConfirmedTarget(Focus);
+
+		return;
+	}
+
+	// Keeps tracking a survivor who moves while being watched, and faces the
+	// last seen point while they are out of view.
+	FVector ToLook = (Focus ? FocusLocation : Suspicion.GetLastSeenLocation()) - Enemy->GetActorLocation();
+	ToLook.Z = 0.0f;
+
+	if (!ToLook.IsNearlyZero())
+	{
+		TurnTowardsYaw(ToLook.Rotation().Yaw, 1.0f, DeltaTime);
+	}
+}
+
+void AExplorationEnemyController::ChaseConfirmedTarget(AActor* Target)
+{
+	ChaseTarget = Target;
+
+	UE_LOG(LogNevergone, Log,
+		TEXT("[ExplorationEnemyController] %s confirmed %s and is chasing"),
+		*GetNameSafe(ControlledEnemy.Get()), *GetNameSafe(Target));
+
+	EnterState(EExplorationEnemyState::Chase);
 }
 
 // ---------------------------------------------------------------------------
@@ -1009,6 +1113,13 @@ void AExplorationEnemyController::HandleSurvivorSensed(AActor* Survivor, const F
 		break;
 
 	case EExplorationSenseChannel::Hearing:
+		if (CurrentState == EExplorationEnemyState::Suspicious)
+		{
+			HoldNoise(StimulusLocation, Survivor);
+
+			break;
+		}
+
 		ReactToNoise();
 		break;
 
@@ -1038,6 +1149,13 @@ void AExplorationEnemyController::HandleEnemyNoiseHeard(AActor* Enemy, const FVe
 		return;
 	}
 
+	if (ControlledEnemy->GetBehaviorState() == EExplorationEnemyState::Suspicious)
+	{
+		HoldNoise(NoiseLocation, Enemy);
+
+		return;
+	}
+
 	if (!CanReactToNoise())
 	{
 		return;
@@ -1064,13 +1182,24 @@ bool AExplorationEnemyController::CanReactToNoise() const
 	}
 
 	// A noise never confirms a target, it only moves the enemy to look. A
-	// chase keeps its target, a suspicious enemy is already looking at one,
-	// and a captured, downed or dead one cannot react.
+	// chase keeps its target, a suspicious enemy is already looking at one
+	// and holds the noise instead (HoldNoise), and a captured, downed or
+	// dead one cannot react.
 	const EExplorationEnemyState State = ControlledEnemy->GetBehaviorState();
 
 	return State == EExplorationEnemyState::Idle ||
 		State == EExplorationEnemyState::Patrol ||
 		State == EExplorationEnemyState::Investigate;
+}
+
+void AExplorationEnemyController::HoldNoise(const FVector& NoiseLocation, const AActor* Source)
+{
+	UE_LOG(LogNevergone, Verbose,
+		TEXT("[ExplorationEnemyController] %s is suspicious and holds the noise of %s at %s%s"),
+		*GetNameSafe(ControlledEnemy.Get()), *GetNameSafe(Source), *NoiseLocation.ToCompactString(),
+		Suspicion.HasHeldNoise() ? TEXT(", replacing an older one") : TEXT(""));
+
+	Suspicion.HoldNoise(NoiseLocation);
 }
 
 void AExplorationEnemyController::ReactToNoise()
