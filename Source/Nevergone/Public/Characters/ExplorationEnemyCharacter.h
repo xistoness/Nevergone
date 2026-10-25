@@ -7,11 +7,15 @@
 #include "Types/ExplorationEnemyTypes.h"
 #include "ExplorationEnemyCharacter.generated.h"
 
+class ADoor;
 class UExplorationEnemyDefinition;
 class UExplorationEnemySignalComponent;
 
 DECLARE_MULTICAST_DELEGATE_TwoParams(FOnExplorationEnemyStateChanged,
 	EExplorationEnemyState /*OldState*/, EExplorationEnemyState /*NewState*/);
+
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnExplorationEnemyDoorSignal,
+	EExplorationEnemySignalMoment /*Moment*/, ADoor* /*Door*/);
 
 // ---------------------------------------------------------------------------
 // AExplorationEnemyCharacter
@@ -45,6 +49,13 @@ public:
 	// Broadcast whenever the controller moves this enemy between states.
 	// The encounter flow listens for the transition into Catch.
 	FOnExplorationEnemyStateChanged OnStateChanged;
+
+	// Broadcast when the controller knocks at a door or breaks it. Played by
+	// UExplorationEnemySignalComponent, like the state signals.
+	FOnExplorationEnemyDoorSignal OnDoorSignal;
+
+	// Moment is DoorKnock or DoorBreak.
+	void AnnounceDoorSignal(EExplorationEnemySignalMoment Moment, ADoor* Door);
 
 	// --- Definition ---
 

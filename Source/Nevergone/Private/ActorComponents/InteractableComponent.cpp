@@ -24,6 +24,23 @@ void UInteractableComponent::Interact(AActor* Interactor)
 	}
 }
 
+bool UInteractableComponent::CanInteractHold(const AActor* Interactor) const
+{
+	const IInteractable* Interactable = Cast<IInteractable>(GetOwner());
+
+	return Interactable && IsValid(Interactor) && Interactable->CanInteractHold(Interactor);
+}
+
+void UInteractableComponent::InteractHold(AActor* Interactor)
+{
+	IInteractable* Interactable = Cast<IInteractable>(GetOwner());
+
+	if (Interactable && IsValid(Interactor))
+	{
+		Interactable->InteractHold(Interactor);
+	}
+}
+
 void UInteractableComponent::SetHighlighted(bool bHighlighted)
 {
 	AActor* OwnerActor = GetOwner();

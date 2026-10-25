@@ -5,6 +5,7 @@
 #include "Nevergone.h"
 #include "ActorComponents/ExplorationModeComponent.h"
 #include "Characters/ExcursionSurvivorNPC.h"
+#include "EngineTools/AINavLinks.h"
 
 #include "GameFramework/Character.h"
 #include "Kismet/GameplayStatics.h"
@@ -55,6 +56,8 @@ void AExcursionSurvivorController::OnUnPossess()
 
 	StopMovement();
 
+	bStopAfterNavLink = false;
+
 	ControlledSurvivor = nullptr;
 	SurvivorMode = nullptr;
 	CachedLeader = nullptr;
@@ -67,14 +70,26 @@ void AExcursionSurvivorController::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	if (!ControlledSurvivor.IsValid() ||
-		ControlledSurvivor->GetSurvivorState() != EExcursionSurvivorState::Following)
+	// Frozen by a player capture: no moves, no stance copies.
+	if (CustomTimeDilation <= 0.0f)
 	{
 		return;
 	}
 
-	// Frozen by a player capture: no moves, no stance copies.
-	if (CustomTimeDilation <= 0.0f)
+	// Told to wait halfway through a door: it stops once across.
+	if (bStopAfterNavLink && !NevergoneAI::IsWalkingNavLink(*this))
+	{
+		bStopAfterNavLink = false;
+
+		StopMovement();
+
+		UE_LOG(LogNevergone, Verbose,
+			TEXT("[ExcursionSurvivorController] %s is off the nav link and stops"),
+			*GetNameSafe(GetPawn()));
+	}
+
+	if (!ControlledSurvivor.IsValid() ||
+		ControlledSurvivor->GetSurvivorState() != EExcursionSurvivorState::Following)
 	{
 		return;
 	}
@@ -106,6 +121,9 @@ void AExcursionSurvivorController::Tick(float DeltaTime)
 void AExcursionSurvivorController::HandleSurvivorStateChanged(AExcursionSurvivorNPC* Survivor,
 	EExcursionSurvivorState NewState)
 {
+	// A stop still waiting for the nav link belonged to the previous state.
+	bStopAfterNavLink = false;
+
 	switch (NewState)
 	{
 	case EExcursionSurvivorState::Following:
@@ -118,8 +136,21 @@ void AExcursionSurvivorController::HandleSurvivorStateChanged(AExcursionSurvivor
 
 	case EExcursionSurvivorState::Waiting:
 		// Hold position in whatever stance the follower is in. A crouched
-		// follower left behind a counter stays hidden behind it.
-		StopMovement();
+		// follower left behind a counter stays hidden behind it. Halfway
+		// through a door, it finishes crossing first.
+		if (NevergoneAI::IsWalkingNavLink(*this))
+		{
+			bStopAfterNavLink = true;
+
+			UE_LOG(LogNevergone, Verbose,
+				TEXT("[ExcursionSurvivorController] %s wait postponed until it is off the nav link"),
+				*GetNameSafe(Survivor));
+		}
+		else
+		{
+			StopMovement();
+		}
+
 		ApplyStance(Survivor->bIsCrouched, false);
 		StanceDelayLeft = 0.0f;
 		break;

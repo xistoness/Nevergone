@@ -131,10 +131,11 @@ struct FExcursionCaptureAnimation
 // ---------------------------------------------------------------------------
 // EExplorationEnemySignalMoment
 //
-// The four moments in which an enemy tells the player, through its own body
-// and voice, what it is doing. There is no UI for enemy awareness: these are
-// the whole read. Derived from a state transition by
-// UExplorationEnemySignalComponent::GetSignalMoment.
+// The moments in which an enemy tells the player, through its own body and
+// voice, what it is doing. There is no UI for enemy awareness: these are the
+// whole read. The first four are derived from a state transition by
+// UExplorationEnemySignalComponent::GetSignalMoment; the door moments are
+// announced by the controller while it works at a door, in any state.
 // ---------------------------------------------------------------------------
 UENUM()
 enum class EExplorationEnemySignalMoment : uint8
@@ -153,6 +154,12 @@ enum class EExplorationEnemySignalMoment : uint8
 	// Back to Patrol after an investigation or a chase. A suspicion never
 	// ends in a patrol: it ends in a chase or an investigation.
 	GiveUp,
+
+	// One knock at a latched door.
+	DoorKnock,
+
+	// The latched door gives way.
+	DoorBreak,
 };
 
 // ---------------------------------------------------------------------------
@@ -182,9 +189,10 @@ struct FExplorationEnemySignal
 // ---------------------------------------------------------------------------
 // FExplorationEnemyScreamSignal
 //
-// The chase signal. Its sound is the scream noise's own sound: the scream is
-// emitted through UExcursionNoiseSubsystem so other enemies hear it, and
-// playing a separate sound on top would play it twice.
+// A signal whose sound is a noise: the chase scream, knocking at a door and
+// breaking it. The sound is the noise's own: it is emitted through
+// UExcursionNoiseSubsystem so other enemies hear it, and playing a separate
+// sound on top would play it twice.
 // ---------------------------------------------------------------------------
 USTRUCT(BlueprintType)
 struct FExplorationEnemyScreamSignal
@@ -196,9 +204,11 @@ struct FExplorationEnemyScreamSignal
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Signal")
 	TObjectPtr<UAnimMontage> Montage = nullptr;
 
-	// Emitted at the enemy with the enemy as instigator. Must be tagged
-	// Noise.Scream: enemies within reach investigate the point, and ignore
-	// any other enemy-made noise. The screamer does not hear itself.
+	// Emitted with the enemy as instigator: at the enemy for the scream, at
+	// the door for the door signals. Must carry a place-noise tag
+	// (Noise.Scream, Noise.DoorKnock, Noise.DoorBreak): enemies within reach
+	// investigate the point, and ignore any other enemy-made noise. The
+	// enemy that made it does not hear itself.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Signal")
 	TObjectPtr<UNoiseDefinition> Noise = nullptr;
 };

@@ -58,6 +58,18 @@ EDataValidationResult UExplorationEnemyDefinition::IsDataValid(FDataValidationCo
 			"ChaseSignal.Noise is not tagged Noise.Scream. Other enemies only react to enemy noise with that tag."));
 	}
 
+	if (KnockSignal.Noise && KnockSignal.Noise->NoiseTag != TAG_Noise_DoorKnock.GetTag())
+	{
+		Context.AddWarning(LOCTEXT("KnockWithoutTag",
+			"KnockSignal.Noise is not tagged Noise.DoorKnock. Other enemies will not come to investigate the knocking."));
+	}
+
+	if (BreakSignal.Noise && BreakSignal.Noise->NoiseTag != TAG_Noise_DoorBreak.GetTag())
+	{
+		Context.AddWarning(LOCTEXT("BreakWithoutTag",
+			"BreakSignal.Noise is not tagged Noise.DoorBreak. Other enemies will not come to investigate the broken door."));
+	}
+
 	return Result;
 }
 

@@ -16,6 +16,11 @@ public:
 	UInteractableComponent();
 	
 	void Interact(AActor* Interactor);
+
+	// Forwarded to the owner's IInteractable hold hooks (C++ owners only).
+	bool CanInteractHold(const AActor* Interactor) const;
+
+	void InteractHold(AActor* Interactor);
 	
 	void SetHighlighted(bool bHighlighted);
 

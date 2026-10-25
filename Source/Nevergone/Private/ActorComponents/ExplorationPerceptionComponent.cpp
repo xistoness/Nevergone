@@ -23,8 +23,9 @@ namespace ExplorationHearing
 	// range at the default factor, and every extra one costs a trace.
 	static constexpr int32 MaxCountedOccluders = 4;
 
-	// An occluder this close to the noise is treated as its source (the door
-	// that slammed, the shelf a bottle fell from) and does not muffle it.
+	// An occluder this close to the noise is treated as its source (the
+	// shelf a bottle fell from) and does not muffle it. A noise emitted with
+	// a Source (a door) ignores that actor whatever the distance.
 	static constexpr float SourceClearance = 25.0f;
 }
 
@@ -289,7 +290,14 @@ bool UExplorationPerceptionComponent::IsNoiseAudible(const AActor* Instigator, c
 
 	// --- Occlusion: once per wall ---
 
-	const int32 Occluders = CountNoiseOccluders(ListenerLocation, NoiseLocation, ListenerPawn, Instigator);
+	// The object the noise came out of (a door) never muffles it.
+	const UExcursionNoiseSubsystem* NoiseSubsystem = UExcursionNoiseSubsystem::Get(this);
+
+	const AActor* Source = NoiseSubsystem
+		? NoiseSubsystem->FindNoiseSource(Instigator, NoiseLocation, Stimulus.Tag)
+		: nullptr;
+
+	const int32 Occluders = CountNoiseOccluders(ListenerLocation, NoiseLocation, ListenerPawn, Instigator, Source);
 
 	const float Occlusion = FMath::Pow(Definition->HearingOcclusionPerWall, static_cast<float>(Occluders));
 
@@ -297,9 +305,9 @@ bool UExplorationPerceptionComponent::IsNoiseAudible(const AActor* Instigator, c
 
 	float Mask = 1.0f;
 
-	if (const UExcursionNoiseSubsystem* Noise = UExcursionNoiseSubsystem::Get(this))
+	if (NoiseSubsystem)
 	{
-		Mask = FMath::Min(Noise->GetHearingMaskAt(ListenerLocation), Noise->GetHearingMaskAt(NoiseLocation));
+		Mask = FMath::Min(NoiseSubsystem->GetHearingMaskAt(ListenerLocation), NoiseSubsystem->GetHearingMaskAt(NoiseLocation));
 	}
 
 	// Stimulus strength is the reported loudness, surface already applied.
@@ -311,9 +319,9 @@ bool UExplorationPerceptionComponent::IsNoiseAudible(const AActor* Instigator, c
 	const bool bAudible = Distance <= EffectiveRange;
 
 	UE_LOG(LogNevergone, Verbose,
-		TEXT("[ExplorationPerceptionComponent] %s %s noise %s: distance %.0f, range %.0f (loudness %.2f, %d walls, mask %.2f)"),
+		TEXT("[ExplorationPerceptionComponent] %s %s noise %s: distance %.0f, range %.0f (loudness %.2f, %d walls, mask %.2f, source %s ignored)"),
 		*GetNameSafe(ListenerPawn), bAudible ? TEXT("heard") : TEXT("filtered"),
-		*Stimulus.Tag.ToString(), Distance, EffectiveRange, Stimulus.Strength, Occluders, Mask);
+		*Stimulus.Tag.ToString(), Distance, EffectiveRange, Stimulus.Strength, Occluders, Mask, *GetNameSafe(Source));
 
 #if ENABLE_DRAW_DEBUG
 	if (UExcursionNoiseSubsystem::IsDebugEnabled())
@@ -332,7 +340,7 @@ bool UExplorationPerceptionComponent::IsNoiseAudible(const AActor* Instigator, c
 }
 
 int32 UExplorationPerceptionComponent::CountNoiseOccluders(const FVector& From, const FVector& To,
-	const AActor* Listener, const AActor* Instigator) const
+	const AActor* Listener, const AActor* Instigator, const AActor* Source) const
 {
 	const UWorld* World = GetWorld();
 
@@ -347,6 +355,11 @@ int32 UExplorationPerceptionComponent::CountNoiseOccluders(const FVector& From, 
 	if (Instigator)
 	{
 		Params.AddIgnoredActor(Instigator);
+	}
+
+	if (Source)
+	{
+		Params.AddIgnoredActor(Source);
 	}
 
 	const float TotalDistance = FVector::Dist(From, To);

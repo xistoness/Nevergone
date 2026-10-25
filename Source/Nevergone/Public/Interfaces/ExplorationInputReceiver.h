@@ -45,7 +45,11 @@ public:
 	// Only ends the crouch when the player chose hold mode.
 	virtual void Input_CrouchReleased() = 0;
 
-	virtual void Input_Interact() = 0;
+	// A press interacts at once, unless the target does something when held
+	// (IInteractable::CanInteractHold): then the release decides, a tap or a
+	// hold. Without a release the press stays a tap.
+	virtual void Input_InteractPressed() = 0;
+	virtual void Input_InteractReleased() = 0;
 
 	// Held to aim a distraction along its arc; releasing throws it.
 	virtual void Input_ThrowPressed() = 0;

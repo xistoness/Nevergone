@@ -5,15 +5,24 @@
 
 #include "Nevergone.h"
 #include "ActorComponents/ExplorationPerceptionComponent.h"
+#include "Actors/Door.h"
 #include "Characters/ExcursionSurvivorNPC.h"
 #include "Characters/ExplorationEnemyCharacter.h"
 #include "Data/ExplorationEnemyDefinition.h"
+#include "EngineTools/AINavLinks.h"
 #include "World/ExcursionEncounterSubsystem.h"
 
 #include "GameFramework/Character.h"
 #include "Kismet/GameplayStatics.h"
 #include "NavigationSystem.h"
 #include "Navigation/PathFollowingComponent.h"
+
+namespace ExplorationEnemyAI
+{
+	// A place noise this close to a point the enemy is already at (or
+	// already investigating) points at the same place.
+	static constexpr float SamePlaceRadius = 100.0f;
+}
 
 AExplorationEnemyController::AExplorationEnemyController()
 {
@@ -84,8 +93,10 @@ void AExplorationEnemyController::OnUnPossess()
 	ChaseTarget = nullptr;
 	ConfirmTarget = nullptr;
 	Suspicion.Reset();
+	ForgetDoorKnock();
 
 	bPatrolStartPending = false;
+	bStopAfterNavLink = false;
 
 	Super::OnUnPossess();
 }
@@ -110,17 +121,21 @@ void AExplorationEnemyController::EnterState(EExplorationEnemyState NewState)
 	// knowing the controller exists.
 	ControlledEnemy->SetBehaviorState(NewState);
 
+	// A stop still waiting for the nav link belonged to the previous state.
+	bStopAfterNavLink = false;
+
 	switch (NewState)
 	{
 	case EExplorationEnemyState::Patrol:
 		Suspicion.Reset();
 		TimeSinceLastContact = 0.0f;
+		ForgetDoorKnock();
 		StartPatrol();
 		break;
 
 	case EExplorationEnemyState::Suspicious:
 		// Stand still: the turn towards the survivor is the whole beat.
-		StopMovement();
+		StopMovementAfterNavLink();
 		break;
 
 	case EExplorationEnemyState::Investigate:
@@ -141,6 +156,7 @@ void AExplorationEnemyController::EnterState(EExplorationEnemyState NewState)
 		StopMovement();
 		ChaseTarget = nullptr;
 		ConfirmTarget = nullptr;
+		ForgetDoorKnock();
 
 		if (EnemyPerceptionComponent)
 		{
@@ -280,6 +296,26 @@ void AExplorationEnemyController::Tick(float DeltaTime)
 	{
 		Suspicion.Reset();
 	}
+
+	// A stop asked halfway through a door: the state already changed, the
+	// body finishes crossing first.
+	if (bStopAfterNavLink)
+	{
+		if (NevergoneAI::IsWalkingNavLink(*this))
+		{
+			return;
+		}
+
+		bStopAfterNavLink = false;
+
+		StopMovement();
+
+		UE_LOG(LogNevergone, Verbose,
+			TEXT("[ExplorationEnemyController] %s is off the nav link and stops"),
+			*GetNameSafe(ControlledEnemy.Get()));
+	}
+
+	TickDoorKnock(DeltaTime);
 
 	switch (ControlledEnemy->GetBehaviorState())
 	{
@@ -728,7 +764,7 @@ void AExplorationEnemyController::BeginInvestigation()
 	bInvestigateMoveIssued = false;
 	bIsSearching = false;
 
-	StopMovement();
+	StopMovementAfterNavLink();
 
 	// Face the stimulus before travelling to it. The eyes follow the body,
 	// so turning in place is what lets the enemy spot a survivor who is
@@ -842,7 +878,11 @@ void AExplorationEnemyController::TickInvestigate(float DeltaTime)
 
 	// --- Search ---
 
-	InvestigateElapsed += DeltaTime;
+	// Knocking at a door on the way to a search point is not searching.
+	if (!IsKnocking())
+	{
+		InvestigateElapsed += DeltaTime;
+	}
 
 	if (InvestigateElapsed >= Definition->InvestigateDurationSeconds)
 	{
@@ -975,15 +1015,10 @@ void AExplorationEnemyController::TickChase(float DeltaTime)
 
 	TimeSinceRepath += DeltaTime;
 
-	// Not while walking a nav link (a door): the doorway is carved out of
-	// the navmesh, so a path planned from inside it starts on the side the
-	// enemy came from and pulls it back. The repath runs as soon as the
+	// Not while walking a nav link (a door): the repath runs as soon as the
 	// enemy is off the link. An enemy paused at a closed door is still at
 	// the link start, on the navmesh, and may change its route.
-	const bool bWalkingNavLink = ShouldPostponePathUpdates() &&
-		GetMoveStatus() == EPathFollowingStatus::Moving;
-
-	if (bWalkingNavLink)
+	if (NevergoneAI::IsWalkingNavLink(*this))
 	{
 		if (bRepathDue)
 		{
@@ -1012,6 +1047,130 @@ void AExplorationEnemyController::TickChase(float DeltaTime)
 			}
 		}
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Doors
+// ---------------------------------------------------------------------------
+
+void AExplorationEnemyController::HandleDoorBarred(ADoor* Door)
+{
+	if (!ControlledEnemy.IsValid() || !Door)
+	{
+		return;
+	}
+
+	// Every new move that reaches the same door comes back here (a chase
+	// repath): the knocking carries on. Coming back to a door knocked at
+	// earlier carries on from there too.
+	KnockDoor = Door;
+
+	// Doors that opened or broke since are done with.
+	for (auto It = DoorKnocks.CreateIterator(); It; ++It)
+	{
+		const ADoor* Knocked = It.Key().Get();
+
+		if (!Knocked || Knocked->GetState() == EDoorState::Open || Knocked->GetState() == EDoorState::Broken)
+		{
+			It.RemoveCurrent();
+		}
+	}
+
+	DoorKnocks.FindOrAdd(Door);
+}
+
+void AExplorationEnemyController::TickDoorKnock(float DeltaTime)
+{
+	ADoor* Door = KnockDoor.Get();
+
+	if (!Door || !Definition || !ControlledEnemy.IsValid())
+	{
+		return;
+	}
+
+	// Unlatched, opened, or broken by somebody else: nothing left to knock
+	// at. Only an unlatched door that stays closed keeps the knocking done.
+	if (!Door->IsLatched())
+	{
+		if (Door->GetState() != EDoorState::Closed)
+		{
+			DoorKnocks.Remove(Door);
+		}
+
+		KnockDoor = nullptr;
+
+		return;
+	}
+
+	// Away from the door for now (moving elsewhere, or between two move
+	// requests that both end here): the knocking so far is kept.
+	if (!IsKnocking())
+	{
+		return;
+	}
+
+	FDoorKnock& Knock = DoorKnocks.FindOrAdd(Door);
+
+	if (!Knock.HasStarted())
+	{
+		UE_LOG(LogNevergone, Verbose,
+			TEXT("[ExplorationEnemyController] %s starts knocking at %s (breaks it after %.1fs)"),
+			*GetNameSafe(ControlledEnemy.Get()), *GetNameSafe(Door), Door->GetBreakSeconds());
+	}
+
+	const FDoorKnock::FStep Step = Knock.Advance(DeltaTime, Definition->KnockIntervalSeconds, Door->GetBreakSeconds());
+
+	if (Step.bKnock)
+	{
+		ControlledEnemy->AnnounceDoorSignal(EExplorationEnemySignalMoment::DoorKnock, Door);
+	}
+
+	if (Step.bBreak)
+	{
+		UE_LOG(LogNevergone, Verbose,
+			TEXT("[ExplorationEnemyController] %s breaks %s after %.1fs of knocking"),
+			*GetNameSafe(ControlledEnemy.Get()), *GetNameSafe(Door), Knock.GetElapsedSeconds());
+
+		DoorKnocks.Remove(Door);
+
+		KnockDoor = nullptr;
+
+		// The door lets every agent waiting at it walk on.
+		if (Door->TryBreak(ControlledEnemy.Get()))
+		{
+			ControlledEnemy->AnnounceDoorSignal(EExplorationEnemySignalMoment::DoorBreak, Door);
+		}
+	}
+}
+
+bool AExplorationEnemyController::IsKnocking() const
+{
+	const ADoor* Door = KnockDoor.Get();
+
+	return Door && Door->IsLatched() && Door->IsAgentWaiting(GetPathFollowingComponent());
+}
+
+void AExplorationEnemyController::ForgetDoorKnock()
+{
+	KnockDoor = nullptr;
+
+	DoorKnocks.Reset();
+}
+
+void AExplorationEnemyController::StopMovementAfterNavLink()
+{
+	if (!NevergoneAI::IsWalkingNavLink(*this))
+	{
+		StopMovement();
+
+		return;
+	}
+
+	bStopAfterNavLink = true;
+
+	UE_LOG(LogNevergone, Verbose,
+		TEXT("[ExplorationEnemyController] %s stop postponed until it is off the nav link"),
+		*GetNameSafe(ControlledEnemy.Get()));
 }
 
 // ---------------------------------------------------------------------------
@@ -1185,6 +1344,32 @@ void AExplorationEnemyController::HandlePlaceNoiseHeard(AActor* Source, const FV
 
 	if (!CanReactToNoise())
 	{
+		return;
+	}
+
+	// Already where the noise points: another enemy knocking at the door
+	// this one knocks at, or a place it is already investigating (a knock
+	// repeats every few seconds). Restarting would stop and turn it on
+	// every knock; the search time is refreshed instead.
+	if (IsKnocking() && FVector::Dist(NoiseLocation, KnockDoor->GetNoiseLocation()) <= ExplorationEnemyAI::SamePlaceRadius)
+	{
+		UE_LOG(LogNevergone, Verbose,
+			TEXT("[ExplorationEnemyController] %s ignores the place noise of %s: it is knocking at that door"),
+			*GetNameSafe(ControlledEnemy.Get()), *GetNameSafe(Source));
+
+		return;
+	}
+
+	if (ControlledEnemy->GetBehaviorState() == EExplorationEnemyState::Investigate &&
+		EnemyPerceptionComponent && EnemyPerceptionComponent->HasLastKnownLocation() &&
+		FVector::Dist(NoiseLocation, EnemyPerceptionComponent->GetLastKnownLocation()) <= ExplorationEnemyAI::SamePlaceRadius)
+	{
+		UE_LOG(LogNevergone, Verbose,
+			TEXT("[ExplorationEnemyController] %s hears %s again where it is investigating; search time refreshed"),
+			*GetNameSafe(ControlledEnemy.Get()), *GetNameSafe(Source));
+
+		InvestigateElapsed = 0.0f;
+
 		return;
 	}
 

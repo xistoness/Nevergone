@@ -258,6 +258,24 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Signals")
 	FExplorationEnemySignal GiveUpSignal;
 
+	// One knock at a latched door, every KnockIntervalSeconds. The noise
+	// sounds at the door and must be tagged Noise.DoorKnock: other enemies
+	// come to investigate it.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Signals")
+	FExplorationEnemyScreamSignal KnockSignal;
+
+	// The latched door gives way. The noise sounds at the door and must be
+	// tagged Noise.DoorBreak.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Signals")
+	FExplorationEnemyScreamSignal BreakSignal;
+
+	// --- Doors ---
+
+	// Time between knocks at a latched door. Match it to the knock montage.
+	// How long the door holds is the door's BreakSeconds.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Doors", meta = (ClampMin = "0.1", Units = "s"))
+	float KnockIntervalSeconds = 1.2f;
+
 #if WITH_EDITOR
 	// Catches the two configuration mistakes that produce silent, hard-to-debug
 	// behaviour: a lose-sight radius inside the sight radius (state flicker),

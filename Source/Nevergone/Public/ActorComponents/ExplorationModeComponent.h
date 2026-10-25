@@ -49,7 +49,8 @@ public:
 	virtual void Input_SprintReleased() override;
 	virtual void Input_CrouchPressed() override;
 	virtual void Input_CrouchReleased() override;
-	virtual void Input_Interact() override;
+	virtual void Input_InteractPressed() override;
+	virtual void Input_InteractReleased() override;
 	virtual void Input_ThrowPressed() override;
 	virtual void Input_ThrowReleased() override;
 
@@ -73,6 +74,11 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category="Interaction")
 	float MaxInteractionDistance = 200.0f;
+
+	// How long interact must be held on a target that has a hold action
+	// (the latch of a door) before it counts as a hold instead of a tap.
+	UPROPERTY(EditAnywhere, Category="Interaction", meta = (ClampMin = "0.05", Units = "s"))
+	float InteractHoldSeconds = 0.4f;
 
 	// --- Movement ---
 
@@ -158,6 +164,20 @@ private:
 	float NextPantingIn = 0.0f;
 
 	bool bInputSuspended = false;
+
+	// --- Hold interact ---
+
+	// Counts a press held on a target with a hold action. Done when the
+	// hold fires, the button is released (a tap) or the target changes.
+	void UpdateInteractHold(float DeltaTime);
+
+	void CancelInteractHold();
+
+	// Target of the press being held, null when no hold is pending.
+	UPROPERTY()
+	TObjectPtr<UInteractableComponent> PendingHoldTarget = nullptr;
+
+	float InteractHoldElapsed = 0.0f;
 
 	// Sibling on the same survivor. Throw input is forwarded to it.
 	UExcursionThrowComponent* GetThrowComponent() const;

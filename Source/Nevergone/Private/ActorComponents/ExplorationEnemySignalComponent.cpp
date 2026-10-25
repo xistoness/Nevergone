@@ -4,6 +4,7 @@
 #include "ActorComponents/ExplorationEnemySignalComponent.h"
 
 #include "Nevergone.h"
+#include "Actors/Door.h"
 #include "Audio/AudioSubsystem.h"
 #include "Characters/ExplorationEnemyCharacter.h"
 #include "Data/ExplorationEnemyDefinition.h"
@@ -79,6 +80,8 @@ void UExplorationEnemySignalComponent::BeginPlay()
 	}
 
 	StateChangedHandle = Enemy->OnStateChanged.AddUObject(this, &UExplorationEnemySignalComponent::HandleStateChanged);
+
+	DoorSignalHandle = Enemy->OnDoorSignal.AddUObject(this, &UExplorationEnemySignalComponent::HandleDoorSignal);
 }
 
 void UExplorationEnemySignalComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -88,9 +91,11 @@ void UExplorationEnemySignalComponent::EndPlay(const EEndPlayReason::Type EndPla
 	if (AExplorationEnemyCharacter* Enemy = GetEnemy())
 	{
 		Enemy->OnStateChanged.Remove(StateChangedHandle);
+		Enemy->OnDoorSignal.Remove(DoorSignalHandle);
 	}
 
 	StateChangedHandle.Reset();
+	DoorSignalHandle.Reset();
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -135,9 +140,61 @@ void UExplorationEnemySignalComponent::HandleStateChanged(EExplorationEnemyState
 	}
 }
 
+void UExplorationEnemySignalComponent::HandleDoorSignal(EExplorationEnemySignalMoment Moment, ADoor* Door)
+{
+	const UExplorationEnemyDefinition* Definition = GetDefinition();
+
+	if (!Definition || !Door)
+	{
+		return;
+	}
+
+	switch (Moment)
+	{
+	case EExplorationEnemySignalMoment::DoorKnock:
+		PlayDoorSignal(Definition->KnockSignal, Door, TEXT("knock"));
+		break;
+
+	case EExplorationEnemySignalMoment::DoorBreak:
+		PlayDoorSignal(Definition->BreakSignal, Door, TEXT("break"));
+		break;
+
+	default:
+		break;
+	}
+}
+
 // ---------------------------------------------------------------------------
 // One-shot signals
 // ---------------------------------------------------------------------------
+
+void UExplorationEnemySignalComponent::PlayDoorSignal(const FExplorationEnemyScreamSignal& Signal, ADoor* Door,
+	const TCHAR* MomentName)
+{
+	PlayMontage(Signal.Montage, MomentName);
+
+	AExplorationEnemyCharacter* Enemy = GetEnemy();
+
+	if (!Signal.Noise || !Enemy)
+	{
+		UE_LOG(LogNevergone, Verbose,
+			TEXT("[ExplorationEnemySignalComponent] %s has no %s noise"),
+			*GetNameSafe(Enemy), MomentName);
+
+		return;
+	}
+
+	// Sounds at the door, which is also its source: the door never muffles
+	// it for a listener on the other side.
+	if (UExcursionNoiseSubsystem* Noise = UExcursionNoiseSubsystem::Get(this))
+	{
+		Noise->EmitNoise(Signal.Noise, Door->GetNoiseLocation(), Enemy, nullptr, Door);
+
+		UE_LOG(LogNevergone, Verbose,
+			TEXT("[ExplorationEnemySignalComponent] %s emitted %s noise %s at %s"),
+			*GetNameSafe(Enemy), MomentName, *GetNameSafe(Signal.Noise), *GetNameSafe(Door));
+	}
+}
 
 void UExplorationEnemySignalComponent::PlaySignal(const FExplorationEnemySignal& Signal, const TCHAR* MomentName)
 {

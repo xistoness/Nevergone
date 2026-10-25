@@ -68,7 +68,14 @@ void AExplorationPlayerController::SetupInputComponent()
     }
 
     if (InteractionInput)
-        EIC->BindAction(InteractionInput, ETriggerEvent::Triggered, this, &AExplorationPlayerController::HandleInteract);
+    {
+        // Started is the press. With a Released trigger on the action (as
+        // on the throw), Completed is the release and holding is possible;
+        // with only Pressed, Completed follows the press at once and every
+        // interaction is a tap.
+        EIC->BindAction(InteractionInput, ETriggerEvent::Started, this, &AExplorationPlayerController::HandleInteract);
+        EIC->BindAction(InteractionInput, ETriggerEvent::Completed, this, &AExplorationPlayerController::HandleInteractReleased);
+    }
 
     if (QuestLogInput)
         EIC->BindAction(QuestLogInput, ETriggerEvent::Triggered, this, &AExplorationPlayerController::HandleQuestLog);
@@ -422,12 +429,25 @@ void AExplorationPlayerController::HandleInteract()
     case EExplorationInputMode::Gameplay:
         if (IExplorationInputReceiver* Actions = GetInputReceiver())
         {
-            Actions->Input_Interact();
+            Actions->Input_InteractPressed();
         }
         break;
 
     default:
         break;
+    }
+}
+
+void AExplorationPlayerController::HandleInteractReleased()
+{
+    if (CurrentInputMode != EExplorationInputMode::Gameplay)
+    {
+        return;
+    }
+
+    if (IExplorationInputReceiver* Actions = GetInputReceiver())
+    {
+        Actions->Input_InteractReleased();
     }
 }
 

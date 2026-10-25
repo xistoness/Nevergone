@@ -11,6 +11,40 @@ class UNoiseDefinition;
 class UPhysicalMaterial;
 
 // ---------------------------------------------------------------------------
+// FExcursionNoiseSourceLog
+//
+// The objects that made the noises of the last moment (the door that was
+// banged, the device that rang). The engine's hearing stimulus carries only
+// the instigator, so a listener looks the source up here by instigator,
+// location and tag, and leaves it out of the occlusion trace: the door does
+// not muffle its own noise. Plain struct so it can be tested on its own.
+// ---------------------------------------------------------------------------
+struct NEVERGONE_API FExcursionNoiseSourceLog
+{
+	// How long an entry is kept, in world seconds: hearing processes a
+	// reported noise within a frame or two.
+	static constexpr double LifetimeSeconds = 1.0;
+
+	void Add(const UObject* Instigator, const FVector& Location, FName Tag, const UObject* Source, double Now);
+
+	// The source of the most recent matching noise still in the log, or null.
+	const UObject* Find(const UObject* Instigator, const FVector& Location, FName Tag, double Now) const;
+
+private:
+
+	struct FEntry
+	{
+		TWeakObjectPtr<const UObject> Instigator;
+		TWeakObjectPtr<const UObject> Source;
+		FVector Location = FVector::ZeroVector;
+		FName Tag;
+		double Time = 0.0;
+	};
+
+	TArray<FEntry> Entries;
+};
+
+// ---------------------------------------------------------------------------
 // UExcursionNoiseSubsystem
 //
 // The single entry point for gameplay noise. Every noise source (footsteps,
@@ -55,14 +89,23 @@ public:
 	//
 	// Surface is optional: when known it selects the sound variant and
 	// scales the AI loudness.
+	//
+	// Source is optional: the world object the noise comes out of (a door),
+	// when it is not the instigator. Hearing occlusion ignores it, so an
+	// object never counts as a wall for its own noise.
 	void EmitNoise(const UNoiseDefinition* Definition, const FVector& Location,
-		AActor* Instigator, const UPhysicalMaterial* Surface = nullptr);
+		AActor* Instigator, const UPhysicalMaterial* Surface = nullptr, const AActor* Source = nullptr);
+
+	// The Source a noise was emitted with, for a listener that heard it
+	// (instigator, stimulus location and tag). Null when it had none.
+	const AActor* FindNoiseSource(const AActor* Instigator, const FVector& Location, FName Tag) const;
 
 	// --- Place noise ---
 
 	// True when an enemy hears this stimulus as a place noise: its tag is in
-	// the place-noise list (today only Noise.Scream) and it was not made by
-	// the listener itself. The instigator does not matter otherwise.
+	// the place-noise list (Noise.Scream, Noise.DoorKnock, Noise.DoorBreak)
+	// and it was not made by the listener itself. The instigator does not
+	// matter otherwise.
 	static bool IsHeardAsPlaceNoise(FName StimulusTag, bool bMadeByListener);
 
 	// --- Masking ---
@@ -88,4 +131,6 @@ protected:
 private:
 
 	TArray<TWeakObjectPtr<AExcursionNoiseMaskVolume>> MaskVolumes;
+
+	FExcursionNoiseSourceLog SourceLog;
 };

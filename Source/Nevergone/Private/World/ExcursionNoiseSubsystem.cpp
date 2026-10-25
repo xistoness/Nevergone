@@ -24,7 +24,54 @@ namespace ExcursionNoise
 
 	// How long debug shapes stay on screen. Long enough to read after a footstep.
 	static constexpr float DebugDrawSeconds = 2.0f;
+
+	// A stimulus keeps the reported location; this only absorbs rounding.
+	static constexpr float SourceMatchTolerance = 1.0f;
 }
+
+// ---------------------------------------------------------------------------
+// FExcursionNoiseSourceLog
+// ---------------------------------------------------------------------------
+
+void FExcursionNoiseSourceLog::Add(const UObject* Instigator, const FVector& Location, FName Tag,
+	const UObject* Source, double Now)
+{
+	Entries.RemoveAll([Now](const FEntry& Entry)
+	{
+		return Now - Entry.Time > LifetimeSeconds || !Entry.Source.IsValid();
+	});
+
+	FEntry& Entry = Entries.AddDefaulted_GetRef();
+	Entry.Instigator = Instigator;
+	Entry.Source = Source;
+	Entry.Location = Location;
+	Entry.Tag = Tag;
+	Entry.Time = Now;
+}
+
+const UObject* FExcursionNoiseSourceLog::Find(const UObject* Instigator, const FVector& Location, FName Tag,
+	double Now) const
+{
+	// Newest first: the same instigator may make the same noise again.
+	for (int32 Index = Entries.Num() - 1; Index >= 0; --Index)
+	{
+		const FEntry& Entry = Entries[Index];
+
+		if (Now - Entry.Time <= LifetimeSeconds &&
+			Entry.Instigator.Get() == Instigator &&
+			Entry.Tag == Tag &&
+			Entry.Location.Equals(Location, ExcursionNoise::SourceMatchTolerance))
+		{
+			return Entry.Source.Get();
+		}
+	}
+
+	return nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// UExcursionNoiseSubsystem
+// ---------------------------------------------------------------------------
 
 UExcursionNoiseSubsystem* UExcursionNoiseSubsystem::Get(const UObject* WorldContextObject)
 {
@@ -52,11 +99,12 @@ bool UExcursionNoiseSubsystem::IsHeardAsPlaceNoise(FName StimulusTag, bool bMade
 		return false;
 	}
 
-	// Noises that point at a place. Knocking, breaking a door and devices
-	// join this list in their own tasks.
+	// Noises that point at a place. Devices join this list in their own task.
 	const FName PlaceNoiseTags[] =
 	{
 		TAG_Noise_Scream.GetTag().GetTagName(),
+		TAG_Noise_DoorKnock.GetTag().GetTagName(),
+		TAG_Noise_DoorBreak.GetTag().GetTagName(),
 	};
 
 	for (const FName& PlaceNoiseTag : PlaceNoiseTags)
@@ -71,7 +119,7 @@ bool UExcursionNoiseSubsystem::IsHeardAsPlaceNoise(FName StimulusTag, bool bMade
 }
 
 void UExcursionNoiseSubsystem::EmitNoise(const UNoiseDefinition* Definition, const FVector& Location,
-	AActor* Instigator, const UPhysicalMaterial* Surface)
+	AActor* Instigator, const UPhysicalMaterial* Surface, const AActor* Source)
 {
 	if (!Definition)
 	{
@@ -122,6 +170,13 @@ void UExcursionNoiseSubsystem::EmitNoise(const UNoiseDefinition* Definition, con
 	{
 		if (Instigator)
 		{
+			// Logged before the report, so it is there whenever hearing
+			// processes the event.
+			if (Source)
+			{
+				SourceLog.Add(Instigator, Location, Definition->NoiseTag.GetTagName(), Source, World->GetTimeSeconds());
+			}
+
 			UAISense_Hearing::ReportNoiseEvent(World, Location, Loudness, Instigator,
 				Definition->MaxRange, Definition->NoiseTag.GetTagName());
 		}
@@ -134,9 +189,9 @@ void UExcursionNoiseSubsystem::EmitNoise(const UNoiseDefinition* Definition, con
 	}
 
 	UE_LOG(LogNevergone, Verbose,
-		TEXT("[ExcursionNoiseSubsystem] %s emitted %s at %s (surface %d, loudness %.2f)"),
+		TEXT("[ExcursionNoiseSubsystem] %s emitted %s at %s (surface %d, loudness %.2f, source %s)"),
 		*GetNameSafe(Instigator), *GetNameSafe(Definition), *Location.ToCompactString(),
-		static_cast<int32>(SurfaceType), Loudness);
+		static_cast<int32>(SurfaceType), Loudness, *GetNameSafe(Source));
 
 #if ENABLE_DRAW_DEBUG
 	if (IsDebugEnabled())
@@ -150,6 +205,13 @@ void UExcursionNoiseSubsystem::EmitNoise(const UNoiseDefinition* Definition, con
 			nullptr, Color, ExcursionNoise::DebugDrawSeconds);
 	}
 #endif
+}
+
+const AActor* UExcursionNoiseSubsystem::FindNoiseSource(const AActor* Instigator, const FVector& Location, FName Tag) const
+{
+	const UWorld* World = GetWorld();
+
+	return World ? Cast<AActor>(SourceLog.Find(Instigator, Location, Tag, World->GetTimeSeconds())) : nullptr;
 }
 
 void UExcursionNoiseSubsystem::RegisterMaskVolume(AExcursionNoiseMaskVolume* Volume)

@@ -63,6 +63,8 @@ void UExplorationModeComponent::ExitMode()
 		Throw->CancelAim();
 	}
 
+	CancelInteractHold();
+
 	PantingTimeLeft = 0.0f;
 
 	if (ACharacter* Character = GetCharacter())
@@ -92,6 +94,8 @@ void UExplorationModeComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 	if (!bInputSuspended)
 	{
 		UpdateInteractionTrace();
+
+		UpdateInteractHold(DeltaTime);
 	}
 
 	UpdateStamina(DeltaTime);
@@ -173,14 +177,80 @@ void UExplorationModeComponent::Input_CrouchReleased()
 	}
 }
 
-void UExplorationModeComponent::Input_Interact()
+void UExplorationModeComponent::Input_InteractPressed()
 {
+	CancelInteractHold();
+
 	if (!HighlightedInteractable)
 	{
 		return;
 	}
 
+	// A target with a hold action waits for the release or the hold time
+	// to know which one the player meant.
+	if (HighlightedInteractable->CanInteractHold(GetOwner()))
+	{
+		PendingHoldTarget = HighlightedInteractable;
+		InteractHoldElapsed = 0.0f;
+
+		return;
+	}
+
 	HighlightedInteractable->Interact(GetOwner());
+}
+
+void UExplorationModeComponent::Input_InteractReleased()
+{
+	UInteractableComponent* Target = PendingHoldTarget;
+
+	if (!Target)
+	{
+		return;
+	}
+
+	// Released before the hold time: a tap.
+	CancelInteractHold();
+
+	Target->Interact(GetOwner());
+}
+
+void UExplorationModeComponent::UpdateInteractHold(float DeltaTime)
+{
+	UInteractableComponent* Target = PendingHoldTarget;
+
+	if (!Target)
+	{
+		return;
+	}
+
+	// Looking away while holding drops the press: neither tap nor hold.
+	if (Target != HighlightedInteractable)
+	{
+		UE_LOG(LogNevergone, Verbose,
+			TEXT("[ExplorationModeComponent] %s held interact off %s; dropped"),
+			*GetNameSafe(GetOwner()), *GetNameSafe(Target->GetOwner()));
+
+		CancelInteractHold();
+
+		return;
+	}
+
+	InteractHoldElapsed += DeltaTime;
+
+	if (InteractHoldElapsed < InteractHoldSeconds)
+	{
+		return;
+	}
+
+	CancelInteractHold();
+
+	Target->InteractHold(GetOwner());
+}
+
+void UExplorationModeComponent::CancelInteractHold()
+{
+	PendingHoldTarget = nullptr;
+	InteractHoldElapsed = 0.0f;
 }
 
 void UExplorationModeComponent::Input_ThrowPressed()
@@ -228,6 +298,8 @@ void UExplorationModeComponent::SetInputSuspended(bool bSuspended)
 		{
 			Throw->CancelAim();
 		}
+
+		CancelInteractHold();
 
 		if (HighlightedInteractable)
 		{

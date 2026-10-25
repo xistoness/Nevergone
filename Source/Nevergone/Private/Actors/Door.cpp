@@ -21,6 +21,7 @@
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
 #include "GameInstance/SaveKeys.h"
+#include "Interfaces/DoorAgent.h"
 #include "Kismet/GameplayStatics.h"
 #include "NavLinkCustomComponent.h"
 #include "NavigationSystem.h"
@@ -162,9 +163,16 @@ void ADoor::Tick(float DeltaSeconds)
 
     SwingYaw = FMath::FInterpConstantTo(SwingYaw, TargetSwingYaw, DeltaSeconds, Speed);
 
+    if (bJolting)
+    {
+        JoltElapsed += DeltaSeconds;
+
+        bJolting = JoltElapsed < JoltDurationSeconds;
+    }
+
     ApplyLeafRotation();
 
-    if (FMath::IsNearlyEqual(SwingYaw, TargetSwingYaw))
+    if (!bJolting && FMath::IsNearlyEqual(SwingYaw, TargetSwingYaw))
     {
         SetActorTickEnabled(false);
     }
@@ -179,6 +187,24 @@ FVector ADoor::GetDoorwayAxis() const
         : FVector::ZeroVector;
 
     return Axis.IsNearlyZero() ? FVector::ForwardVector : Axis;
+}
+
+float ADoor::GetSideOf(const AActor* Actor) const
+{
+    if (!Actor || !DoorCollisionBox)
+    {
+        return 0.f;
+    }
+
+    // In actor space, from the middle of the box along its thickness axis.
+    const FVector ActorLocal = GetActorTransform().InverseTransformPosition(Actor->GetActorLocation());
+
+    return FVector::DotProduct(ActorLocal - DoorCollisionBox->GetRelativeLocation(), GetDoorwayAxis());
+}
+
+bool ADoor::IsOnLatchSide(const AActor* Actor) const
+{
+    return Actor && DoorRules::IsOnLatchSide(LatchSide, GetSideOf(Actor));
 }
 
 void ADoor::PlaceNavLinkEnds()
@@ -275,6 +301,7 @@ void ADoor::CaptureClosedLeaf()
 
     SwingYaw = 0.f;
     TargetSwingYaw = 0.f;
+    bJolting = false;
 }
 
 float ADoor::ChooseSwingSign(const AActor* Opener) const
@@ -289,8 +316,7 @@ float ADoor::ChooseSwingSign(const AActor* Opener) const
     const FVector Axis = GetDoorwayAxis();
 
     // Side of the doorway the opener is on, in actor space.
-    const FVector OpenerLocal = GetActorTransform().InverseTransformPosition(Opener->GetActorLocation());
-    const float OpenerSide = FVector::DotProduct(OpenerLocal - DoorCollisionBox->GetRelativeLocation(), Axis);
+    const float OpenerSide = GetSideOf(Opener);
 
     // Middle of the closed leaf relative to the hinge (the mesh pivot), in
     // actor space. Works whichever side the hinge is on.
@@ -303,16 +329,39 @@ void ADoor::StartSwing(float NewTargetYaw)
 {
     TargetSwingYaw = NewTargetYaw;
 
-    SetActorTickEnabled(!FMath::IsNearlyEqual(SwingYaw, TargetSwingYaw));
+    SetActorTickEnabled(bJolting || !FMath::IsNearlyEqual(SwingYaw, TargetSwingYaw));
+}
+
+void ADoor::StartJolt(float Sign, AActor* JoltInstigator)
+{
+    UE_LOG(LogTemp, Verbose, TEXT("[Door] '%s' jolts (%s, by '%s'): %.1f deg over %.2fs."),
+        *GetName(), *UEnum::GetValueAsString(CurrentState), *GetNameSafe(JoltInstigator),
+        JoltAngleDegrees, JoltDurationSeconds);
+
+    // Movement only: the leaf has no collision to push anybody with.
+    JoltSign = Sign >= 0.f ? 1.f : -1.f;
+    JoltElapsed = 0.f;
+    bJolting = JoltDurationSeconds > 0.f && JoltAngleDegrees > 0.f;
+
+    if (bJolting)
+    {
+        SetActorTickEnabled(true);
+    }
+
+    EmitDoorNoise(JoltNoise, TEXT("Jolt"), JoltInstigator);
 }
 
 void ADoor::ApplyLeafRotation()
 {
     if (DoorMesh)
     {
+        const float JoltYaw = bJolting
+            ? JoltSign * DoorRules::GetJoltOffset(JoltElapsed, JoltDurationSeconds, JoltAngleDegrees)
+            : 0.f;
+
         // Yaw about the actor's up axis, on top of the authored closed pose,
         // around the mesh pivot (the hinge).
-        DoorMesh->SetRelativeRotation(FQuat(FVector::UpVector, FMath::DegreesToRadians(SwingYaw)) * ClosedLeafRotation);
+        DoorMesh->SetRelativeRotation(FQuat(FVector::UpVector, FMath::DegreesToRadians(SwingYaw + JoltYaw)) * ClosedLeafRotation);
     }
 }
 
@@ -376,37 +425,94 @@ void ADoor::Interact_Implementation(AActor* Interactor)
         *UEnum::GetValueAsString(CurrentState),
         *GetNameSafe(Interactor));
 
-    switch (CurrentState)
-    {
-    case EDoorState::Locked:
-    {
-        UInventorySubsystem* Inventory = GetGameInstance()
-            ? GetGameInstance()->GetSubsystem<UInventorySubsystem>()
-            : nullptr;
+    ApplyInteraction(DoorRules::ResolveInteraction(CurrentState, IsOnLatchSide(Interactor), /*bHold=*/false), Interactor);
+}
 
-        UItemDefinition* KeyDef  = RequiredKey.LoadSynchronous();
-        const bool       bHasKey = (Inventory != nullptr) && (KeyDef != nullptr) && Inventory->HasItem(KeyDef);
+bool ADoor::CanInteractHold(const AActor* Interactor) const
+{
+    return DoorRules::CanHoldInteract(CurrentState, IsOnLatchSide(Interactor));
+}
 
-        if (bHasKey)
-        {
-            HandleUnlockAndOpen(Interactor);
-        }
-        else
-        {
-            HandleLockedAttempt(Interactor);
-        }
+void ADoor::InteractHold(AActor* Interactor)
+{
+    UE_LOG(LogTemp, Log, TEXT("[Door] '%s' InteractHold: state=%s, interactor=%s"),
+        *GetName(),
+        *UEnum::GetValueAsString(CurrentState),
+        *GetNameSafe(Interactor));
+
+    ApplyInteraction(DoorRules::ResolveInteraction(CurrentState, IsOnLatchSide(Interactor), /*bHold=*/true), Interactor);
+}
+
+void ADoor::ApplyInteraction(EDoorInteraction Interaction, AActor* Interactor)
+{
+    switch (Interaction)
+    {
+    case EDoorInteraction::UseKey:
+        HandleKeyInteraction(Interactor);
         break;
-    }
-    case EDoorState::Closed:
-    {
+
+    case EDoorInteraction::Open:
         TryOpen(Interactor);
         break;
-    }
-    case EDoorState::Open:
-    {
+
+    case EDoorInteraction::Close:
         TryClose(Interactor);
         break;
+
+    case EDoorInteraction::CloseAndLatch:
+        // Somebody in the doorway: the leaf jolts and the latch stays off.
+        if (!TryClose(Interactor))
+        {
+            break;
+        }
+        [[fallthrough]];
+
+    case EDoorInteraction::Latch:
+        // Not an AI noise.
+        UE_LOG(LogTemp, Verbose, TEXT("[Door] '%s' latched by '%s'."), *GetName(), *GetNameSafe(Interactor));
+        SetState(EDoorState::Latched);
+        break;
+
+    case EDoorInteraction::Unlatch:
+        UE_LOG(LogTemp, Verbose, TEXT("[Door] '%s' unlatched by '%s'."), *GetName(), *GetNameSafe(Interactor));
+        SetState(EDoorState::Closed);
+        break;
+
+    case EDoorInteraction::UnlatchAndOpen:
+        UE_LOG(LogTemp, Verbose, TEXT("[Door] '%s' unlatched by '%s'."), *GetName(), *GetNameSafe(Interactor));
+        SetState(EDoorState::Closed);
+        TryOpen(Interactor);
+        break;
+
+    case EDoorInteraction::Jolt:
+        // The latch holds: the leaf gives a little away from the one pushing.
+        StartJolt(ChooseSwingSign(Interactor), Interactor);
+        break;
+
+    case EDoorInteraction::None:
+    default:
+        UE_LOG(LogTemp, Verbose, TEXT("[Door] '%s' interact by '%s' does nothing: %s."),
+            *GetName(), *GetNameSafe(Interactor), *UEnum::GetValueAsString(CurrentState));
+        break;
     }
+}
+
+void ADoor::HandleKeyInteraction(AActor* Interactor)
+{
+    UInventorySubsystem* Inventory = GetGameInstance()
+        ? GetGameInstance()->GetSubsystem<UInventorySubsystem>()
+        : nullptr;
+
+    UItemDefinition* KeyDef  = RequiredKey.LoadSynchronous();
+    const bool       bHasKey = (Inventory != nullptr) && (KeyDef != nullptr) && Inventory->HasItem(KeyDef);
+
+    if (bHasKey)
+    {
+        HandleUnlockAndOpen(Interactor);
+    }
+    else
+    {
+        HandleLockedAttempt(Interactor);
     }
 }
 
@@ -419,11 +525,13 @@ bool ADoor::TryOpen(AActor* Opener)
     switch (CurrentState)
     {
     case EDoorState::Locked:
-        UE_LOG(LogTemp, Verbose, TEXT("[Door] '%s' TryOpen by '%s' refused: Locked."),
-            *GetName(), *GetNameSafe(Opener));
+    case EDoorState::Latched:
+        UE_LOG(LogTemp, Verbose, TEXT("[Door] '%s' TryOpen by '%s' refused: %s."),
+            *GetName(), *GetNameSafe(Opener), *UEnum::GetValueAsString(CurrentState));
         return false;
 
     case EDoorState::Open:
+    case EDoorState::Broken:
         ReleaseWaitingAgents();
         return true;
 
@@ -450,13 +558,17 @@ bool ADoor::TryClose(AActor* Closer)
 {
     if (CurrentState != EDoorState::Open)
     {
-        return true;
+        return CurrentState != EDoorState::Broken;
     }
 
     if (IsDoorwayOccupied())
     {
         UE_LOG(LogTemp, Verbose, TEXT("[Door] '%s' TryClose by '%s' refused: somebody is in the doorway."),
             *GetName(), *GetNameSafe(Closer));
+
+        // The leaf starts to close, hits whoever is there and swings back.
+        StartJolt(TargetSwingYaw > 0.f ? -1.f : 1.f, Closer);
+
         return false;
     }
 
@@ -516,6 +628,41 @@ bool ADoor::IsDoorwayOccupied() const
     }
 
     return false;
+}
+
+bool ADoor::TryBreak(AActor* Breaker)
+{
+    if (CurrentState != EDoorState::Latched)
+    {
+        return false;
+    }
+
+    UE_LOG(LogTemp, Verbose, TEXT("[Door] '%s' Latched -> Broken by '%s'."), *GetName(), *GetNameSafe(Breaker));
+
+    SetState(EDoorState::Broken);
+
+    // Thrown open away from the one who broke it, for good.
+    StartSwing(ChooseSwingSign(Breaker) * OpenAngleDegrees);
+
+    BP_OnDoorBroken();
+
+    ReleaseWaitingAgents();
+
+    return true;
+}
+
+bool ADoor::IsAgentWaiting(const UPathFollowingComponent* PathFollowing) const
+{
+    return PathFollowing && WaitingAgents.ContainsByPredicate([PathFollowing](const FAgentMove& Agent)
+    {
+        return Agent.PathFollowing.Get() == PathFollowing && IsStillWaiting(Agent);
+    });
+}
+
+FVector ADoor::GetNoiseLocation() const
+{
+    // Centre of the box (the closed doorway) rather than the floor pivot.
+    return DoorCollisionBox ? DoorCollisionBox->GetComponentLocation() : GetActorLocation();
 }
 
 // ===========================================================================
@@ -594,6 +741,7 @@ void ADoor::SetState(EDoorState NewState)
 {
     CurrentState = NewState;
     ApplyState();
+    UpdateWaitingAgents();
 }
 
 void ADoor::ApplyState()
@@ -604,6 +752,7 @@ void ADoor::ApplyState()
         {
         case EDoorState::Locked:
         case EDoorState::Closed:
+        case EDoorState::Latched:
             // Solid box: blocks pawns, sight and hearing occlusion.
             DoorCollisionBox->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
             InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
@@ -615,6 +764,18 @@ void ADoor::ApplyState()
             // sphere stays as a wider interact target.
             DoorCollisionBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
             InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+            break;
+
+        case EDoorState::Broken:
+            // Nothing left to interact with: it never closes again. The leaf
+            // still blocks sight.
+            DoorCollisionBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+            InteractionSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+            if (DoorMesh)
+            {
+                DoorMesh->SetCollisionResponseToChannel(NevergoneCollision::Interactable, ECR_Ignore);
+            }
             break;
         }
     }
@@ -656,6 +817,7 @@ void ADoor::HandleAgentReachedLink(UNavLinkCustomComponent* Link, UObject* PathC
         break;
 
     case EDoorAgentPassage::OpenFirst:
+    case EDoorAgentPassage::Barred:
     {
         const FAIRequestID RequestId = PathFollowing->GetCurrentRequestId();
 
@@ -677,15 +839,13 @@ void ADoor::HandleAgentReachedLink(UNavLinkCustomComponent* Link, UObject* PathC
             WaitingAgents.Add({ PathFollowing, RequestId });
         }
 
-        // The delay counts from the first agent to arrive.
-        if (UWorld* World = GetWorld(); World && !World->GetTimerManager().IsTimerActive(AgentOpenTimerHandle))
+        if (Passage == EDoorAgentPassage::OpenFirst)
         {
-            World->GetTimerManager().SetTimer(
-                AgentOpenTimerHandle,
-                this,
-                &ADoor::HandleAgentOpenDelayElapsed,
-                FMath::Max(AgentOpenDelaySeconds, DoorConstants::MinAgentOpenDelaySeconds),
-                /*bLoop=*/false);
+            StartAgentOpenTimer();
+        }
+        else
+        {
+            NotifyAgentBarred(PathFollowing);
         }
         break;
     }
@@ -769,6 +929,69 @@ void ADoor::ReleaseWaitingAgents()
     }
 }
 
+void ADoor::UpdateWaitingAgents()
+{
+    WaitingAgents.RemoveAll([](const FAgentMove& Agent)
+    {
+        return !IsStillWaiting(Agent);
+    });
+
+    switch (DoorRules::ResolveAgentPassage(CurrentState))
+    {
+    case EDoorAgentPassage::OpenFirst:
+        // Unlatched with agents still at the door: they open it after the
+        // usual delay.
+        if (WaitingAgents.Num() > 0)
+        {
+            StartAgentOpenTimer();
+        }
+        break;
+
+    case EDoorAgentPassage::Barred:
+    {
+        // Latched while agents waited to open it: it will not open for them now.
+        if (UWorld* World = GetWorld())
+        {
+            World->GetTimerManager().ClearTimer(AgentOpenTimerHandle);
+        }
+
+        const TArray<FAgentMove> Barred = WaitingAgents;
+
+        for (const FAgentMove& Agent : Barred)
+        {
+            NotifyAgentBarred(Agent.PathFollowing.Get());
+        }
+        break;
+    }
+
+    default:
+        // Open and Broken release them where they open (TryOpen, TryBreak).
+        break;
+    }
+}
+
+void ADoor::StartAgentOpenTimer()
+{
+    // The delay counts from the first agent to arrive.
+    if (UWorld* World = GetWorld(); World && !World->GetTimerManager().IsTimerActive(AgentOpenTimerHandle))
+    {
+        World->GetTimerManager().SetTimer(
+            AgentOpenTimerHandle,
+            this,
+            &ADoor::HandleAgentOpenDelayElapsed,
+            FMath::Max(AgentOpenDelaySeconds, DoorConstants::MinAgentOpenDelaySeconds),
+            /*bLoop=*/false);
+    }
+}
+
+void ADoor::NotifyAgentBarred(UPathFollowingComponent* PathFollowing)
+{
+    if (IDoorAgent* Agent = PathFollowing ? Cast<IDoorAgent>(PathFollowing->GetOwner()) : nullptr)
+    {
+        Agent->HandleDoorBarred(this);
+    }
+}
+
 void ADoor::AddCrossingAgent(const FAgentMove& Agent)
 {
     CrossingAgents.RemoveAll([this, &Agent](const FAgentMove& Other)
@@ -844,15 +1067,9 @@ void ADoor::EmitDoorNoise(const UNoiseDefinition* Noise, const TCHAR* DebugLabel
         return;
     }
 
-    // Centre of the box (the closed doorway) rather than the floor pivot. Hearing occlusion does
-    // not count an occluder this close to the noise (SourceClearance), so
-    // the door rarely muffles its own noise; a listener at a shallow angle
-    // to the box can still count it as one wall. The leaf never occludes.
-    const FVector NoiseLocation = DoorCollisionBox
-        ? DoorCollisionBox->GetComponentLocation()
-        : GetActorLocation();
-
-    NoiseSS->EmitNoise(Noise, NoiseLocation, NoiseInstigator);
+    // The door is the noise's source: hearing occlusion ignores it, so the
+    // closed box never muffles its own noise, whatever the listener's angle.
+    NoiseSS->EmitNoise(Noise, GetNoiseLocation(), NoiseInstigator, nullptr, this);
 }
 
 // ===========================================================================
@@ -904,7 +1121,7 @@ void ADoor::OnPostRestore_Implementation()
     //   - First visit: bIsUnlocked stays false (no payload was read) → state
     //     comes from the bStartLocked designer flag.
     //   - Revisit:     bIsUnlocked was set by ReadSaveData → if true, the
-    //     door starts Closed (Open is never persisted).
+    //     door starts Closed (Open, Latched and Broken are never persisted).
     // The navmesh is not registered yet: BeginPlay pushes the nav link
     // state to it.
     SetState(bIsUnlocked

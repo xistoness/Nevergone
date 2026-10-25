@@ -56,11 +56,12 @@ struct FExplorationSensedSurvivor
 // distance against HearingRange x Loudness, so walls (occlusion) and
 // ambient noise (mask volumes) are applied on top before a noise counts.
 //
-// A place noise (UExcursionNoiseSubsystem::IsHeardAsPlaceNoise; today only
-// another enemy's chase scream) is heard whoever made it, through the same
-// occlusion and masking, and reported on its own delegate: it points at a
-// place, not at a survivor. An enemy never hears its own. Any other noise
-// not made by a survivor body (an enemy opening a door) is ignored.
+// A place noise (UExcursionNoiseSubsystem::IsHeardAsPlaceNoise: another
+// enemy's chase scream, knocking at a door or breaking it) is heard whoever
+// made it, through the same occlusion and masking, and reported on its own
+// delegate: it points at a place, not at a survivor. An enemy never hears
+// its own. Any other noise not made by a survivor body (an enemy opening a
+// door) is ignored.
 //
 // Every survivor body is tracked separately: the survivor the player
 // controls and any recruited follower (AExcursionSurvivorNPC::IsSurvivorBody).
@@ -157,10 +158,11 @@ private:
 	// True when the noise is still within reach after both.
 	bool IsNoiseAudible(const AActor* Instigator, const FAIStimulus& Stimulus) const;
 
-	// Number of occluding objects between the two points, capped. An object
-	// touching the noise itself (the door that made it) is not counted.
+	// Number of occluding objects between the two points, capped. The
+	// noise's Source (the door it came out of) is not counted, nor an object
+	// touching the noise itself (the shelf a bottle fell from).
 	int32 CountNoiseOccluders(const FVector& From, const FVector& To,
-		const AActor* Listener, const AActor* Instigator) const;
+		const AActor* Listener, const AActor* Instigator, const AActor* Source) const;
 
 	// The enemy body. The component lives on the controller.
 	APawn* GetListenerPawn() const;

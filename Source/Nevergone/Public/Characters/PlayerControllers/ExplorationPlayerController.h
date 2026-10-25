@@ -135,7 +135,7 @@ public:
     UPROPERTY(EditDefaultsOnly, Category = "Input|Gameplay", meta = (ToolTip = "Action for throwing a distraction. Held to aim, released to throw."))
     UInputAction* ThrowInput;
 
-    UPROPERTY(EditDefaultsOnly, Category = "Input|Gameplay", meta = (ToolTip = "Action for interacting with objects/NPCs."))
+    UPROPERTY(EditDefaultsOnly, Category = "Input|Gameplay", meta = (ToolTip = "Action for interacting with objects/NPCs. Needs a Pressed and a Released trigger for hold interactions (the door latch)."))
     UInputAction* InteractionInput;
 
     UPROPERTY(EditDefaultsOnly, Category = "Input|UI", meta = (ToolTip = "Action for toggling the Quest Log."))
@@ -259,6 +259,7 @@ private:
     // --- Internal Input Handlers ---
 
     void HandleInteract();
+    void HandleInteractReleased();
     void HandleQuestLog();
     void HandlePartyManager();
     void HandleInventory();

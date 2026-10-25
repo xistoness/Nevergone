@@ -28,8 +28,12 @@ enum class EExcursionSurvivorState : uint8;
 //           noise the player did not choose.
 //
 // While Waiting the follower stops, keeps the stance it had and lets go of
-// the sprint. Stamina and panting belong to its own component and keep
-// working in both states.
+// the sprint. Told to wait halfway through a door, it finishes crossing
+// first: the doorway is carved out of the navmesh. Stamina and panting
+// belong to its own component and keep working in both states.
+//
+// At a latched door the follower waits, its move paused by the door, until
+// somebody opens it.
 //
 // The leader is read from player 0 every tick instead of cached, so swapping
 // the party leader mid-excursion needs no notification.
@@ -82,6 +86,9 @@ private:
 	void RefreshLeader(ACharacter* Leader);
 
 	ACharacter* GetLeader() const;
+
+	// A stop asked while walking a nav link: done once the pawn is off it.
+	bool bStopAfterNavLink = false;
 
 	TWeakObjectPtr<AExcursionSurvivorNPC> ControlledSurvivor;
 

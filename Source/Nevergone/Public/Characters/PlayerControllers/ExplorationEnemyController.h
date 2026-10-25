@@ -4,10 +4,13 @@
 
 #include "CoreMinimal.h"
 #include "AIController.h"
+#include "Interfaces/DoorAgent.h"
+#include "Types/DoorTypes.h"
 #include "Types/ExplorationEnemyTypes.h"
 #include "Types/ExplorationSuspicion.h"
 #include "ExplorationEnemyController.generated.h"
 
+class ADoor;
 class AExplorationEnemyCharacter;
 class UExplorationEnemyDefinition;
 class UExplorationPerceptionComponent;
@@ -55,6 +58,22 @@ enum class EExplorationSenseChannel : uint8;
 // While a player capture freezes the world, this controller's time dilation
 // is zero and Tick does nothing.
 //
+// Doors: a latched door pauses the enemy's move at its nav link and tells it
+// through IDoorAgent. The enemy knocks there, in whatever state its path
+// crosses the door (Chase, Investigate, Patrol), without changing state:
+// a knock every KnockIntervalSeconds, a place noise other enemies come to,
+// and after the door's BreakSeconds it breaks the door and walks on. Counted
+// in Tick, so a capture freeze stops it. Knocking is not searching: the
+// investigation's give-up time does not run meanwhile. Anything that moves
+// the enemy elsewhere (a survivor seen, smelled, a new noise) takes it away
+// from the door like from anywhere else; the knocking done so far is kept
+// for that door until it opens or breaks, or the enemy goes back to patrol.
+//
+// Stops never happen halfway through a door: an enemy entering Suspicious
+// or Investigate while walking a nav link changes state (and signals) at
+// once, but only stops moving, and only runs the new state, once it is off
+// the link (NevergoneAI::IsWalkingNavLink).
+//
 // Escalation differs per sense: hearing only ever causes Investigate, sight
 // needs TimeToConfirmSeconds of contact (spent in Suspicious, short losses
 // inside the tolerance paused rather than reset) before it becomes a chase,
@@ -77,7 +96,7 @@ enum class EExplorationSenseChannel : uint8;
 // UExcursionEncounterSubsystem, which decides the outcome and calls back.
 // ---------------------------------------------------------------------------
 UCLASS()
-class NEVERGONE_API AExplorationEnemyController : public AAIController
+class NEVERGONE_API AExplorationEnemyController : public AAIController, public IDoorAgent
 {
 	GENERATED_BODY()
 
@@ -103,6 +122,10 @@ public:
 	virtual void OnUnPossess() override;
 
 	virtual void Tick(float DeltaTime) override;
+
+	// --- IDoorAgent ---
+
+	virtual void HandleDoorBarred(ADoor* Door) override;
 
 protected:
 
@@ -171,6 +194,20 @@ private:
 	// found or the move request failed.
 	bool MoveToRandomReachablePoint(const FVector& Origin, float Radius);
 	
+	// --- Doors ---
+
+	// Knocks at KnockDoor while the move is paused there, and breaks it in
+	// time. Does nothing while the enemy is not at that door.
+	void TickDoorKnock(float DeltaTime);
+
+	// True while the move is paused at the latched KnockDoor.
+	bool IsKnocking() const;
+
+	void ForgetDoorKnock();
+
+	// StopMovement now, or once the pawn is off the nav link it is walking.
+	void StopMovementAfterNavLink();
+
 	// --- Perception handlers ---
 
 	void HandleSurvivorSensed(AActor* Survivor, const FVector& StimulusLocation, EExplorationSenseChannel Channel);
@@ -265,4 +302,17 @@ private:
 	FVector FaceTarget = FVector::ZeroVector;
 
 	bool bIsSearching = false;
+
+	// --- Door state ---
+
+	// The latched door this enemy's move is paused at, or last was.
+	TWeakObjectPtr<ADoor> KnockDoor;
+
+	// Knocking done at each latched door, kept until the door opens or
+	// breaks, or the enemy goes back to patrol.
+	TMap<TWeakObjectPtr<ADoor>, FDoorKnock> DoorKnocks;
+
+	// A stop was asked while walking a nav link: the current state waits
+	// for the pawn to come off it.
+	bool bStopAfterNavLink = false;
 };

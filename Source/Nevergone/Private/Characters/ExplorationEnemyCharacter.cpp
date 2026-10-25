@@ -186,6 +186,11 @@ void AExplorationEnemyCharacter::SetBehaviorState(EExplorationEnemyState NewStat
 	OnStateChanged.Broadcast(OldState, NewState);
 }
 
+void AExplorationEnemyCharacter::AnnounceDoorSignal(EExplorationEnemySignalMoment Moment, ADoor* Door)
+{
+	OnDoorSignal.Broadcast(Moment, Door);
+}
+
 EExplorationPatrolMode AExplorationEnemyCharacter::GetEffectivePatrolMode() const
 {
 	if (!Definition)

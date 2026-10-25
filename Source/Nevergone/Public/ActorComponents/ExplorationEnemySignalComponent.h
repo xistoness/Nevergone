@@ -7,6 +7,7 @@
 #include "Types/ExplorationEnemyTypes.h"
 #include "ExplorationEnemySignalComponent.generated.h"
 
+class ADoor;
 class AExplorationEnemyCharacter;
 class UAudioComponent;
 class UExplorationEnemyDefinition;
@@ -19,10 +20,12 @@ class UExplorationEnemyDefinition;
 // controller makes is turned into a montage and a sound here, from the
 // type's UExplorationEnemyDefinition signals.
 //
-// It listens to AExplorationEnemyCharacter::OnStateChanged and never drives
-// the state machine. The one thing it emits that the AI reacts to is the
-// chase scream, which goes through UExcursionNoiseSubsystem like any other
-// noise (a footstep notify emits its noise the same way).
+// It listens to AExplorationEnemyCharacter::OnStateChanged and OnDoorSignal
+// and never drives the state machine. What it emits that the AI reacts to
+// (the chase scream, knocking at a door, breaking it) goes through
+// UExcursionNoiseSubsystem like any other noise (a footstep notify emits its
+// noise the same way). The door noises sound at the door, with the door as
+// their source.
 //
 // The investigation sound loops for as long as Investigate lasts, restarted
 // whenever it ends so a one-shot asset still loops, and retried every half
@@ -62,6 +65,11 @@ private:
 
 	void HandleStateChanged(EExplorationEnemyState OldState, EExplorationEnemyState NewState);
 
+	void HandleDoorSignal(EExplorationEnemySignalMoment Moment, ADoor* Door);
+
+	// Plays the montage and emits the noise at the door.
+	void PlayDoorSignal(const FExplorationEnemyScreamSignal& Signal, ADoor* Door, const TCHAR* MomentName);
+
 	// Plays the montage and the one-shot sound of a signal.
 	void PlaySignal(const FExplorationEnemySignal& Signal, const TCHAR* MomentName);
 
@@ -90,4 +98,6 @@ private:
 	float LoopRetrySeconds = 0.0f;
 
 	FDelegateHandle StateChangedHandle;
+
+	FDelegateHandle DoorSignalHandle;
 };
