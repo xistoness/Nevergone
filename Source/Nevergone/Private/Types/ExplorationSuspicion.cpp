@@ -31,6 +31,16 @@ void FExplorationSuspicion::RestartContact()
 	bHasHeldNoise = false;
 }
 
+void FExplorationSuspicion::SwitchTarget(const FVector& NewTargetLocation)
+{
+	SightLossSeconds = 0.0f;
+	bSightLost = false;
+
+	LastSeenLocation = NewTargetLocation;
+
+	bHasHeldNoise = false;
+}
+
 EExplorationSuspicionStep FExplorationSuspicion::Advance(bool bTargetInView, const FVector& TargetLocation,
 	float DeltaTime, float ToleranceSeconds)
 {

@@ -34,7 +34,7 @@ enum class EExplorationSenseChannel : uint8;
 //               longer, it investigates. Noise does not interrupt it: the
 //               most recent noise is held, and an unconfirmed window
 //               investigates it instead of the last seen point when it was
-//               heard after the survivor was last acquired (see
+//               heard after any survivor last came into view (see
 //               FExplorationSuspicion). Never returns to Patrol directly.
 //   Investigate Something was heard, or the survivor was seen and then lost.
 //               Turns to face the stimulus first, then walks to the last
@@ -69,9 +69,9 @@ enum class EExplorationSenseChannel : uint8;
 // Targets: every survivor body counts (the player's survivor and recruited
 // followers), but the enemy works on one at a time. Sight confirms the
 // closest survivor in view and sticks with it while it stays in view (or,
-// while Suspicious, inside the sight loss tolerance, unless another survivor
-// is in view); a chase sticks with its target until it is lost, whoever else
-// shows up.
+// while Suspicious, inside the sight loss tolerance; if another survivor is in
+// view meanwhile, it moves to that one and keeps the confirmation); a chase
+// sticks with its target until it is lost, whoever else shows up.
 //
 // The controller never resolves a capture. It reports the catch to
 // UExcursionEncounterSubsystem, which decides the outcome and calls back.
@@ -206,7 +206,8 @@ private:
 
 	// Sight contact with ConfirmTarget, and while Suspicious the sight loss
 	// tolerance and the held noise. Contact resets whenever sight drops
-	// outside the tolerance or the enemy starts confirming someone else.
+	// outside the tolerance or a target is acquired outside a window; inside
+	// a window, switching to another survivor keeps it.
 	FExplorationSuspicion Suspicion;
 
 	// Survivor whose sight contact is being accumulated.

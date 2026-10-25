@@ -107,16 +107,59 @@ bool FNevergoneExplorationSuspicionToleranceTest::RunTest(const FString& Paramet
 
 		TestEqual(TEXT("Expired after a regain: last seen point"), Regained.ResolveStimulus(), SeenB);
 
-		// A new target is a new sighting too.
+		// A target acquired outside a window restarts the confirmation.
+		FExplorationSuspicion Acquired;
+
+		Acquired.AddContact(0.4f);
+		Acquired.RestartContact();
+
+		TestEqual(TEXT("Acquiring outside a window restarts the confirmation"), Acquired.GetContactSeconds(), 0.0f);
+
+		// Inside a window, another survivor in view after the target is lost
+		// keeps the confirmation and ends the gap.
 		FExplorationSuspicion Switched;
 
+		Switched.AddContact(0.2f);
 		Switched.Open(SeenA);
-		Switched.AddContact(0.4f);
-		Switched.HoldNoise(NoiseA);
-		Switched.RestartContact();
+		Switched.Advance(true, SeenA, 0.2f, Tolerance);
+		Switched.Advance(false, FVector::ZeroVector, 0.2f, Tolerance);
 
-		TestFalse(TEXT("Switching target drops the noise"), Switched.HasHeldNoise());
-		TestEqual(TEXT("Switching target restarts the confirmation"), Switched.GetContactSeconds(), 0.0f);
+		TestTrue(TEXT("Target lost before the switch"), Switched.IsSightLost());
+
+		Switched.SwitchTarget(SeenB);
+
+		TestEqual(TEXT("Switching keeps the confirmation"), Switched.GetContactSeconds(), 0.4f, KINDA_SMALL_NUMBER);
+		TestFalse(TEXT("Switching ends the sight loss"), Switched.IsSightLost());
+		TestEqual(TEXT("Switching moves the last seen point"), Switched.GetLastSeenLocation(), SeenB);
+		TestTrue(TEXT("The new target is watched, not regained"), Switched.Advance(true, SeenB, 0.1f, Tolerance) == EStep::Watching);
+		TestEqual(TEXT("The confirmation keeps growing"), Switched.GetContactSeconds(), 0.5f, KINDA_SMALL_NUMBER);
+
+		// A noise held before the switch is older than the new sighting.
+		FExplorationSuspicion SwitchedAfterNoise;
+
+		SwitchedAfterNoise.Open(SeenA);
+		SwitchedAfterNoise.Advance(false, FVector::ZeroVector, 0.1f, Tolerance);
+		SwitchedAfterNoise.HoldNoise(NoiseA);
+		SwitchedAfterNoise.SwitchTarget(SeenB);
+
+		TestFalse(TEXT("Switching drops the earlier noise"), SwitchedAfterNoise.HasHeldNoise());
+
+		SwitchedAfterNoise.Advance(true, SeenB, 0.1f, Tolerance);
+		SwitchedAfterNoise.Advance(false, FVector::ZeroVector, 0.6f, Tolerance);
+
+		TestEqual(TEXT("Expired after a switch: the new target's last seen point"), SwitchedAfterNoise.ResolveStimulus(), SeenB);
+
+		// A noise heard after the switch is the most recent stimulus.
+		FExplorationSuspicion NoiseAfterSwitch;
+
+		NoiseAfterSwitch.Open(SeenA);
+		NoiseAfterSwitch.Advance(false, FVector::ZeroVector, 0.1f, Tolerance);
+		NoiseAfterSwitch.SwitchTarget(SeenB);
+		NoiseAfterSwitch.Advance(true, SeenB, 0.1f, Tolerance);
+		NoiseAfterSwitch.HoldNoise(NoiseB);
+		NoiseAfterSwitch.Advance(false, FVector::ZeroVector, 0.6f, Tolerance);
+
+		TestEqual(TEXT("Noise heard after the switch: the noise"), NoiseAfterSwitch.ResolveStimulus(), NoiseB);
 
 		// A new window starts without the previous one's noise.
 		FExplorationSuspicion Reopened;

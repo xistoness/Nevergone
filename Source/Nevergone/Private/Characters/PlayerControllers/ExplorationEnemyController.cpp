@@ -202,6 +202,8 @@ void AExplorationEnemyController::Tick(float DeltaTime)
 	// The survivor being confirmed is kept while it stays in view. Picking
 	// the closest one every frame would restart the window each time two
 	// survivors trade places, and the confirmation would never complete.
+	// Once it is lost, a suspicious enemy moves to the other survivor in view
+	// without resetting the confirmation: it belongs to the enemy.
 	const EExplorationEnemyState StateBeforeSight = ControlledEnemy->GetBehaviorState();
 
 	const bool bWasSuspicious = StateBeforeSight == EExplorationEnemyState::Suspicious;
@@ -225,13 +227,18 @@ void AExplorationEnemyController::Tick(float DeltaTime)
 				if (bWasSuspicious && Sighted)
 				{
 					UE_LOG(LogNevergone, Verbose,
-						TEXT("[ExplorationEnemyController] %s lost sight of %s and is now suspicious of %s"),
-						*GetNameSafe(ControlledEnemy.Get()), *GetNameSafe(ConfirmTarget.Get()), *GetNameSafe(Sighted));
+						TEXT("[ExplorationEnemyController] %s lost sight of %s and switches to %s; confirmation kept at %.2fs"),
+						*GetNameSafe(ControlledEnemy.Get()), *GetNameSafe(ConfirmTarget.Get()), *GetNameSafe(Sighted),
+						Suspicion.GetContactSeconds());
+
+					Suspicion.SwitchTarget(Sighted->GetActorLocation());
+				}
+				else
+				{
+					Suspicion.RestartContact();
 				}
 
 				ConfirmTarget = Sighted;
-
-				Suspicion.RestartContact();
 			}
 
 			Focus = Sighted;

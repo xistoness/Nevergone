@@ -42,9 +42,13 @@ enum class EExplorationSuspicionStep : uint8
 //   - A noise heard during the window does not end it either. The most
 //     recent one is held, and when the window expires the enemy investigates
 //     the most recent stimulus: the held noise if it was heard after the
-//     target was last acquired, the last seen point otherwise. Acquiring a
-//     target (seeing it again after a loss, or switching to another one)
-//     therefore drops the held noise.
+//     any survivor last came into view, the last seen point otherwise. A
+//     survivor coming into view (the target again after a loss, or another
+//     one) therefore drops the held noise.
+//   - The confirmation belongs to the enemy. Losing the target and seeing
+//     another survivor inside the tolerance switches to the new one without
+//     resetting it; the enemy then chases whoever is in view when it
+//     completes.
 // ---------------------------------------------------------------------------
 struct FExplorationSuspicion
 {
@@ -58,9 +62,15 @@ struct FExplorationSuspicion
 	// Adds contact time outside an open window.
 	void AddContact(float DeltaTime);
 
-	// Restarts the confirmation on a newly acquired target. Inside a window
-	// this is a new sighting, which supersedes a held noise.
+	// Restarts the confirmation on a newly acquired target outside an open
+	// window. Inside a window the target changes through SwitchTarget.
 	void RestartContact();
+
+	// Inside an open window, the target went out of view and another survivor
+	// is in view. The confirmation is the enemy's, not a survivor's: it keeps
+	// its progress and the gap ends. The new survivor is the most recent
+	// sighting, which supersedes a held noise and becomes the last seen point.
+	void SwitchTarget(const FVector& NewTargetLocation);
 
 	// One tick of an open window. TargetLocation is read only when the
 	// target is in view.
