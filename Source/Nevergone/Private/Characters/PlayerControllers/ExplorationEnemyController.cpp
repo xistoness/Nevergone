@@ -970,9 +970,29 @@ void AExplorationEnemyController::TickChase(float DeltaTime)
 		}
 	}
 
+	const bool bRepathDue = TimeSinceRepath < ChaseRepathInterval &&
+		TimeSinceRepath + DeltaTime >= ChaseRepathInterval;
+
 	TimeSinceRepath += DeltaTime;
 
-	if (TimeSinceRepath >= ChaseRepathInterval)
+	// Not while walking a nav link (a door): the doorway is carved out of
+	// the navmesh, so a path planned from inside it starts on the side the
+	// enemy came from and pulls it back. The repath runs as soon as the
+	// enemy is off the link. An enemy paused at a closed door is still at
+	// the link start, on the navmesh, and may change its route.
+	const bool bWalkingNavLink = ShouldPostponePathUpdates() &&
+		GetMoveStatus() == EPathFollowingStatus::Moving;
+
+	if (bWalkingNavLink)
+	{
+		if (bRepathDue)
+		{
+			UE_LOG(LogNevergone, Verbose,
+				TEXT("[ExplorationEnemyController] %s chase repath postponed while on a nav link"),
+				*GetNameSafe(ControlledEnemy.Get()));
+		}
+	}
+	else if (TimeSinceRepath >= ChaseRepathInterval)
 	{
 		TimeSinceRepath = 0.0f;
 
