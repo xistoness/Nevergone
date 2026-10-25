@@ -3,9 +3,11 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "AITypes.h"
 #include "GameFramework/Actor.h"
 #include "Interfaces/Interactable.h"
 #include "Interfaces/SaveParticipant.h"
+#include "Types/DoorTypes.h"
 #include "Door.generated.h"
 
 class USceneComponent;
@@ -16,62 +18,57 @@ class UInteractableComponent;
 class USaveableComponent;
 class UItemDefinition;
 class UNoiseDefinition;
-
-// ---------------------------------------------------------------------------
-// EDoorState
-//
-// Runtime-only state for a door. Only Locked / not-Locked is persisted
-// (via FSaveableComponent + FActorSaveData). The Closed/Open distinction is
-// transient: a door restored from save always materializes in Closed (or
-// Locked) — Open is never written to disk.
-// ---------------------------------------------------------------------------
-UENUM(BlueprintType)
-enum class EDoorState : uint8
-{
-    Locked   UMETA(DisplayName = "Locked"),    // Blocks pawn, cannot be opened without RequiredKey.
-    Closed   UMETA(DisplayName = "Closed"),    // Blocks pawn, opens on next interact.
-    Open     UMETA(DisplayName = "Open"),      // Walkable, will auto-close after AutoCloseDelaySeconds.
-};
+class UNavLinkCustomComponent;
+class UPathFollowingComponent;
 
 // ---------------------------------------------------------------------------
 // ADoor
 //
-// Placed actor that represents a lockable door in the exploration mode.
+// Placed actor that represents a door in the exploration mode, crossable by
+// the player and by AI (enemies and the follower).
 // Implements:
-//   - IInteractable    — opens/unlocks on interact line trace from the player.
+//   - IInteractable    — the player's interact: unlock with the key, open, close.
 //   - ISaveParticipant — persists the bIsUnlocked flag via SaveableComponent.
 //
-// State machine (auto-close model — option C):
+// State machine (the door stays as it was left):
 //
-//                +-------+ has key  +--------+  interact  +------+
-//                |Locked | -------> | Closed | ---------> | Open |
-//                +-------+   (key   +--------+            +------+
-//                  ^   ^   consumed)    ^                     |
-//                  |   |                |     timer (2.5s)    |
-//                  |   +-- no key ------+---------------------+
-//                  |       (locked
-//                  |        feedback)
-//                  +-- (Open never re-locks; bIsUnlocked is one-way.)
+//                +-------+ has key  +--------+   open    +------+
+//                |Locked | -------> | Closed | <-------> | Open |
+//                +-------+   (key   +--------+   close   +------+
+//                    |     consumed)              (fails while somebody
+//                    +-- no key: locked feedback   stands in the doorway)
+//
+//   Open never re-locks; bIsUnlocked is one-way.
+//
+// Player and AI share TryOpen / TryClose. The player reaches them through
+// Interact, which is also the only path that spends the party's key. AI
+// reaches them through the nav link and never calls Interact.
+//
+// AI navigation: the navmesh stays static and the collision box carves the
+// doorway out of it. DoorNavLink is a smart link across the carve. When an
+// agent's path reaches it, DoorRules::ResolveAgentPassage decides by state:
+// walk through (Open), stop, open after AgentOpenDelaySeconds and walk
+// through (Closed), or never offered to pathfinding (Locked, link off).
 //
 // Visuals are decoupled — C++ flips collision and fires BP_OnDoorOpening /
 // BP_OnDoorClosing so the BP subclass can drive the actual animation
-// (skeletal anim, timeline rotation, particles, whatever the LD wires up).
+// (timeline rotation, particles, whatever the LD wires up).
 //
 // Component layout:
 //   Root (USceneComponent)
-//   ├── DoorMesh          (USkeletalMeshComponent — VISUAL ONLY, NoCollision)
-//   ├── DoorCollisionBox  (UBoxComponent          — solid blocker, sized in BP)
-//   └── InteractionSphere (USphereComponent       — QueryOnly trace volume)
+//   ├── DoorMesh          (UStaticMeshComponent — VISUAL ONLY, NoCollision)
+//   ├── DoorCollisionBox  (UBoxComponent        — solid blocker, covers the whole doorway)
+//   ├── InteractionSphere (USphereComponent     — QueryOnly trace volume)
+//   └── DoorNavLink       (UNavLinkCustomComponent — not a scene component)
 //
-// IMPORTANT: a SkeletalMeshComponent has no collision bodies without a Physics
-// Asset assigned. Even with response Block on every channel, a pawn passes
-// straight through. The UBoxComponent is the actual collider — the mesh is
-// purely cosmetic. This is the standard UE pattern for doors and simple props.
+// The box is the actual collider — the mesh is purely cosmetic, so a mesh
+// without collision (or with the wrong one) never lets a pawn through. While
+// closed, the box also blocks enemy sight and counts as a wall for hearing
+// occlusion; while open it has no collision at all.
 //
 // The SceneComponent root keeps the actor pivot independent from the mesh
-// pivot — a future swing animation can rotate DoorMesh around its hinge socket
-// without dragging the box or the sphere along (they stay in place; collision
-// is disabled while Open anyway).
+// pivot — a swing animation can rotate DoorMesh around its hinge without
+// dragging the box or the sphere along.
 // ---------------------------------------------------------------------------
 UCLASS(Blueprintable)
 class NEVERGONE_API ADoor : public AActor,
@@ -97,6 +94,23 @@ public:
     virtual void OnPostRestore_Implementation() override;
 
     // -----------------------------------------------------------------------
+    // Open / close — shared by the player (through Interact) and AI
+    // -----------------------------------------------------------------------
+
+    // Opens a Closed door. The noise is attributed to Opener. True when the
+    // door is open afterwards (already open counts); false while Locked.
+    // Never touches the key: unlocking is Interact's job.
+    bool TryOpen(AActor* Opener);
+
+    // Closes an Open door. Fails while a pawn stands in the doorway. True
+    // when the door is closed afterwards (already closed counts).
+    bool TryClose(AActor* Closer);
+
+    // True while a pawn's capsule overlaps the leaf, or an agent is walking
+    // the nav link through the doorway.
+    bool IsDoorwayOccupied() const;
+
+    // -----------------------------------------------------------------------
     // Read access
     // -----------------------------------------------------------------------
 
@@ -111,7 +125,9 @@ public:
 
 protected:
 
+    virtual void OnConstruction(const FTransform& Transform) override;
     virtual void BeginPlay() override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
     // -----------------------------------------------------------------------
     // Configuration — designer-tweakable per placement
@@ -124,8 +140,8 @@ protected:
     bool bStartLocked = true;
 
     // Item required to unlock this door. Consumed (one-time use) on success.
-    // If null AND bStartLocked is true, a warning is logged at BeginPlay and
-    // the door cannot be unlocked by interact (only by BP override / scripts).
+    // If null AND bStartLocked is true, a warning is logged at BeginPlay:
+    // nothing can unlock the door.
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Config")
     TSoftObjectPtr<UItemDefinition> RequiredKey;
 
@@ -135,10 +151,27 @@ protected:
     FText LockedPromptText;
 
     // -----------------------------------------------------------------------
+    // AI
+    // -----------------------------------------------------------------------
+
+    // How long an agent (enemy or follower) stands at a closed door before
+    // it opens and walks through.
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|AI", meta = (ClampMin = "0.0", Units = "s"))
+    float AgentOpenDelaySeconds = 0.6f;
+
+    // Distance from the door plane to each end of the nav link. Both ends
+    // must land on navmesh: past the carve of the box (half its thickness
+    // plus the agent radius, 42). Changing it requires rebuilding paths.
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|AI", meta = (ClampMin = "0.0", Units = "cm"))
+    float NavLinkHalfLength = 80.f;
+
+    // -----------------------------------------------------------------------
     // Noises — sound for the player and noise for enemies, one asset each.
     // Authored on the Blueprint subclass, so a squeaky door and a quiet one
     // are different subclasses (or per-instance overrides). A null entry is
-    // silent to both.
+    // silent to both. Attributed to whoever moved the door: enemies hunt
+    // the noise of a survivor body only, so an enemy opening a door is heard
+    // by the player and by no other enemy.
     // -----------------------------------------------------------------------
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Noise")
@@ -161,20 +194,27 @@ protected:
     TObjectPtr<USceneComponent> Root;
 
     // Visual-only door leaf. NEVER configured for collision — see class comment.
-    // BP subclass assigns the SkeletalMesh asset.
+    // BP subclass assigns the StaticMesh asset.
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<UStaticMeshComponent> DoorMesh;
 
-    // Solid collider that does the actual pawn blocking. Sized in the BP
-    // subclass to match the visual door leaf (designer tunes BoxExtent and
-    // RelativeLocation per door asset). Toggled on/off by ApplyCollisionForState.
+    // Solid collider that does the actual pawn blocking. Must cover the whole
+    // doorway; the C++ default is 120 wide, for a clear opening of at least
+    // 110. Thickness along local X, which is also the axis the nav link
+    // crosses. Toggled on/off by ApplyState.
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<UBoxComponent> DoorCollisionBox;
 
     // Wider trigger volume for the interaction line trace. QueryOnly — never
-    // physically obstructs the player, only returns hits to the trace.
+    // physically obstructs anything, only returns hits to the trace. Stays
+    // active while open so the player can close the door.
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<USphereComponent> InteractionSphere;
+
+    // Smart link across the doorway, for AI pathfinding. Ends placed by
+    // OnConstruction from the box and NavLinkHalfLength.
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    TObjectPtr<UNavLinkCustomComponent> DoorNavLink;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<UInteractableComponent> InteractableComponent;
@@ -210,12 +250,6 @@ private:
     UPROPERTY()
     bool bIsUnlocked = false;
 
-    // -----------------------------------------------------------------------
-    // Constants
-    // -----------------------------------------------------------------------
-
-    static constexpr float AutoCloseDelaySeconds = 2.5f;
-
     static const FName SaveKey;
 
     // -----------------------------------------------------------------------
@@ -223,35 +257,60 @@ private:
     // -----------------------------------------------------------------------
 
     void HandleUnlockAndOpen(AActor* Interactor);
-    void HandleLockedAttempt();
-    void TransitionToOpen();
-    void TransitionToClosed();
+    void HandleLockedAttempt(AActor* Interactor);
 
-    // Sets DoorCollisionBox + InteractionSphere collision modes for the given state.
-    // - Locked / Closed: both enabled (box blocks pawn, sphere accepts trace).
-    // - Open: both disabled (player walks through; trace ignores the door).
+    // Sets the state and applies everything that follows from it.
+    void SetState(EDoorState NewState);
+
+    // Applies the state to the components:
+    // - Locked / Closed: box blocks; sphere accepts the interact trace.
+    // - Open: box has no collision; sphere still accepts the trace.
+    // - Nav link on unless DoorRules says the door is a wall for AI.
     //
     // DoorMesh is never touched here — it stays NoCollision for its entire lifetime.
-    //
-    // NOTE: Auto-close edge case — if a pawn is overlapping the door footprint
-    // when the timer fires, the close transition will re-enable collision and
-    // can clip the pawn. Acceptable for v1 (turn-based pace). When this becomes
-    // a problem, gate TransitionToClosed on a UWorld::OverlapMultiByChannel
-    // check and re-arm the timer if blocked.
-    void ApplyCollisionForState(EDoorState State);
+    void ApplyState();
 
-    // Emits one of the door noises at the door leaf, attributed to the last
-    // actor who interacted with the door.
-    void EmitDoorNoise(const UNoiseDefinition* Noise, const TCHAR* DebugLabel) const;
-
-    // Survivor who last used the door. The auto-close has no interactor of
-    // its own, but the slam is still their fault as far as enemies are
-    // concerned.
-    TWeakObjectPtr<AActor> LastInteractor;
+    // Emits one of the door noises at the door leaf, attributed to NoiseInstigator.
+    void EmitDoorNoise(const UNoiseDefinition* Noise, const TCHAR* DebugLabel, AActor* NoiseInstigator) const;
 
     // -----------------------------------------------------------------------
-    // Timer
+    // AI passage
     // -----------------------------------------------------------------------
 
-    FTimerHandle AutoCloseTimerHandle;
+    // Bound to DoorNavLink: an agent's path just reached the link.
+    void HandleAgentReachedLink(UNavLinkCustomComponent* Link, UObject* PathComp, const FVector& DestPoint);
+
+    // AgentOpenDelaySeconds after the first agent stopped at the closed door.
+    void HandleAgentOpenDelayElapsed();
+
+    // Lets every waiting agent walk through and clears the open delay.
+    void ReleaseWaitingAgents();
+
+    // An agent at the link, and the move request it had there. A new
+    // request (the agent changed its mind) makes the entry stale.
+    struct FAgentMove
+    {
+        TWeakObjectPtr<UPathFollowingComponent> PathFollowing;
+        FAIRequestID RequestId;
+    };
+
+    // True while the agent is still paused on the request it had at the door.
+    static bool IsStillWaiting(const FAgentMove& Agent);
+
+    // Records an agent that walks the link now, dropping stale entries.
+    void AddCrossingAgent(const FAgentMove& Agent);
+
+    // True while the agent is still on the request it crossed with and has
+    // not yet cleared the doorway (see IsDoorwayOccupied).
+    bool IsStillCrossing(const FAgentMove& Agent) const;
+
+    static AActor* GetAgentPawn(const UPathFollowingComponent* PathFollowing);
+
+    // Agents paused at the closed door, waiting for it to open.
+    TArray<FAgentMove> WaitingAgents;
+
+    // Agents released through the link, until they clear the doorway.
+    TArray<FAgentMove> CrossingAgents;
+
+    FTimerHandle AgentOpenTimerHandle;
 };

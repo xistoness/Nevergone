@@ -43,6 +43,33 @@ bool UExcursionNoiseSubsystem::IsDebugEnabled()
 	return ExcursionNoise::CVarDebugNoise.GetValueOnGameThread();
 }
 
+bool UExcursionNoiseSubsystem::IsHeardAsPlaceNoise(FName StimulusTag, bool bMadeByListener)
+{
+	// The engine does not filter the listener's own noises: a screamer would
+	// otherwise answer its own scream.
+	if (bMadeByListener || StimulusTag.IsNone())
+	{
+		return false;
+	}
+
+	// Noises that point at a place. Knocking, breaking a door and devices
+	// join this list in their own tasks.
+	const FName PlaceNoiseTags[] =
+	{
+		TAG_Noise_Scream.GetTag().GetTagName(),
+	};
+
+	for (const FName& PlaceNoiseTag : PlaceNoiseTags)
+	{
+		if (StimulusTag == PlaceNoiseTag)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 void UExcursionNoiseSubsystem::EmitNoise(const UNoiseDefinition* Definition, const FVector& Location,
 	AActor* Instigator, const UPhysicalMaterial* Surface)
 {

@@ -61,7 +61,7 @@ void AExplorationEnemyController::OnPossess(APawn* InPawn)
 
 		EnemyPerceptionComponent->OnSurvivorSensed.AddUObject(this, &AExplorationEnemyController::HandleSurvivorSensed);
 		EnemyPerceptionComponent->OnSurvivorLost.AddUObject(this, &AExplorationEnemyController::HandleSurvivorLost);
-		EnemyPerceptionComponent->OnEnemyNoiseHeard.AddUObject(this, &AExplorationEnemyController::HandleEnemyNoiseHeard);
+		EnemyPerceptionComponent->OnPlaceNoiseHeard.AddUObject(this, &AExplorationEnemyController::HandlePlaceNoiseHeard);
 	}
 
 	// Placed pawns are possessed inside PostInitializeComponents, before any
@@ -76,7 +76,7 @@ void AExplorationEnemyController::OnUnPossess()
 	{
 		EnemyPerceptionComponent->OnSurvivorSensed.RemoveAll(this);
 		EnemyPerceptionComponent->OnSurvivorLost.RemoveAll(this);
-		EnemyPerceptionComponent->OnEnemyNoiseHeard.RemoveAll(this);
+		EnemyPerceptionComponent->OnPlaceNoiseHeard.RemoveAll(this);
 	}
 
 	ControlledEnemy = nullptr;
@@ -1149,7 +1149,7 @@ void AExplorationEnemyController::HandleSurvivorLost(AActor* Survivor)
 		*GetNameSafe(ControlledEnemy.Get()), *GetNameSafe(Survivor));
 }
 
-void AExplorationEnemyController::HandleEnemyNoiseHeard(AActor* Enemy, const FVector& NoiseLocation)
+void AExplorationEnemyController::HandlePlaceNoiseHeard(AActor* Source, const FVector& NoiseLocation)
 {
 	if (!ControlledEnemy.IsValid())
 	{
@@ -1158,7 +1158,7 @@ void AExplorationEnemyController::HandleEnemyNoiseHeard(AActor* Enemy, const FVe
 
 	if (ControlledEnemy->GetBehaviorState() == EExplorationEnemyState::Suspicious)
 	{
-		HoldNoise(NoiseLocation, Enemy);
+		HoldNoise(NoiseLocation, Source);
 
 		return;
 	}
@@ -1169,10 +1169,10 @@ void AExplorationEnemyController::HandleEnemyNoiseHeard(AActor* Enemy, const FVe
 	}
 
 	UE_LOG(LogNevergone, Log,
-		TEXT("[ExplorationEnemyController] %s heard %s and is investigating %s"),
-		*GetNameSafe(ControlledEnemy.Get()), *GetNameSafe(Enemy), *NoiseLocation.ToCompactString());
+		TEXT("[ExplorationEnemyController] %s heard a place noise from %s and is investigating %s"),
+		*GetNameSafe(ControlledEnemy.Get()), *GetNameSafe(Source), *NoiseLocation.ToCompactString());
 
-	// Recorded only now: an enemy that ignores the scream keeps its own trail.
+	// Recorded only now: an enemy that ignores the noise keeps its own trail.
 	if (EnemyPerceptionComponent)
 	{
 		EnemyPerceptionComponent->SetMostRecentStimulus(NoiseLocation);

@@ -45,17 +45,25 @@ public:
 
 	// Plays the noise's sound for the player and reports it to AI hearing.
 	//
-	// Instigator must be the survivor who caused the noise (the one walking,
-	// opening the door, bumping the prop, throwing the item). Enemy hearing
+	// Instigator is whoever caused the noise (the one walking, opening the
+	// door, bumping the prop, throwing the item). Enemy hearing
 	// accepts stimuli attributed to a survivor body: the player's survivor or
-	// a recruited follower (AExcursionSurvivorNPC::IsSurvivorBody). The one
-	// exception is an enemy's chase scream, tagged Noise.Scream, instigated
-	// by the screaming enemy and heard by every other enemy.
+	// a recruited follower (AExcursionSurvivorNPC::IsSurvivorBody). Anything
+	// else (an enemy opening a door) is heard by the player only. The
+	// exception is a place noise (IsHeardAsPlaceNoise): heard whoever made
+	// it, pointing enemies at a place rather than at a survivor.
 	//
 	// Surface is optional: when known it selects the sound variant and
 	// scales the AI loudness.
 	void EmitNoise(const UNoiseDefinition* Definition, const FVector& Location,
 		AActor* Instigator, const UPhysicalMaterial* Surface = nullptr);
+
+	// --- Place noise ---
+
+	// True when an enemy hears this stimulus as a place noise: its tag is in
+	// the place-noise list (today only Noise.Scream) and it was not made by
+	// the listener itself. The instigator does not matter otherwise.
+	static bool IsHeardAsPlaceNoise(FName StimulusTag, bool bMadeByListener);
 
 	// --- Masking ---
 

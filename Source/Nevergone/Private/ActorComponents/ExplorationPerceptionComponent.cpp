@@ -5,7 +5,6 @@
 
 #include "Nevergone.h"
 #include "Characters/ExcursionSurvivorNPC.h"
-#include "Characters/ExplorationEnemyCharacter.h"
 #include "Data/ExplorationEnemyDefinition.h"
 #include "EngineTools/CollisionChannels.h"
 #include "World/ExcursionNoiseSubsystem.h"
@@ -166,34 +165,34 @@ void UExplorationPerceptionComponent::HandleTargetPerceptionUpdated(AActor* Acto
 			return;
 		}
 
-		if (bIsBody)
+		// A place noise (a scream) is heard whoever made it, except the
+		// listener itself, and points at a place rather than at a survivor.
+		// Checked first, so a survivor making one is not hunted for it.
+		if (UExcursionNoiseSubsystem::IsHeardAsPlaceNoise(Stimulus.Tag, Actor == GetListenerPawn()))
 		{
 			if (IsNoiseAudible(Actor, Stimulus))
 			{
-				RecordStimulus(Actor, Stimulus.StimulusLocation);
+				// Not recorded as the most recent stimulus here: a chasing
+				// enemy ignores it and must keep its own trail. The
+				// controller records it when it reacts.
+				UE_LOG(LogNevergone, Verbose,
+					TEXT("[ExplorationPerceptionComponent] %s heard place noise %s from %s"),
+					*GetNameSafe(GetListenerPawn()), *Stimulus.Tag.ToString(), *GetNameSafe(Actor));
 
-				OnSurvivorSensed.Broadcast(Actor, Stimulus.StimulusLocation, EExplorationSenseChannel::Hearing);
+				OnPlaceNoiseHeard.Broadcast(Actor, Stimulus.StimulusLocation);
 			}
 
 			return;
 		}
 
-		// Another enemy's scream. Only the scream tag counts: an enemy whose
-		// footsteps were ever made audible to AI would otherwise drag every
-		// enemy nearby after it. The engine does not filter the listener's
-		// own noises, so the screamer would also answer its own scream.
-		if (Stimulus.Tag == TAG_Noise_Scream.GetTag().GetTagName() &&
-			Actor->IsA<AExplorationEnemyCharacter>() && Actor != GetListenerPawn() &&
-			IsNoiseAudible(Actor, Stimulus))
+		// Any other noise counts only when a survivor body made it: an enemy
+		// opening a door, or one whose footsteps were ever made audible to AI,
+		// would otherwise drag every enemy nearby after it.
+		if (bIsBody && IsNoiseAudible(Actor, Stimulus))
 		{
-			// Not recorded as the most recent stimulus here: a chasing enemy
-			// ignores the scream and must keep its own trail. The controller
-			// records it when it reacts.
-			UE_LOG(LogNevergone, Verbose,
-				TEXT("[ExplorationPerceptionComponent] %s heard %s from %s"),
-				*GetNameSafe(GetListenerPawn()), *Stimulus.Tag.ToString(), *GetNameSafe(Actor));
+			RecordStimulus(Actor, Stimulus.StimulusLocation);
 
-			OnEnemyNoiseHeard.Broadcast(Actor, Stimulus.StimulusLocation);
+			OnSurvivorSensed.Broadcast(Actor, Stimulus.StimulusLocation, EExplorationSenseChannel::Hearing);
 		}
 	}
 }

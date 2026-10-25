@@ -6,6 +6,7 @@
 #include "ActorComponents/InteractableComponent.h"
 #include "ActorComponents/SaveableComponent.h"
 #include "Characters/PlayerControllers/ExplorationPlayerController.h"
+#include "CollisionQueryParams.h"
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -13,8 +14,15 @@
 #include "Data/ActorSaveData.h"
 #include "Data/ItemDefinition.h"
 #include "Data/NoiseDefinition.h"
+#include "Engine/OverlapResult.h"
+#include "Engine/World.h"
+#include "GameFramework/Controller.h"
+#include "GameFramework/Pawn.h"
 #include "GameInstance/SaveKeys.h"
 #include "Kismet/GameplayStatics.h"
+#include "NavLinkCustomComponent.h"
+#include "NavigationSystem.h"
+#include "Navigation/PathFollowingComponent.h"
 #include "Serialization/MemoryReader.h"
 #include "Serialization/MemoryWriter.h"
 #include "Serialization/ObjectAndNameAsStringProxyArchive.h"
@@ -25,6 +33,18 @@
 
 const FName ADoor::SaveKey = SaveKeys::Door;
 
+namespace DoorConstants
+{
+    // An agent walking the link keeps the doorway occupied while it is
+    // within the link's length of the leaf plus this much, and no further
+    // than the leaf's half width plus this much to the side.
+    static constexpr float CrossingClearance = 20.f;
+
+    // A zero delay still goes through the timer, so an agent is never
+    // released from inside the call that paused it.
+    static constexpr float MinAgentOpenDelaySeconds = 0.01f;
+}
+
 // ===========================================================================
 // Construction
 // ===========================================================================
@@ -34,29 +54,29 @@ ADoor::ADoor()
     PrimaryActorTick.bCanEverTick = false;
 
     // Plain SceneComponent root keeps the actor pivot independent from the
-    // mesh pivot. When skeletal animation arrives, the door leaf can pivot
-    // around its hinge socket without forcing the whole actor to rotate.
+    // mesh pivot, so the door leaf can swing around its hinge without
+    // forcing the whole actor to rotate.
     Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
     SetRootComponent(Root);
 
-    // Visual-only mesh. A USkeletalMeshComponent has no collision bodies
-    // without a Physics Asset, and we do not want to require one for every
-    // door — DoorCollisionBox handles all blocking. Forcing NoCollision here
-    // also prevents accidental misconfiguration in BP subclasses.
+    // Visual-only mesh. DoorCollisionBox handles all blocking; forcing
+    // NoCollision here also prevents accidental misconfiguration in BP
+    // subclasses.
     DoorMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("DoorMesh"));
     DoorMesh->SetupAttachment(Root);
     DoorMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-    // Actual blocking volume. Default extent is a placeholder; the BP subclass
-    // tunes BoxExtent and RelativeLocation per door asset (e.g. half-thickness
-    // on X, half-width on Y, half-height on Z, lifted by Z so the bottom sits
-    // at the actor pivot).
+    // Actual blocking volume. It must cover the whole doorway: a gap at a
+    // jamb lets a pawn squeeze past and lets sight through. The BP subclass
+    // may still tune BoxExtent and RelativeLocation per door asset (X is the
+    // thickness, Y half the width, Z half the height, lifted by Z so the
+    // bottom sits at the actor pivot).
     //
-    // Standard UE door dimensions (~1m wide, ~2m tall, ~10cm thick):
-    //   Extents = (5, 45, 100)  →  10x90x200 cm full size
+    // Default sized for the minimum clear opening of 110:
+    //   Extents = (5, 60, 100)  →  10x120x200 cm full size
     DoorCollisionBox = CreateDefaultSubobject<UBoxComponent>(TEXT("DoorCollisionBox"));
     DoorCollisionBox->SetupAttachment(Root);
-    DoorCollisionBox->SetBoxExtent(FVector(5.f, 45.f, 100.f));
+    DoorCollisionBox->SetBoxExtent(FVector(5.f, 60.f, 100.f));
     DoorCollisionBox->SetRelativeLocation(FVector(0.f, 0.f, 100.f));
     DoorCollisionBox->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
     DoorCollisionBox->SetCollisionObjectType(ECC_WorldStatic);
@@ -64,7 +84,7 @@ ADoor::ADoor()
     // The Interactable channel will be promoted to Block by
     // InteractableComponent::OnRegister regardless — that is fine. The
     // sphere's only purpose then is widening the interaction radius beyond
-    // the visual door footprint.
+    // the visual door footprint, and keeping the door reachable while open.
 
     // Interaction trigger volume — wider than the box so the player can
     // interact from a small distance, similar to AContainerActor / AWorldItemActor.
@@ -74,6 +94,11 @@ ADoor::ADoor()
     InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
     InteractionSphere->SetCollisionObjectType(ECC_WorldDynamic);
     InteractionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
+
+    // Smart link across the doorway. The navmesh is static and the box
+    // carves the doorway out of it, open or closed; the link is the only
+    // way a path crosses. Ends are placed in OnConstruction.
+    DoorNavLink = CreateDefaultSubobject<UNavLinkCustomComponent>(TEXT("DoorNavLink"));
 
     InteractableComponent = CreateDefaultSubobject<UInteractableComponent>(TEXT("InteractableComponent"));
     SaveableComponent     = CreateDefaultSubobject<USaveableComponent>(TEXT("SaveableComponent"));
@@ -94,6 +119,34 @@ ADoor::ADoor()
     CombatPresence->DefaultPolicy = ECombatPresencePolicy::BecomeObstacle;
 }
 
+void ADoor::OnConstruction(const FTransform& Transform)
+{
+    Super::OnConstruction(Transform);
+
+    if (!DoorNavLink || !DoorCollisionBox)
+    {
+        return;
+    }
+
+    // Link ends in actor space, on the floor (the actor pivot), one on each
+    // side of the box along its thickness axis. Runs in the editor, so the
+    // navmesh built there already has the link where the door is.
+    const FVector BoxLocation = DoorCollisionBox->GetRelativeLocation();
+    const FVector Center(BoxLocation.X, BoxLocation.Y, 0.f);
+
+    FVector Axis = DoorCollisionBox->GetRelativeRotation().RotateVector(FVector::ForwardVector).GetSafeNormal2D();
+
+    if (Axis.IsNearlyZero())
+    {
+        Axis = FVector::ForwardVector;
+    }
+
+    DoorNavLink->SetLinkData(
+        Center + Axis * NavLinkHalfLength,
+        Center - Axis * NavLinkHalfLength,
+        ENavLinkDirection::BothWays);
+}
+
 // ===========================================================================
 // Lifecycle
 // ===========================================================================
@@ -108,13 +161,24 @@ void ADoor::BeginPlay()
     // it initializes from the persisted bIsUnlocked flag. Either way, by the
     // time BeginPlay fires, CurrentState and bIsUnlocked are already correct
     // and BeginPlay must NOT overwrite them.
-    //
-    // Validation-only logic goes here.
+
+    if (DoorNavLink)
+    {
+        DoorNavLink->SetMoveReachedLink(this, &ADoor::HandleAgentReachedLink);
+
+        // The navmesh registers only after OnPostRestore, so the link state
+        // set there never reached it (and SetEnabled skips an unchanged
+        // value). Push the current state to the loaded navmesh now.
+        if (UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
+        {
+            NavSys->UpdateCustomLink(DoorNavLink);
+        }
+    }
 
     if (bStartLocked && !bIsUnlocked && RequiredKey.IsNull())
     {
         UE_LOG(LogTemp, Warning,
-            TEXT("[Door] '%s' starts Locked but has no RequiredKey assigned — only scripted unlock paths will work."),
+            TEXT("[Door] '%s' starts Locked but has no RequiredKey assigned — it can never be unlocked."),
             *GetName());
     }
 
@@ -122,6 +186,14 @@ void ADoor::BeginPlay()
         *GetName(),
         *UEnum::GetValueAsString(CurrentState),
         (int32)bIsUnlocked);
+}
+
+void ADoor::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    // Nobody stays paused at a door that no longer exists.
+    ReleaseWaitingAgents();
+
+    Super::EndPlay(EndPlayReason);
 }
 
 // ===========================================================================
@@ -134,8 +206,6 @@ void ADoor::Interact_Implementation(AActor* Interactor)
         *GetName(),
         *UEnum::GetValueAsString(CurrentState),
         *GetNameSafe(Interactor));
-
-    LastInteractor = Interactor;
 
     switch (CurrentState)
     {
@@ -154,24 +224,127 @@ void ADoor::Interact_Implementation(AActor* Interactor)
         }
         else
         {
-            HandleLockedAttempt();
+            HandleLockedAttempt(Interactor);
         }
         break;
     }
     case EDoorState::Closed:
     {
-        TransitionToOpen();
+        TryOpen(Interactor);
         break;
     }
     case EDoorState::Open:
     {
-        // Defensive — InteractionSphere collision is disabled while Open, so
-        // the trace should not reach here. If something else routes Interact
-        // here (e.g. a debug shortcut), ignore silently.
-        UE_LOG(LogTemp, Verbose, TEXT("[Door] '%s' Interact while Open — ignored."), *GetName());
+        TryClose(Interactor);
         break;
     }
     }
+}
+
+// ===========================================================================
+// Open / close
+// ===========================================================================
+
+bool ADoor::TryOpen(AActor* Opener)
+{
+    switch (CurrentState)
+    {
+    case EDoorState::Locked:
+        UE_LOG(LogTemp, Verbose, TEXT("[Door] '%s' TryOpen by '%s' refused: Locked."),
+            *GetName(), *GetNameSafe(Opener));
+        return false;
+
+    case EDoorState::Open:
+        ReleaseWaitingAgents();
+        return true;
+
+    case EDoorState::Closed:
+    default:
+        break;
+    }
+
+    UE_LOG(LogTemp, Verbose, TEXT("[Door] '%s' Closed -> Open by '%s'."), *GetName(), *GetNameSafe(Opener));
+
+    SetState(EDoorState::Open);
+
+    EmitDoorNoise(OpenNoise, TEXT("Open"), Opener);
+    BP_OnDoorOpening();
+
+    // Whoever opened it, anyone waiting at the link walks through now.
+    ReleaseWaitingAgents();
+
+    return true;
+}
+
+bool ADoor::TryClose(AActor* Closer)
+{
+    if (CurrentState != EDoorState::Open)
+    {
+        return true;
+    }
+
+    if (IsDoorwayOccupied())
+    {
+        UE_LOG(LogTemp, Verbose, TEXT("[Door] '%s' TryClose by '%s' refused: somebody is in the doorway."),
+            *GetName(), *GetNameSafe(Closer));
+        return false;
+    }
+
+    UE_LOG(LogTemp, Verbose, TEXT("[Door] '%s' Open -> Closed by '%s'."), *GetName(), *GetNameSafe(Closer));
+
+    SetState(EDoorState::Closed);
+
+    EmitDoorNoise(CloseNoise, TEXT("Close"), Closer);
+    BP_OnDoorClosing();
+
+    return true;
+}
+
+bool ADoor::IsDoorwayOccupied() const
+{
+    const UWorld* World = GetWorld();
+
+    if (!World || !DoorCollisionBox)
+    {
+        return false;
+    }
+
+    // A pawn whose capsule touches the leaf would be shut inside it.
+    TArray<FOverlapResult> Overlaps;
+
+    FCollisionQueryParams Params(SCENE_QUERY_STAT(DoorwayOccupancy), false, this);
+
+    World->OverlapMultiByObjectType(
+        Overlaps,
+        DoorCollisionBox->GetComponentLocation(),
+        DoorCollisionBox->GetComponentQuat(),
+        FCollisionObjectQueryParams(ECC_Pawn),
+        FCollisionShape::MakeBox(DoorCollisionBox->GetScaledBoxExtent()),
+        Params);
+
+    for (const FOverlapResult& Overlap : Overlaps)
+    {
+        // Only the capsule counts: character meshes are Pawn objects too and
+        // reach further, so the player closing the door would block himself.
+        const APawn* Pawn = Cast<APawn>(Overlap.GetActor());
+
+        if (Pawn && Overlap.GetComponent() == Pawn->GetRootComponent())
+        {
+            return true;
+        }
+    }
+
+    // An agent already walking the link is in the doorway before it reaches
+    // the leaf: closing now would shut the door in its face.
+    for (const FAgentMove& Agent : CrossingAgents)
+    {
+        if (IsStillCrossing(Agent))
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 // ===========================================================================
@@ -212,17 +385,20 @@ void ADoor::HandleUnlockAndOpen(AActor* Interactor)
         *GetNameSafe(Interactor),
         *KeyDef->DisplayName.ToString());
 
-    EmitDoorNoise(UnlockNoise, TEXT("Unlock"));
+    // Closed first: from here on the door is an ordinary door, for AI too.
+    SetState(EDoorState::Closed);
+
+    EmitDoorNoise(UnlockNoise, TEXT("Unlock"), Interactor);
     BP_OnUnlocked();
 
-    TransitionToOpen();
+    TryOpen(Interactor);
 }
 
-void ADoor::HandleLockedAttempt()
+void ADoor::HandleLockedAttempt(AActor* Interactor)
 {
     UE_LOG(LogTemp, Log, TEXT("[Door] '%s' LOCKED ATTEMPT — player has no valid key."), *GetName());
 
-    EmitDoorNoise(LockedAttemptNoise, TEXT("LockedAttempt"));
+    EmitDoorNoise(LockedAttemptNoise, TEXT("LockedAttempt"), Interactor);
 
     APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
     AExplorationPlayerController* ExpPC = Cast<AExplorationPlayerController>(PC);
@@ -243,73 +419,241 @@ void ADoor::HandleLockedAttempt()
     BP_OnLockedAttempt();
 }
 
-void ADoor::TransitionToOpen()
+void ADoor::SetState(EDoorState NewState)
 {
-    UE_LOG(LogTemp, Log, TEXT("[Door] '%s' Closed -> Open."), *GetName());
+    CurrentState = NewState;
+    ApplyState();
+}
 
-    CurrentState = EDoorState::Open;
-    ApplyCollisionForState(CurrentState);
-
-    EmitDoorNoise(OpenNoise, TEXT("Open"));
-    BP_OnDoorOpening();
-
-    if (UWorld* World = GetWorld())
+void ADoor::ApplyState()
+{
+    if (DoorCollisionBox && InteractionSphere)
     {
-        World->GetTimerManager().SetTimer(
-            AutoCloseTimerHandle,
-            this,
-            &ADoor::TransitionToClosed,
-            AutoCloseDelaySeconds,
-            /*bLoop=*/false);
+        switch (CurrentState)
+        {
+        case EDoorState::Locked:
+        case EDoorState::Closed:
+            // Solid box: blocks pawns, sight and hearing occlusion.
+            DoorCollisionBox->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+            InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+            break;
 
-        UE_LOG(LogTemp, Verbose,
-            TEXT("[Door] '%s' auto-close timer armed (%.2fs)."),
-            *GetName(), AutoCloseDelaySeconds);
+        case EDoorState::Open:
+            // Door is out of the way visually (BP plays the swing): nothing
+            // blocks. The sphere stays so the player can close it again.
+            DoorCollisionBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+            InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+            break;
+        }
+    }
+
+    // Updates the link's area in the loaded navmesh: no rebuild, so it
+    // works on a static navmesh.
+    if (DoorNavLink)
+    {
+        DoorNavLink->SetEnabled(DoorRules::IsAgentLinkEnabled(CurrentState));
     }
 }
 
-void ADoor::TransitionToClosed()
+// ===========================================================================
+// AI passage
+// ===========================================================================
+
+void ADoor::HandleAgentReachedLink(UNavLinkCustomComponent* Link, UObject* PathComp, const FVector& DestPoint)
 {
-    UE_LOG(LogTemp, Log, TEXT("[Door] '%s' Open -> Closed (auto-close)."), *GetName());
+    UPathFollowingComponent* PathFollowing = Cast<UPathFollowingComponent>(PathComp);
 
-    CurrentState = EDoorState::Closed;
-    ApplyCollisionForState(CurrentState);
-
-    EmitDoorNoise(CloseNoise, TEXT("Close"));
-    BP_OnDoorClosing();
-}
-
-void ADoor::ApplyCollisionForState(EDoorState State)
-{
-    if (!DoorCollisionBox || !InteractionSphere)
+    if (!PathFollowing)
     {
         return;
     }
 
-    switch (State)
+    const EDoorAgentPassage Passage = DoorRules::ResolveAgentPassage(CurrentState);
+
+    UE_LOG(LogTemp, Verbose, TEXT("[Door] '%s' agent '%s' reached the link: state=%s, passage=%s."),
+        *GetName(),
+        *GetNameSafe(GetAgentPawn(PathFollowing)),
+        *UEnum::GetValueAsString(CurrentState),
+        *UEnum::GetValueAsString(Passage));
+
+    switch (Passage)
     {
-    case EDoorState::Locked:
-    case EDoorState::Closed:
-        // Solid box + active interaction trigger.
-        DoorCollisionBox->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-        InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+    case EDoorAgentPassage::Pass:
+        PathFollowing->FinishUsingCustomLink(Link);
+        AddCrossingAgent({ PathFollowing, PathFollowing->GetCurrentRequestId() });
         break;
 
-    case EDoorState::Open:
-        // Door is out of the way visually (BP plays the swing); fully disable
-        // collision so the player walks through and the interact trace ignores
-        // the door entirely until it auto-closes.
-        DoorCollisionBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-        InteractionSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    case EDoorAgentPassage::OpenFirst:
+    {
+        const FAIRequestID RequestId = PathFollowing->GetCurrentRequestId();
+
+        PathFollowing->PauseMove(RequestId, EPathFollowingVelocityMode::Reset);
+
+        // An agent that re-requested its move while waiting (a chase
+        // repath) comes back here with a new request: keep one entry.
+        FAgentMove* Existing = WaitingAgents.FindByPredicate([PathFollowing](const FAgentMove& Agent)
+        {
+            return Agent.PathFollowing.Get() == PathFollowing;
+        });
+
+        if (Existing)
+        {
+            Existing->RequestId = RequestId;
+        }
+        else
+        {
+            WaitingAgents.Add({ PathFollowing, RequestId });
+        }
+
+        // The delay counts from the first agent to arrive.
+        if (UWorld* World = GetWorld(); World && !World->GetTimerManager().IsTimerActive(AgentOpenTimerHandle))
+        {
+            World->GetTimerManager().SetTimer(
+                AgentOpenTimerHandle,
+                this,
+                &ADoor::HandleAgentOpenDelayElapsed,
+                FMath::Max(AgentOpenDelaySeconds, DoorConstants::MinAgentOpenDelaySeconds),
+                /*bLoop=*/false);
+        }
         break;
     }
+
+    case EDoorAgentPassage::Blocked:
+        // The link is off while the door is a wall, so no path should get
+        // here. If one did (a path built before the state changed), stop it
+        // instead of pushing into the box.
+        PathFollowing->AbortMove(*this, FPathFollowingResultFlags::InvalidPath);
+        break;
+    }
+}
+
+void ADoor::HandleAgentOpenDelayElapsed()
+{
+    WaitingAgents.RemoveAll([](const FAgentMove& Agent)
+    {
+        return !IsStillWaiting(Agent);
+    });
+
+    if (WaitingAgents.Num() == 0)
+    {
+        UE_LOG(LogTemp, Verbose, TEXT("[Door] '%s' open delay elapsed with nobody waiting — stays %s."),
+            *GetName(), *UEnum::GetValueAsString(CurrentState));
+        return;
+    }
+
+    // The first agent still waiting is the one who opens it: the noise is
+    // theirs. TryOpen releases everybody.
+    AActor* Opener = GetAgentPawn(WaitingAgents[0].PathFollowing.Get());
+
+    if (!TryOpen(Opener))
+    {
+        UE_LOG(LogTemp, Verbose, TEXT("[Door] '%s' could not be opened by '%s' — aborting %d waiting move(s)."),
+            *GetName(), *GetNameSafe(Opener), WaitingAgents.Num());
+
+        TArray<FAgentMove> Aborted = MoveTemp(WaitingAgents);
+        WaitingAgents.Reset();
+
+        for (const FAgentMove& Agent : Aborted)
+        {
+            if (UPathFollowingComponent* PathFollowing = Agent.PathFollowing.Get())
+            {
+                PathFollowing->AbortMove(*this, FPathFollowingResultFlags::InvalidPath, Agent.RequestId);
+            }
+        }
+    }
+}
+
+void ADoor::ReleaseWaitingAgents()
+{
+    if (UWorld* World = GetWorld())
+    {
+        World->GetTimerManager().ClearTimer(AgentOpenTimerHandle);
+    }
+
+    if (WaitingAgents.Num() == 0)
+    {
+        return;
+    }
+
+    TArray<FAgentMove> Released = MoveTemp(WaitingAgents);
+    WaitingAgents.Reset();
+
+    for (const FAgentMove& Agent : Released)
+    {
+        if (!IsStillWaiting(Agent))
+        {
+            continue;
+        }
+
+        UPathFollowingComponent* PathFollowing = Agent.PathFollowing.Get();
+
+        UE_LOG(LogTemp, Verbose, TEXT("[Door] '%s' releases agent '%s'."),
+            *GetName(), *GetNameSafe(GetAgentPawn(PathFollowing)));
+
+        PathFollowing->FinishUsingCustomLink(DoorNavLink);
+        PathFollowing->ResumeMove(Agent.RequestId);
+
+        AddCrossingAgent(Agent);
+    }
+}
+
+void ADoor::AddCrossingAgent(const FAgentMove& Agent)
+{
+    CrossingAgents.RemoveAll([this, &Agent](const FAgentMove& Other)
+    {
+        return Other.PathFollowing == Agent.PathFollowing || !IsStillCrossing(Other);
+    });
+
+    CrossingAgents.Add(Agent);
+}
+
+bool ADoor::IsStillCrossing(const FAgentMove& Agent) const
+{
+    const UPathFollowingComponent* PathFollowing = Agent.PathFollowing.Get();
+
+    if (!PathFollowing ||
+        PathFollowing->GetStatus() == EPathFollowingStatus::Idle ||
+        PathFollowing->GetCurrentRequestId().GetID() != Agent.RequestId.GetID())
+    {
+        return false;
+    }
+
+    const AActor* Pawn = GetAgentPawn(PathFollowing);
+
+    if (!Pawn || !DoorCollisionBox)
+    {
+        return false;
+    }
+
+    // In the box's frame: X across the doorway (the link), Y along the leaf.
+    const FVector Local = DoorCollisionBox->GetComponentTransform().InverseTransformPositionNoScale(Pawn->GetActorLocation());
+
+    return FMath::Abs(Local.X) <= NavLinkHalfLength + DoorConstants::CrossingClearance &&
+        FMath::Abs(Local.Y) <= DoorCollisionBox->GetScaledBoxExtent().Y + DoorConstants::CrossingClearance;
+}
+
+bool ADoor::IsStillWaiting(const FAgentMove& Agent)
+{
+    const UPathFollowingComponent* PathFollowing = Agent.PathFollowing.Get();
+
+    return PathFollowing &&
+        PathFollowing->GetStatus() == EPathFollowingStatus::Paused &&
+        PathFollowing->GetCurrentRequestId().GetID() == Agent.RequestId.GetID();
+}
+
+AActor* ADoor::GetAgentPawn(const UPathFollowingComponent* PathFollowing)
+{
+    // The path following component lives on the AI controller.
+    const AController* Controller = PathFollowing ? Cast<AController>(PathFollowing->GetOwner()) : nullptr;
+
+    return Controller ? Controller->GetPawn() : nullptr;
 }
 
 // ===========================================================================
 // Noise
 // ===========================================================================
 
-void ADoor::EmitDoorNoise(const UNoiseDefinition* Noise, const TCHAR* DebugLabel) const
+void ADoor::EmitDoorNoise(const UNoiseDefinition* Noise, const TCHAR* DebugLabel, AActor* NoiseInstigator) const
 {
     if (!Noise)
     {
@@ -328,13 +672,15 @@ void ADoor::EmitDoorNoise(const UNoiseDefinition* Noise, const TCHAR* DebugLabel
         return;
     }
 
-    // Centre of the leaf rather than the floor pivot. The occlusion trace
-    // ignores the door itself here, because it touches the noise source.
+    // Centre of the leaf rather than the floor pivot. Hearing occlusion does
+    // not count an occluder this close to the noise (SourceClearance), so
+    // the door rarely muffles its own noise; a listener at a shallow angle
+    // to the leaf can still count it as one wall.
     const FVector NoiseLocation = DoorCollisionBox
         ? DoorCollisionBox->GetComponentLocation()
         : GetActorLocation();
 
-    NoiseSS->EmitNoise(Noise, NoiseLocation, LastInteractor.Get());
+    NoiseSS->EmitNoise(Noise, NoiseLocation, NoiseInstigator);
 }
 
 // ===========================================================================
@@ -387,11 +733,11 @@ void ADoor::OnPostRestore_Implementation()
     //     comes from the bStartLocked designer flag.
     //   - Revisit:     bIsUnlocked was set by ReadSaveData → if true, the
     //     door starts Closed (Open is never persisted).
-    CurrentState = bIsUnlocked
+    // The navmesh is not registered yet: BeginPlay pushes the nav link
+    // state to it.
+    SetState(bIsUnlocked
         ? EDoorState::Closed
-        : (bStartLocked ? EDoorState::Locked : EDoorState::Closed);
-
-    ApplyCollisionForState(CurrentState);
+        : (bStartLocked ? EDoorState::Locked : EDoorState::Closed));
 
     UE_LOG(LogTemp, Log, TEXT("[Door] '%s' OnPostRestore: bIsUnlocked=%d → state=%s"),
         *GetName(),

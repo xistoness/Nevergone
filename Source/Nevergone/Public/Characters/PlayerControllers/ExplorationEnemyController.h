@@ -59,8 +59,8 @@ enum class EExplorationSenseChannel : uint8;
 // needs TimeToConfirmSeconds of contact (spent in Suspicious, short losses
 // inside the tolerance paused rather than reset) before it becomes a chase,
 // and smell escalates immediately because by then the survivor is already
-// close enough to touch. Another enemy's chase scream is heard like any
-// noise: the listener investigates where it came from, or holds it while
+// close enough to touch. A place noise (another enemy's chase scream) is
+// heard like any noise: the listener investigates where it came from, or holds it while
 // Suspicious.
 //
 // The controller only changes state. What the player sees and hears of it
@@ -175,7 +175,7 @@ private:
 
 	void HandleSurvivorSensed(AActor* Survivor, const FVector& StimulusLocation, EExplorationSenseChannel Channel);
 	void HandleSurvivorLost(AActor* Survivor);
-	void HandleEnemyNoiseHeard(AActor* Enemy, const FVector& NoiseLocation);
+	void HandlePlaceNoiseHeard(AActor* Source, const FVector& NoiseLocation);
 
 	// True in the states a noise can move: Idle, Patrol and Investigate.
 	bool CanReactToNoise() const;
