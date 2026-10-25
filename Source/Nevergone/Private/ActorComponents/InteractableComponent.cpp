@@ -38,18 +38,18 @@ void UInteractableComponent::SetHighlighted(bool bHighlighted)
 	for (UPrimitiveComponent* Primitive : Primitives)
 	{
 		
-		UE_LOG(LogTemp, Warning,
+		UE_LOG(LogTemp, Verbose,
 		TEXT("[Highlight] Primitive: %s | Class: %s | Visible: %d"),
 		*Primitive->GetName(),
 		*Primitive->GetClass()->GetName(),
 		Primitive->IsVisible()
 		);
 
-		UE_LOG(LogTemp, Warning, TEXT("Tries to highlight..."));
+		UE_LOG(LogTemp, Verbose, TEXT("Tries to highlight..."));
 		Primitive->SetRenderCustomDepth(bHighlighted);
 		Primitive->SetCustomDepthStencilValue(1);
 		
-		UE_LOG(LogTemp, Warning,
+		UE_LOG(LogTemp, Verbose,
 			TEXT("[Highlight] CustomDepth ENABLED for: %s"),
 			*Primitive->GetName()
 		);
