@@ -17,6 +17,7 @@
 #include "Engine/OverlapResult.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "EngineTools/CollisionChannels.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
 #include "GameInstance/SaveKeys.h"
@@ -68,12 +69,17 @@ ADoor::ADoor()
     Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
     SetRootComponent(Root);
 
-    // Visual-only mesh, swung by C++ around its pivot (the hinge).
-    // DoorCollisionBox handles all blocking; NoCollision is also enforced
-    // after the Blueprint applies its defaults (EnforceLeafWithoutCollision).
+    // The leaf, swung by C++ around its pivot (the hinge). Queries only:
+    // it takes the interact trace (the player closes an open door through
+    // the leaf) and blocks sight. It never blocks pawns, the camera or
+    // hearing: a swinging leaf with physics shoves whoever is in its arc,
+    // and the static navmesh cannot route agents around an open one. Closed,
+    // the box does all the blocking for the doorway. Re-applied after the
+    // Blueprint and the level apply their saved values (ApplyLeafCollision).
     DoorMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("DoorMesh"));
     DoorMesh->SetupAttachment(Root);
-    DoorMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    DoorMesh->SetCanEverAffectNavigation(false);
+    ApplyLeafCollision();
 
     // Actual blocking volume. It must cover the whole doorway: a gap at a
     // jamb lets a pawn squeeze past and lets sight through. The BP subclass
@@ -93,7 +99,8 @@ ADoor::ADoor()
     // The Interactable channel will be promoted to Block by
     // InteractableComponent::OnRegister regardless — that is fine. The
     // sphere's only purpose then is widening the interaction radius beyond
-    // the visual door footprint, and keeping the door reachable while open.
+    // the visual door footprint. A trace starting inside the sphere misses
+    // it, so up close the open door is reached through the leaf.
 
     // Interaction trigger volume — wider than the box so the player can
     // interact from a small distance, similar to AContainerActor / AWorldItemActor.
@@ -132,7 +139,7 @@ void ADoor::OnConstruction(const FTransform& Transform)
 {
     Super::OnConstruction(Transform);
 
-    EnforceLeafWithoutCollision();
+    ApplyLeafCollision();
     CaptureClosedLeaf();
     PlaceNavLinkEnds();
 }
@@ -143,7 +150,7 @@ void ADoor::PostInitializeComponents()
 
     // Construction scripts do not run again on a level loaded in a cooked
     // game: repeat what the leaf needs here.
-    EnforceLeafWithoutCollision();
+    ApplyLeafCollision();
     CaptureClosedLeaf();
 }
 
@@ -234,17 +241,29 @@ void ADoor::PlaceNavLinkEnds()
 // Leaf swing
 // ===========================================================================
 
-void ADoor::EnforceLeafWithoutCollision()
+void ADoor::ApplyLeafCollision()
 {
-    // The leaf is visual only: swinging with collision it shoves pawns out
-    // of the doorway. A Blueprint collision profile on it is overridden.
-    if (DoorMesh && DoorMesh->GetCollisionEnabled() != ECollisionEnabled::NoCollision)
+    if (!DoorMesh)
     {
-        UE_LOG(LogTemp, Verbose, TEXT("[Door] '%s' DoorMesh had collision in the Blueprint — forced to NoCollision."),
-            *GetName());
-
-        DoorMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        return;
     }
+
+    // Collision is part of the door's behaviour, not of the art: a value
+    // saved on the Blueprint or the placed instance is overridden. Logged
+    // only after construction, where the engine defaults always differ.
+    if (!HasAnyFlags(RF_NeedInitialization) &&
+        (DoorMesh->GetCollisionEnabled() != ECollisionEnabled::QueryOnly ||
+         DoorMesh->GetCollisionResponseToChannel(NevergoneCollision::Interactable) != ECR_Block))
+    {
+        UE_LOG(LogTemp, Verbose, TEXT("[Door] '%s' DoorMesh collision reset to the leaf setup (QueryOnly)."),
+            *GetName());
+    }
+
+    DoorMesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+    DoorMesh->SetCollisionObjectType(ECC_WorldDynamic);
+    DoorMesh->SetCollisionResponseToAllChannels(ECR_Ignore);
+    DoorMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+    DoorMesh->SetCollisionResponseToChannel(NevergoneCollision::Interactable, ECR_Block);
 }
 
 void ADoor::CaptureClosedLeaf()
@@ -461,7 +480,7 @@ bool ADoor::IsDoorwayOccupied() const
         return false;
     }
 
-    // A pawn whose capsule touches the leaf would be shut inside it.
+    // A pawn whose capsule touches the box would be shut inside the doorway.
     TArray<FOverlapResult> Overlaps;
 
     FCollisionQueryParams Params(SCENE_QUERY_STAT(DoorwayOccupancy), false, this);
@@ -591,8 +610,9 @@ void ADoor::ApplyState()
             break;
 
         case EDoorState::Open:
-            // The leaf swings out of the way (StartSwing): nothing blocks.
-            // The sphere stays so the player can close it again.
+            // The leaf swings out of the way (StartSwing) and still takes
+            // the interact trace; the box leaves the doorway free. The
+            // sphere stays as a wider interact target.
             DoorCollisionBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
             InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
             break;
@@ -824,10 +844,10 @@ void ADoor::EmitDoorNoise(const UNoiseDefinition* Noise, const TCHAR* DebugLabel
         return;
     }
 
-    // Centre of the leaf rather than the floor pivot. Hearing occlusion does
+    // Centre of the box (the closed doorway) rather than the floor pivot. Hearing occlusion does
     // not count an occluder this close to the noise (SourceClearance), so
     // the door rarely muffles its own noise; a listener at a shallow angle
-    // to the leaf can still count it as one wall.
+    // to the box can still count it as one wall. The leaf never occludes.
     const FVector NoiseLocation = DoorCollisionBox
         ? DoorCollisionBox->GetComponentLocation()
         : GetActorLocation();

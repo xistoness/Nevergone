@@ -52,20 +52,22 @@ class UPathFollowingComponent;
 //
 // The leaf swing is C++: DoorMesh yaws OpenAngleDegrees around its pivot
 // (the hinge) over SwingDurationSeconds, always away from whoever opened
-// it, so it never swings into them. The leaf never collides. BP_OnDoorOpening
+// it. The leaf only answers queries (interact trace, sight): the open leaf
+// is what the player interacts with to close it. BP_OnDoorOpening
 // / BP_OnDoorClosing stay as hooks for extra effects, not for the swing.
 //
 // Component layout:
 //   Root (USceneComponent)
-//   ├── DoorMesh          (UStaticMeshComponent — VISUAL ONLY, NoCollision)
+//   ├── DoorMesh          (UStaticMeshComponent — the swinging leaf, QueryOnly)
 //   ├── DoorCollisionBox  (UBoxComponent        — solid blocker, covers the whole doorway)
 //   ├── InteractionSphere (USphereComponent     — QueryOnly trace volume)
 //   └── DoorNavLink       (UNavLinkCustomComponent — not a scene component)
 //
-// The box is the actual collider — the mesh is purely cosmetic, so a mesh
-// without collision (or with the wrong one) never lets a pawn through. While
-// closed, the box also blocks enemy sight and counts as a wall for hearing
-// occlusion; while open it has no collision at all.
+// The box is what seals the doorway: a leaf mesh without collision (or with
+// the wrong one) never lets a pawn through. While closed, the box also blocks
+// enemy sight and counts as a wall for hearing occlusion; while open it has
+// no collision at all; the swung-aside leaf blocks only sight and the
+// interact trace.
 //
 // The SceneComponent root keeps the actor pivot independent from the mesh
 // pivot — the swing rotates DoorMesh around its hinge without dragging the
@@ -108,8 +110,8 @@ public:
     // when the door is closed afterwards (already closed counts).
     bool TryClose(AActor* Closer);
 
-    // True while a pawn's capsule overlaps the leaf, or an agent is walking
-    // the nav link through the doorway.
+    // True while a pawn's capsule overlaps the box (the doorway), or an
+    // agent is walking the nav link through it.
     bool IsDoorwayOccupied() const;
 
     // -----------------------------------------------------------------------
@@ -209,9 +211,10 @@ protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<USceneComponent> Root;
 
-    // Visual-only door leaf, swung by C++. Never collides, whatever the
-    // Blueprint sets (EnforceLeafWithoutCollision). BP subclass assigns the
-    // StaticMesh asset, with its pivot on the hinge.
+    // Door leaf, swung by C++. QueryOnly: blocks Visibility and Interactable,
+    // ignores pawns, camera and hearing occlusion; never shapes the navmesh.
+    // BP subclass assigns the StaticMesh asset (with simple collision), with
+    // its pivot on the hinge.
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<UStaticMeshComponent> DoorMesh;
 
@@ -223,8 +226,8 @@ protected:
     TObjectPtr<UBoxComponent> DoorCollisionBox;
 
     // Wider trigger volume for the interaction line trace. QueryOnly — never
-    // physically obstructs anything, only returns hits to the trace. Stays
-    // active while open so the player can close the door.
+    // physically obstructs anything, only returns hits to the trace. A trace
+    // that starts inside it misses it: up close, the leaf is the target.
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<USphereComponent> InteractionSphere;
 
@@ -284,7 +287,7 @@ private:
     // - Open: box has no collision; sphere still accepts the trace.
     // - Nav link on unless DoorRules says the door is a wall for AI.
     //
-    // DoorMesh is never touched here — it stays NoCollision for its entire lifetime.
+    // DoorMesh collision is never touched here: the leaf keeps its own.
     void ApplyState();
 
     // The box's thickness axis in actor space, flat: what the nav link
@@ -298,8 +301,9 @@ private:
     // Leaf swing
     // -----------------------------------------------------------------------
 
-    // Turns off any collision the Blueprint gave DoorMesh.
-    void EnforceLeafWithoutCollision();
+    // Sets the leaf's query-only collision (see DoorMesh), overriding any
+    // value saved on the Blueprint or the placed instance.
+    void ApplyLeafCollision();
 
     // Records the authored leaf rotation as the closed pose.
     void CaptureClosedLeaf();
@@ -320,7 +324,7 @@ private:
     float SwingYaw = 0.f;
     float TargetSwingYaw = 0.f;
 
-    // Emits one of the door noises at the door leaf, attributed to NoiseInstigator.
+    // Emits one of the door noises at the centre of the box, attributed to NoiseInstigator.
     void EmitDoorNoise(const UNoiseDefinition* Noise, const TCHAR* DebugLabel, AActor* NoiseInstigator) const;
 
     // -----------------------------------------------------------------------
