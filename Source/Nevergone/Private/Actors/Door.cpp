@@ -15,6 +15,7 @@
 #include "Data/ItemDefinition.h"
 #include "Data/NoiseDefinition.h"
 #include "Engine/OverlapResult.h"
+#include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
@@ -43,6 +44,12 @@ namespace DoorConstants
     // A zero delay still goes through the timer, so an agent is never
     // released from inside the call that paused it.
     static constexpr float MinAgentOpenDelaySeconds = 0.01f;
+
+    // How far below the box centre each nav link end looks for the floor.
+    static constexpr float NavLinkFloorSearchDepth = 500.f;
+
+    // A zero duration swings the leaf in one frame.
+    static constexpr float MinSwingDurationSeconds = 0.01f;
 }
 
 // ===========================================================================
@@ -51,7 +58,9 @@ namespace DoorConstants
 
 ADoor::ADoor()
 {
-    PrimaryActorTick.bCanEverTick = false;
+    // Ticks only while the leaf swings.
+    PrimaryActorTick.bCanEverTick = true;
+    PrimaryActorTick.bStartWithTickEnabled = false;
 
     // Plain SceneComponent root keeps the actor pivot independent from the
     // mesh pivot, so the door leaf can swing around its hinge without
@@ -59,9 +68,9 @@ ADoor::ADoor()
     Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
     SetRootComponent(Root);
 
-    // Visual-only mesh. DoorCollisionBox handles all blocking; forcing
-    // NoCollision here also prevents accidental misconfiguration in BP
-    // subclasses.
+    // Visual-only mesh, swung by C++ around its pivot (the hinge).
+    // DoorCollisionBox handles all blocking; NoCollision is also enforced
+    // after the Blueprint applies its defaults (EnforceLeafWithoutCollision).
     DoorMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("DoorMesh"));
     DoorMesh->SetupAttachment(Root);
     DoorMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -123,28 +132,169 @@ void ADoor::OnConstruction(const FTransform& Transform)
 {
     Super::OnConstruction(Transform);
 
+    EnforceLeafWithoutCollision();
+    CaptureClosedLeaf();
+    PlaceNavLinkEnds();
+}
+
+void ADoor::PostInitializeComponents()
+{
+    Super::PostInitializeComponents();
+
+    // Construction scripts do not run again on a level loaded in a cooked
+    // game: repeat what the leaf needs here.
+    EnforceLeafWithoutCollision();
+    CaptureClosedLeaf();
+}
+
+void ADoor::Tick(float DeltaSeconds)
+{
+    Super::Tick(DeltaSeconds);
+
+    const float Speed = OpenAngleDegrees / FMath::Max(SwingDurationSeconds, DoorConstants::MinSwingDurationSeconds);
+
+    SwingYaw = FMath::FInterpConstantTo(SwingYaw, TargetSwingYaw, DeltaSeconds, Speed);
+
+    ApplyLeafRotation();
+
+    if (FMath::IsNearlyEqual(SwingYaw, TargetSwingYaw))
+    {
+        SetActorTickEnabled(false);
+    }
+}
+
+FVector ADoor::GetDoorwayAxis() const
+{
+    // The box's thickness axis, in actor space and flat: the direction the
+    // nav link crosses and the leaf swings towards.
+    const FVector Axis = DoorCollisionBox
+        ? DoorCollisionBox->GetRelativeRotation().RotateVector(FVector::ForwardVector).GetSafeNormal2D()
+        : FVector::ZeroVector;
+
+    return Axis.IsNearlyZero() ? FVector::ForwardVector : Axis;
+}
+
+void ADoor::PlaceNavLinkEnds()
+{
     if (!DoorNavLink || !DoorCollisionBox)
     {
         return;
     }
 
-    // Link ends in actor space, on the floor (the actor pivot), one on each
-    // side of the box along its thickness axis. Runs in the editor, so the
-    // navmesh built there already has the link where the door is.
+    // Link ends in actor space, one on each side of the box along its
+    // thickness axis. Runs in the editor, so the navmesh built there already
+    // has the link where the door is.
     const FVector BoxLocation = DoorCollisionBox->GetRelativeLocation();
-    const FVector Center(BoxLocation.X, BoxLocation.Y, 0.f);
+    const FVector Axis = GetDoorwayAxis();
 
-    FVector Axis = DoorCollisionBox->GetRelativeRotation().RotateVector(FVector::ForwardVector).GetSafeNormal2D();
-
-    if (Axis.IsNearlyZero())
+    FVector Ends[2] =
     {
-        Axis = FVector::ForwardVector;
+        FVector(BoxLocation.X, BoxLocation.Y, 0.f) + Axis * NavLinkHalfLength,
+        FVector(BoxLocation.X, BoxLocation.Y, 0.f) - Axis * NavLinkHalfLength,
+    };
+
+    // Each end must sit within a step height of the navmesh or it does not
+    // snap, and the link silently never exists. The actor pivot is not
+    // reliably on the floor, so each end looks for the floor below it,
+    // starting at the top of the box.
+    if (const UWorld* World = GetWorld())
+    {
+        const FTransform& ActorTransform = GetActorTransform();
+
+        const float TraceTopZ = BoxLocation.Z + DoorCollisionBox->GetUnscaledBoxExtent().Z;
+
+        FCollisionQueryParams Params(SCENE_QUERY_STAT(DoorNavLinkFloor), false, this);
+
+        for (FVector& End : Ends)
+        {
+            const FVector Start = ActorTransform.TransformPosition(FVector(End.X, End.Y, TraceTopZ));
+            const FVector Bottom = Start - FVector::UpVector * DoorConstants::NavLinkFloorSearchDepth;
+
+            FHitResult Hit;
+
+            if (World->LineTraceSingleByChannel(Hit, Start, Bottom, ECC_Visibility, Params))
+            {
+                End.Z = ActorTransform.InverseTransformPosition(Hit.ImpactPoint).Z;
+            }
+            else
+            {
+                // Left at the pivot: the link only works if the pivot is near
+                // the navmesh.
+                UE_LOG(LogTemp, Warning,
+                    TEXT("[Door] '%s' found no floor under a nav link end at %s — AI may not cross this door."),
+                    *GetName(), *Start.ToCompactString());
+            }
+        }
     }
 
-    DoorNavLink->SetLinkData(
-        Center + Axis * NavLinkHalfLength,
-        Center - Axis * NavLinkHalfLength,
-        ENavLinkDirection::BothWays);
+    DoorNavLink->SetLinkData(Ends[0], Ends[1], ENavLinkDirection::BothWays);
+}
+
+// ===========================================================================
+// Leaf swing
+// ===========================================================================
+
+void ADoor::EnforceLeafWithoutCollision()
+{
+    // The leaf is visual only: swinging with collision it shoves pawns out
+    // of the doorway. A Blueprint collision profile on it is overridden.
+    if (DoorMesh && DoorMesh->GetCollisionEnabled() != ECollisionEnabled::NoCollision)
+    {
+        UE_LOG(LogTemp, Verbose, TEXT("[Door] '%s' DoorMesh had collision in the Blueprint — forced to NoCollision."),
+            *GetName());
+
+        DoorMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    }
+}
+
+void ADoor::CaptureClosedLeaf()
+{
+    if (DoorMesh)
+    {
+        ClosedLeafRotation = DoorMesh->GetRelativeRotation().Quaternion();
+    }
+
+    SwingYaw = 0.f;
+    TargetSwingYaw = 0.f;
+}
+
+float ADoor::ChooseSwingSign(const AActor* Opener) const
+{
+    const UStaticMesh* Mesh = DoorMesh ? DoorMesh->GetStaticMesh() : nullptr;
+
+    if (!Opener || !Mesh || !DoorCollisionBox)
+    {
+        return 1.f;
+    }
+
+    const FVector Axis = GetDoorwayAxis();
+
+    // Side of the doorway the opener is on, in actor space.
+    const FVector OpenerLocal = GetActorTransform().InverseTransformPosition(Opener->GetActorLocation());
+    const float OpenerSide = FVector::DotProduct(OpenerLocal - DoorCollisionBox->GetRelativeLocation(), Axis);
+
+    // Middle of the closed leaf relative to the hinge (the mesh pivot), in
+    // actor space. Works whichever side the hinge is on.
+    const FVector LeafCentre = ClosedLeafRotation.RotateVector(Mesh->GetBounds().Origin * DoorMesh->GetRelativeScale3D());
+
+    return DoorRules::ChooseSwingSign(OpenerSide, LeafCentre, OpenAngleDegrees, Axis);
+}
+
+void ADoor::StartSwing(float NewTargetYaw)
+{
+    TargetSwingYaw = NewTargetYaw;
+
+    SetActorTickEnabled(!FMath::IsNearlyEqual(SwingYaw, TargetSwingYaw));
+}
+
+void ADoor::ApplyLeafRotation()
+{
+    if (DoorMesh)
+    {
+        // Yaw about the actor's up axis, on top of the authored closed pose,
+        // around the mesh pivot (the hinge).
+        DoorMesh->SetRelativeRotation(FQuat(FVector::UpVector, FMath::DegreesToRadians(SwingYaw)) * ClosedLeafRotation);
+    }
 }
 
 // ===========================================================================
@@ -266,6 +416,7 @@ bool ADoor::TryOpen(AActor* Opener)
     UE_LOG(LogTemp, Verbose, TEXT("[Door] '%s' Closed -> Open by '%s'."), *GetName(), *GetNameSafe(Opener));
 
     SetState(EDoorState::Open);
+    StartSwing(ChooseSwingSign(Opener) * OpenAngleDegrees);
 
     EmitDoorNoise(OpenNoise, TEXT("Open"), Opener);
     BP_OnDoorOpening();
@@ -293,6 +444,7 @@ bool ADoor::TryClose(AActor* Closer)
     UE_LOG(LogTemp, Verbose, TEXT("[Door] '%s' Open -> Closed by '%s'."), *GetName(), *GetNameSafe(Closer));
 
     SetState(EDoorState::Closed);
+    StartSwing(0.f);
 
     EmitDoorNoise(CloseNoise, TEXT("Close"), Closer);
     BP_OnDoorClosing();
@@ -439,8 +591,8 @@ void ADoor::ApplyState()
             break;
 
         case EDoorState::Open:
-            // Door is out of the way visually (BP plays the swing): nothing
-            // blocks. The sphere stays so the player can close it again.
+            // The leaf swings out of the way (StartSwing): nothing blocks.
+            // The sphere stays so the player can close it again.
             DoorCollisionBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
             InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
             break;

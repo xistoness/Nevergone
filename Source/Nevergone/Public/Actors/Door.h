@@ -50,9 +50,10 @@ class UPathFollowingComponent;
 // walk through (Open), stop, open after AgentOpenDelaySeconds and walk
 // through (Closed), or never offered to pathfinding (Locked, link off).
 //
-// Visuals are decoupled — C++ flips collision and fires BP_OnDoorOpening /
-// BP_OnDoorClosing so the BP subclass can drive the actual animation
-// (timeline rotation, particles, whatever the LD wires up).
+// The leaf swing is C++: DoorMesh yaws OpenAngleDegrees around its pivot
+// (the hinge) over SwingDurationSeconds, always away from whoever opened
+// it, so it never swings into them. The leaf never collides. BP_OnDoorOpening
+// / BP_OnDoorClosing stay as hooks for extra effects, not for the swing.
 //
 // Component layout:
 //   Root (USceneComponent)
@@ -67,8 +68,9 @@ class UPathFollowingComponent;
 // occlusion; while open it has no collision at all.
 //
 // The SceneComponent root keeps the actor pivot independent from the mesh
-// pivot — a swing animation can rotate DoorMesh around its hinge without
-// dragging the box or the sphere along.
+// pivot — the swing rotates DoorMesh around its hinge without dragging the
+// box or the sphere along. The actor pivot need not sit on the floor: the
+// nav link ends find the floor themselves.
 // ---------------------------------------------------------------------------
 UCLASS(Blueprintable)
 class NEVERGONE_API ADoor : public AActor,
@@ -126,8 +128,10 @@ public:
 protected:
 
     virtual void OnConstruction(const FTransform& Transform) override;
+    virtual void PostInitializeComponents() override;
     virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+    virtual void Tick(float DeltaSeconds) override;
 
     // -----------------------------------------------------------------------
     // Configuration — designer-tweakable per placement
@@ -166,6 +170,18 @@ protected:
     float NavLinkHalfLength = 80.f;
 
     // -----------------------------------------------------------------------
+    // Swing
+    // -----------------------------------------------------------------------
+
+    // How far the leaf turns around its pivot when open.
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Swing", meta = (ClampMin = "0.0", ClampMax = "180.0", Units = "deg"))
+    float OpenAngleDegrees = 90.f;
+
+    // Time for a full swing, open or closed.
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Swing", meta = (ClampMin = "0.0", Units = "s"))
+    float SwingDurationSeconds = 0.5f;
+
+    // -----------------------------------------------------------------------
     // Noises — sound for the player and noise for enemies, one asset each.
     // Authored on the Blueprint subclass, so a squeaky door and a quiet one
     // are different subclasses (or per-instance overrides). A null entry is
@@ -193,8 +209,9 @@ protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<USceneComponent> Root;
 
-    // Visual-only door leaf. NEVER configured for collision — see class comment.
-    // BP subclass assigns the StaticMesh asset.
+    // Visual-only door leaf, swung by C++. Never collides, whatever the
+    // Blueprint sets (EnforceLeafWithoutCollision). BP subclass assigns the
+    // StaticMesh asset, with its pivot on the hinge.
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<UStaticMeshComponent> DoorMesh;
 
@@ -269,6 +286,39 @@ private:
     //
     // DoorMesh is never touched here — it stays NoCollision for its entire lifetime.
     void ApplyState();
+
+    // The box's thickness axis in actor space, flat: what the nav link
+    // crosses and the leaf swings towards.
+    FVector GetDoorwayAxis() const;
+
+    // Places the nav link ends across the box, each on the floor below it.
+    void PlaceNavLinkEnds();
+
+    // -----------------------------------------------------------------------
+    // Leaf swing
+    // -----------------------------------------------------------------------
+
+    // Turns off any collision the Blueprint gave DoorMesh.
+    void EnforceLeafWithoutCollision();
+
+    // Records the authored leaf rotation as the closed pose.
+    void CaptureClosedLeaf();
+
+    // +1 or -1: the swing direction that takes the leaf to the side of the
+    // doorway opposite Opener. +1 when it cannot tell.
+    float ChooseSwingSign(const AActor* Opener) const;
+
+    // Swings the leaf towards NewTargetYaw (0 is closed), ticking until there.
+    void StartSwing(float NewTargetYaw);
+
+    void ApplyLeafRotation();
+
+    // Closed leaf pose, relative to the root.
+    FQuat ClosedLeafRotation = FQuat::Identity;
+
+    // Current and target yaw of the leaf away from the closed pose.
+    float SwingYaw = 0.f;
+    float TargetSwingYaw = 0.f;
 
     // Emits one of the door noises at the door leaf, attributed to NoiseInstigator.
     void EmitDoorNoise(const UNoiseDefinition* Noise, const TCHAR* DebugLabel, AActor* NoiseInstigator) const;
