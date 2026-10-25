@@ -809,19 +809,19 @@ void ADoor::HandleAgentReachedLink(UNavLinkCustomComponent* Link, UObject* PathC
         *UEnum::GetValueAsString(CurrentState),
         *UEnum::GetValueAsString(Passage));
 
+    const FAgentMove Move{ PathFollowing, PathFollowing->GetCurrentRequestId(), DestPoint };
+
     switch (Passage)
     {
     case EDoorAgentPassage::Pass:
         PathFollowing->FinishUsingCustomLink(Link);
-        AddCrossingAgent({ PathFollowing, PathFollowing->GetCurrentRequestId() });
+        AddCrossingAgent(Move);
         break;
 
     case EDoorAgentPassage::OpenFirst:
     case EDoorAgentPassage::Barred:
     {
-        const FAIRequestID RequestId = PathFollowing->GetCurrentRequestId();
-
-        PathFollowing->PauseMove(RequestId, EPathFollowingVelocityMode::Reset);
+        PathFollowing->PauseMove(Move.RequestId, EPathFollowingVelocityMode::Reset);
 
         // An agent that re-requested its move while waiting (a chase
         // repath) comes back here with a new request: keep one entry.
@@ -832,11 +832,11 @@ void ADoor::HandleAgentReachedLink(UNavLinkCustomComponent* Link, UObject* PathC
 
         if (Existing)
         {
-            Existing->RequestId = RequestId;
+            *Existing = Move;
         }
         else
         {
-            WaitingAgents.Add({ PathFollowing, RequestId });
+            WaitingAgents.Add(Move);
         }
 
         if (Passage == EDoorAgentPassage::OpenFirst)
@@ -1000,6 +1000,11 @@ void ADoor::AddCrossingAgent(const FAgentMove& Agent)
     });
 
     CrossingAgents.Add(Agent);
+
+    if (IDoorAgent* DoorAgent = Agent.PathFollowing.IsValid() ? Cast<IDoorAgent>(Agent.PathFollowing->GetOwner()) : nullptr)
+    {
+        DoorAgent->HandleDoorCrossing(this, Agent.Exit);
+    }
 }
 
 bool ADoor::IsStillCrossing(const FAgentMove& Agent) const
@@ -1013,8 +1018,11 @@ bool ADoor::IsStillCrossing(const FAgentMove& Agent) const
         return false;
     }
 
-    const AActor* Pawn = GetAgentPawn(PathFollowing);
+    return IsInDoorway(GetAgentPawn(PathFollowing));
+}
 
+bool ADoor::IsInDoorway(const AActor* Pawn) const
+{
     if (!Pawn || !DoorCollisionBox)
     {
         return false;

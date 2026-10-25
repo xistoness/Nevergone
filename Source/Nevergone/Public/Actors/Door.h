@@ -146,6 +146,10 @@ public:
     // True while this agent's move is paused at the door, waiting for it.
     bool IsAgentWaiting(const UPathFollowingComponent* PathFollowing) const;
 
+    // True while Pawn stands between the two ends of the nav link, inside
+    // the doorway carved out of the navmesh.
+    bool IsInDoorway(const AActor* Pawn) const;
+
     // Where every door noise sounds: the centre of the box (the doorway).
     FVector GetNoiseLocation() const;
 
@@ -442,18 +446,21 @@ private:
     // Tells the agent's controller, if it is an IDoorAgent, that the door is barred.
     void NotifyAgentBarred(UPathFollowingComponent* PathFollowing);
 
-    // An agent at the link, and the move request it had there. A new
-    // request (the agent changed its mind) makes the entry stale.
+    // An agent at the link, the move request it had there and the link end
+    // it is heading to. A new request (the agent changed its mind) makes the
+    // entry stale.
     struct FAgentMove
     {
         TWeakObjectPtr<UPathFollowingComponent> PathFollowing;
         FAIRequestID RequestId;
+        FVector Exit = FVector::ZeroVector;
     };
 
     // True while the agent is still paused on the request it had at the door.
     static bool IsStillWaiting(const FAgentMove& Agent);
 
-    // Records an agent that walks the link now, dropping stale entries.
+    // Records an agent that walks the link now, dropping stale entries, and
+    // tells its controller, if it is an IDoorAgent, where it comes out.
     void AddCrossingAgent(const FAgentMove& Agent);
 
     // True while the agent is still on the request it crossed with and has

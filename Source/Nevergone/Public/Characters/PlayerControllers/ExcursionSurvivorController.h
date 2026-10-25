@@ -4,9 +4,11 @@
 
 #include "CoreMinimal.h"
 #include "AIController.h"
+#include "Interfaces/DoorAgent.h"
 #include "ExcursionSurvivorController.generated.h"
 
 class ACharacter;
+class ADoor;
 class AExcursionSurvivorNPC;
 class UExplorationModeComponent;
 enum class EExcursionSurvivorState : uint8;
@@ -28,9 +30,14 @@ enum class EExcursionSurvivorState : uint8;
 //           noise the player did not choose.
 //
 // While Waiting the follower stops, keeps the stance it had and lets go of
-// the sprint. Told to wait halfway through a door, it finishes crossing
-// first: the doorway is carved out of the navmesh. Stamina and panting
-// belong to its own component and keep working in both states.
+// the sprint. Stamina and panting belong to its own component and keep
+// working in both states.
+//
+// The follower never stands still in a doorway: the doorway is carved out of
+// the navmesh, and a path started from there can begin on either side of the
+// door. Told to wait halfway through, it finishes crossing first. A follow
+// move that reaches StopDistance halfway through walks straight on to the
+// link end it was heading to (the door tells it, IDoorAgent).
 //
 // At a latched door the follower waits, its move paused by the door, until
 // somebody opens it.
@@ -39,7 +46,7 @@ enum class EExcursionSurvivorState : uint8;
 // the party leader mid-excursion needs no notification.
 // ---------------------------------------------------------------------------
 UCLASS()
-class NEVERGONE_API AExcursionSurvivorController : public AAIController
+class NEVERGONE_API AExcursionSurvivorController : public AAIController, public IDoorAgent
 {
 	GENERATED_BODY()
 
@@ -52,6 +59,15 @@ public:
 	virtual void OnUnPossess() override;
 
 	virtual void Tick(float DeltaTime) override;
+
+	virtual void OnMoveCompleted(FAIRequestID RequestID, const FPathFollowingResult& Result) override;
+
+	// --- IDoorAgent ---
+
+	// Nothing to do at a latched door: the follower waits there.
+	virtual void HandleDoorBarred(ADoor* Door) override {}
+
+	virtual void HandleDoorCrossing(ADoor* Door, const FVector& Exit) override;
 
 protected:
 
@@ -87,8 +103,26 @@ private:
 
 	ACharacter* GetLeader() const;
 
-	// A stop asked while walking a nav link: done once the pawn is off it.
+	// Walks straight to the exit of the door last crossed.
+	void LeaveDoorway();
+
+	// True while walking a nav link, or walking out of a doorway.
+	bool IsCrossingDoorway() const;
+
+	// A stop asked while crossing a doorway: done once the pawn is out.
 	bool bStopAfterNavLink = false;
+
+	// The door whose nav link the follower last walked, and where it comes
+	// out on the far side.
+	TWeakObjectPtr<ADoor> CrossingDoor;
+
+	FVector CrossingExit = FVector::ZeroVector;
+
+	// A move ended in the doorway: the next tick walks out of it.
+	bool bLeaveDoorwayPending = false;
+
+	// The move walking out of the doorway, while it runs.
+	FAIRequestID DoorwayExitRequest;
 
 	TWeakObjectPtr<AExcursionSurvivorNPC> ControlledSurvivor;
 
