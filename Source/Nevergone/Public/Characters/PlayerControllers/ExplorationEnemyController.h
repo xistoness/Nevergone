@@ -6,6 +6,7 @@
 #include "AIController.h"
 #include "EngineTools/AINavLinks.h"
 #include "Interfaces/DoorAgent.h"
+#include "Types/CaptureTypes.h"
 #include "Types/DoorTypes.h"
 #include "Types/ExplorationEnemyTypes.h"
 #include "Types/ExplorationSuspicion.h"
@@ -76,10 +77,12 @@ enum class EExplorationSenseChannel : uint8;
 // and only runs the new state, once it is out (DoesStateWaitForDoorway).
 // A move that ends inside the doorway it crossed walks on to the link end.
 //
-// No capture through a door: within CatchDistance, a closed, latched or
-// locked door between the enemy and its target (ADoor::FindClosedDoorBetween)
-// holds the catch, and the chase heads for the target's own spot so its path
-// runs through the door: the enemy opens it, or knocks until it breaks.
+// No capture without a free line (FindCaptureLineBlock): within
+// CatchDistance, a closed, latched or locked door between the enemy and its
+// target (ADoor::FindClosedDoorBetween), or fixed scenery across the line
+// between them (a wall, a door frame), holds the catch. The chase then heads
+// for the target's own spot so its path runs through the door (the enemy
+// opens it, or knocks until it breaks) or around the wall.
 //
 // Escalation differs per sense: hearing only ever causes Investigate, sight
 // needs TimeToConfirmSeconds of contact (spent in Suspicious, short losses
@@ -220,6 +223,12 @@ private:
 	// True while the move is paused at the latched KnockDoor.
 	bool IsKnocking() const;
 
+	// The one place the line between the enemy and Target is judged for a
+	// capture: the closed door rule first, then a trace for fixed scenery
+	// between the two capsule centres (CaptureRules). OutBlocker is the door
+	// or the scenery actor hit, null for a free line (or BSP).
+	ECaptureLineBlock FindCaptureLineBlock(const AActor* Target, const AActor*& OutBlocker) const;
+
 	void ForgetDoorKnock();
 
 	// True when the current state waits to start until the pawn is out of
@@ -341,6 +350,9 @@ private:
 
 	FDoorwayCrossing DoorwayCrossing;
 
-	// The door holding up the catch of the chase target, for the log.
-	TWeakObjectPtr<const ADoor> CatchBlockingDoor;
+	// What holds up the catch of the chase target within CatchDistance, and
+	// the door or scenery actor doing it, for the log.
+	ECaptureLineBlock CatchBlock = ECaptureLineBlock::None;
+
+	TWeakObjectPtr<const AActor> CatchBlocker;
 };

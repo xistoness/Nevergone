@@ -10,8 +10,11 @@
 #include "Characters/ExplorationEnemyCharacter.h"
 #include "Data/ExplorationEnemyDefinition.h"
 #include "EngineTools/AINavLinks.h"
+#include "EngineTools/CollisionChannels.h"
 #include "World/ExcursionEncounterSubsystem.h"
 
+#include "Components/PrimitiveComponent.h"
+#include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "Kismet/GameplayStatics.h"
 #include "NavigationSystem.h"
@@ -23,10 +26,15 @@ namespace ExplorationEnemyAI
 	// already investigating) points at the same place.
 	static constexpr float SamePlaceRadius = 100.0f;
 
-	// Acceptance of a chase move while a closed door stands between the
-	// enemy and its target: well under any distance across a closed door,
-	// and the catch happens at CatchDistance long before it is reached.
-	static constexpr float DoorBlockedChaseAcceptanceRadius = 10.0f;
+	// Acceptance of a chase move while a closed door or a wall stands
+	// between the enemy and its target: well under any distance across a
+	// door or a wall, and the catch happens at CatchDistance long before it
+	// is reached.
+	static constexpr float LineBlockedChaseAcceptanceRadius = 10.0f;
+
+	// Hits on the capture line that are not scenery (a closed door's box, a
+	// ragdoll) skipped before the line is taken as free.
+	static constexpr int32 MaxCaptureLineSkippedHits = 8;
 }
 
 AExplorationEnemyController::AExplorationEnemyController()
@@ -103,7 +111,8 @@ void AExplorationEnemyController::OnUnPossess()
 	bPatrolStartPending = false;
 	bStateStartAfterDoorway = false;
 	DoorwayCrossing.Reset();
-	CatchBlockingDoor = nullptr;
+	CatchBlock = ECaptureLineBlock::None;
+	CatchBlocker = nullptr;
 
 	Super::OnUnPossess();
 }
@@ -161,7 +170,8 @@ void AExplorationEnemyController::EnterState(EExplorationEnemyState NewState)
 	case EExplorationEnemyState::Chase:
 		TimeSinceLastContact = 0.0f;
 		TimeSinceRepath = ChaseRepathInterval;
-		CatchBlockingDoor = nullptr;
+		CatchBlock = ECaptureLineBlock::None;
+		CatchBlocker = nullptr;
 		break;
 
 	case EExplorationEnemyState::Catch:
@@ -964,29 +974,41 @@ void AExplorationEnemyController::TickChase(float DeltaTime)
 		return;
 	}
 
-	// A closed door between them is a wall for the capture, however close
+	// A closed door or a wall between them holds the capture, however close
 	// they stand. It also changes the chase move below.
-	const ADoor* BlockingDoor = ADoor::FindClosedDoorBetween(GetWorld(),
-		ControlledEnemy->GetActorLocation(), Target->GetActorLocation());
+	const AActor* LineBlocker = nullptr;
+
+	const ECaptureLineBlock LineBlock = FindCaptureLineBlock(Target, LineBlocker);
 
 	const bool bWithinCatchDistance = ControlledEnemy->IsWithinCatchDistance(Target);
 
-	const ADoor* CatchDoor = bWithinCatchDistance ? BlockingDoor : nullptr;
+	const ECaptureLineBlock HeldBlock = bWithinCatchDistance ? LineBlock : ECaptureLineBlock::None;
 
-	if (CatchDoor != CatchBlockingDoor.Get())
+	const AActor* HeldBlocker = bWithinCatchDistance ? LineBlocker : nullptr;
+
+	if (HeldBlock != CatchBlock || HeldBlocker != CatchBlocker.Get())
 	{
-		if (CatchDoor)
+		if (HeldBlock == ECaptureLineBlock::ClosedDoor)
 		{
+			const ADoor* Door = Cast<ADoor>(HeldBlocker);
+
 			UE_LOG(LogNevergone, Verbose,
 				TEXT("[ExplorationEnemyController] %s cannot catch %s through %s (%s); it goes through the door first"),
-				*GetNameSafe(ControlledEnemy.Get()), *GetNameSafe(Target), *GetNameSafe(CatchDoor),
-				*UEnum::GetValueAsString(CatchDoor->GetState()));
+				*GetNameSafe(ControlledEnemy.Get()), *GetNameSafe(Target), *GetNameSafe(Door),
+				Door ? *UEnum::GetValueAsString(Door->GetState()) : TEXT("?"));
+		}
+		else if (HeldBlock == ECaptureLineBlock::Scenery)
+		{
+			UE_LOG(LogNevergone, Verbose,
+				TEXT("[ExplorationEnemyController] %s cannot catch %s through %s (scenery); it goes around"),
+				*GetNameSafe(ControlledEnemy.Get()), *GetNameSafe(Target), *GetNameSafe(HeldBlocker));
 		}
 
-		CatchBlockingDoor = CatchDoor;
+		CatchBlock = HeldBlock;
+		CatchBlocker = HeldBlocker;
 	}
 
-	if (bWithinCatchDistance && !BlockingDoor)
+	if (CaptureRules::CanCatch(bWithinCatchDistance, LineBlock))
 	{
 		UExcursionEncounterSubsystem* Encounter = UExcursionEncounterSubsystem::Get(this);
 
@@ -1077,12 +1099,13 @@ void AExplorationEnemyController::TickChase(float DeltaTime)
 
 		// While tracking, chase the live actor. Once the window closes, run to
 		// the last remembered location instead of following through walls.
-		if (bIsTracking && BlockingDoor)
+		if (bIsTracking && LineBlock != ECaptureLineBlock::None)
 		{
 			// The target's own spot, with no overlap: the usual reach test is
-			// a straight distance and, close to the door, would call the move
-			// done on this side of it. The path has to run through the door.
-			MoveToActor(Target, ExplorationEnemyAI::DoorBlockedChaseAcceptanceRadius, /*bStopOnOverlap=*/false);
+			// a straight distance and, close to the door or the wall, would
+			// call the move done on this side of it. The path has to run
+			// through the door or around the wall.
+			MoveToActor(Target, ExplorationEnemyAI::LineBlockedChaseAcceptanceRadius, /*bStopOnOverlap=*/false);
 		}
 		else if (bIsTracking)
 		{
@@ -1199,6 +1222,73 @@ bool AExplorationEnemyController::IsKnocking() const
 	const ADoor* Door = KnockDoor.Get();
 
 	return Door && Door->IsLatched() && Door->IsAgentWaiting(GetPathFollowingComponent());
+}
+
+ECaptureLineBlock AExplorationEnemyController::FindCaptureLineBlock(const AActor* Target, const AActor*& OutBlocker) const
+{
+	OutBlocker = nullptr;
+
+	const UWorld* World = GetWorld();
+
+	if (!World || !ControlledEnemy.IsValid() || !Target)
+	{
+		return ECaptureLineBlock::None;
+	}
+
+	// Capsule centre to capsule centre, about 96 cm off the floor: furniture
+	// lower than that is reached over, walls and door frames are not.
+	const FVector From = ControlledEnemy->GetActorLocation();
+
+	const FVector To = Target->GetActorLocation();
+
+	if (const ADoor* Door = ADoor::FindClosedDoorBetween(World, From, To))
+	{
+		OutBlocker = Door;
+
+		return CaptureRules::ResolveLineBlock(/*bClosedDoorBetween=*/true, /*bSceneryBetween=*/false);
+	}
+
+	// Never the visibility channel: the open leaf blocks it. Noise occlusion
+	// is blocked by walls and ignored by the leaf, knockable props and
+	// characters. Whatever else still stops the trace without being scenery
+	// (a closed door's box, a ragdoll) is skipped and the trace repeated.
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(ExplorationCaptureLine), false);
+	Params.AddIgnoredActor(ControlledEnemy.Get());
+	Params.AddIgnoredActor(Target);
+
+	bool bSceneryBetween = false;
+
+	FHitResult Hit;
+
+	for (int32 Skipped = 0; Skipped < ExplorationEnemyAI::MaxCaptureLineSkippedHits; ++Skipped)
+	{
+		if (!World->LineTraceSingleByChannel(Hit, From, To, NevergoneCollision::NoiseOcclusion, Params))
+		{
+			break;
+		}
+
+		const UPrimitiveComponent* HitComponent = Hit.GetComponent();
+
+		if (!HitComponent)
+		{
+			break;
+		}
+
+		const bool bPartOfDoor = Cast<ADoor>(Hit.GetActor()) != nullptr;
+
+		if (CaptureRules::IsSceneryHit(HitComponent->GetCollisionObjectType(), bPartOfDoor))
+		{
+			bSceneryBetween = true;
+
+			OutBlocker = Hit.GetActor();
+
+			break;
+		}
+
+		Params.AddIgnoredComponent(HitComponent);
+	}
+
+	return CaptureRules::ResolveLineBlock(/*bClosedDoorBetween=*/false, bSceneryBetween);
 }
 
 void AExplorationEnemyController::ForgetDoorKnock()
