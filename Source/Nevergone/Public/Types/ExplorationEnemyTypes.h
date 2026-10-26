@@ -187,7 +187,7 @@ struct FExplorationEnemySignal
 };
 
 // ---------------------------------------------------------------------------
-// FExplorationEnemyScreamSignal
+// FExplorationEnemyNoiseSignal
 //
 // A signal whose sound is a noise: the chase scream, knocking at a door and
 // breaking it. The sound is the noise's own: it is emitted through
@@ -195,7 +195,7 @@ struct FExplorationEnemySignal
 // sound on top would play it twice.
 // ---------------------------------------------------------------------------
 USTRUCT(BlueprintType)
-struct FExplorationEnemyScreamSignal
+struct FExplorationEnemyNoiseSignal
 {
 	GENERATED_BODY()
 

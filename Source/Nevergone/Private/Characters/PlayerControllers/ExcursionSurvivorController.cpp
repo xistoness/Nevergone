@@ -6,17 +6,10 @@
 #include "ActorComponents/ExplorationModeComponent.h"
 #include "Actors/Door.h"
 #include "Characters/ExcursionSurvivorNPC.h"
-#include "EngineTools/AINavLinks.h"
 
 #include "GameFramework/Character.h"
 #include "Kismet/GameplayStatics.h"
 #include "Navigation/PathFollowingComponent.h"
-
-namespace ExcursionSurvivorAI
-{
-	// How close to the link end the walk out of a doorway gets.
-	static constexpr float DoorwayExitAcceptanceRadius = 20.0f;
-}
 
 AExcursionSurvivorController::AExcursionSurvivorController()
 {
@@ -64,8 +57,7 @@ void AExcursionSurvivorController::OnUnPossess()
 	StopMovement();
 
 	bStopAfterNavLink = false;
-	bLeaveDoorwayPending = false;
-	CrossingDoor = nullptr;
+	DoorwayCrossing.Reset();
 
 	ControlledSurvivor = nullptr;
 	SurvivorMode = nullptr;
@@ -85,12 +77,7 @@ void AExcursionSurvivorController::Tick(float DeltaTime)
 		return;
 	}
 
-	if (bLeaveDoorwayPending)
-	{
-		bLeaveDoorwayPending = false;
-
-		LeaveDoorway();
-	}
+	DoorwayCrossing.Tick(*this);
 
 	// Told to wait halfway through a door: it stops once across.
 	if (bStopAfterNavLink && !IsCrossingDoorway())
@@ -176,7 +163,7 @@ void AExcursionSurvivorController::HandleSurvivorStateChanged(AExcursionSurvivor
 		break;
 
 	case EExcursionSurvivorState::Dead:
-		bLeaveDoorwayPending = false;
+		DoorwayCrossing.Reset();
 		StopMovement();
 		break;
 
@@ -261,79 +248,19 @@ void AExcursionSurvivorController::TickFollow(ACharacter* Leader)
 
 void AExcursionSurvivorController::HandleDoorCrossing(ADoor* Door, const FVector& Exit)
 {
-	CrossingDoor = Door;
-	CrossingExit = Exit;
+	DoorwayCrossing.HandleDoorCrossing(Door, Exit);
 }
 
 void AExcursionSurvivorController::OnMoveCompleted(FAIRequestID RequestID, const FPathFollowingResult& Result)
 {
 	Super::OnMoveCompleted(RequestID, Result);
 
-	// Out of the doorway, or stopped on the way out: that crossing is done.
-	if (DoorwayExitRequest.IsValid() && RequestID == DoorwayExitRequest)
-	{
-		DoorwayExitRequest = FAIRequestID::InvalidRequest;
-		CrossingDoor = nullptr;
-
-		return;
-	}
-
-	const ADoor* Door = CrossingDoor.Get();
-
-	if (!Door)
-	{
-		return;
-	}
-
-	// Only a move that arrived counts: an aborted one was stopped on
-	// purpose, and a stop halfway through is postponed before it gets here.
-	if (Result.IsSuccess() && Door->IsInDoorway(GetPawn()))
-	{
-		bLeaveDoorwayPending = true;
-
-		return;
-	}
-
-	CrossingDoor = nullptr;
-}
-
-void AExcursionSurvivorController::LeaveDoorway()
-{
-	if (!CrossingDoor.IsValid() || !GetPawn())
-	{
-		return;
-	}
-
-	// Straight along the link: the doorway has no navmesh to path on.
-	const EPathFollowingRequestResult::Type Result = MoveToLocation(
-		CrossingExit,
-		ExcursionSurvivorAI::DoorwayExitAcceptanceRadius,
-		/*bStopOnOverlap=*/false,
-		/*bUsePathfinding=*/false);
-
-	if (Result == EPathFollowingRequestResult::RequestSuccessful)
-	{
-		DoorwayExitRequest = GetCurrentMoveRequestID();
-
-		UE_LOG(LogNevergone, Verbose,
-			TEXT("[ExcursionSurvivorController] %s stopped in the doorway of %s and walks out of it"),
-			*GetNameSafe(GetPawn()), *GetNameSafe(CrossingDoor.Get()));
-	}
-	else
-	{
-		// Already at the exit (AlreadyAtGoal completes the move at once).
-		bLeaveDoorwayPending = false;
-		CrossingDoor = nullptr;
-	}
+	DoorwayCrossing.HandleMoveCompleted(*this, RequestID, Result);
 }
 
 bool AExcursionSurvivorController::IsCrossingDoorway() const
 {
-	const bool bLeavingDoorway = DoorwayExitRequest.IsValid() &&
-		GetCurrentMoveRequestID() == DoorwayExitRequest &&
-		GetMoveStatus() != EPathFollowingStatus::Idle;
-
-	return bLeaveDoorwayPending || bLeavingDoorway || NevergoneAI::IsWalkingNavLink(*this);
+	return DoorwayCrossing.IsCrossing(*this);
 }
 
 // ---------------------------------------------------------------------------

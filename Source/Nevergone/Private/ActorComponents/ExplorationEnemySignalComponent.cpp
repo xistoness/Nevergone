@@ -168,7 +168,7 @@ void UExplorationEnemySignalComponent::HandleDoorSignal(EExplorationEnemySignalM
 // One-shot signals
 // ---------------------------------------------------------------------------
 
-void UExplorationEnemySignalComponent::PlayDoorSignal(const FExplorationEnemyScreamSignal& Signal, ADoor* Door,
+void UExplorationEnemySignalComponent::PlayDoorSignal(const FExplorationEnemyNoiseSignal& Signal, ADoor* Door,
 	const TCHAR* MomentName)
 {
 	PlayMontage(Signal.Montage, MomentName);
@@ -223,7 +223,7 @@ void UExplorationEnemySignalComponent::PlaySignal(const FExplorationEnemySignal&
 	}
 }
 
-void UExplorationEnemySignalComponent::PlayChaseSignal(const FExplorationEnemyScreamSignal& Signal)
+void UExplorationEnemySignalComponent::PlayChaseSignal(const FExplorationEnemyNoiseSignal& Signal)
 {
 	PlayMontage(Signal.Montage, TEXT("chase"));
 

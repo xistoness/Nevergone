@@ -22,6 +22,11 @@ namespace ExplorationEnemyAI
 	// A place noise this close to a point the enemy is already at (or
 	// already investigating) points at the same place.
 	static constexpr float SamePlaceRadius = 100.0f;
+
+	// Acceptance of a chase move while a closed door stands between the
+	// enemy and its target: well under any distance across a closed door,
+	// and the catch happens at CatchDistance long before it is reached.
+	static constexpr float DoorBlockedChaseAcceptanceRadius = 10.0f;
 }
 
 AExplorationEnemyController::AExplorationEnemyController()
@@ -96,7 +101,9 @@ void AExplorationEnemyController::OnUnPossess()
 	ForgetDoorKnock();
 
 	bPatrolStartPending = false;
-	bStopAfterNavLink = false;
+	bStateStartAfterDoorway = false;
+	DoorwayCrossing.Reset();
+	CatchBlockingDoor = nullptr;
 
 	Super::OnUnPossess();
 }
@@ -121,8 +128,8 @@ void AExplorationEnemyController::EnterState(EExplorationEnemyState NewState)
 	// knowing the controller exists.
 	ControlledEnemy->SetBehaviorState(NewState);
 
-	// A stop still waiting for the nav link belonged to the previous state.
-	bStopAfterNavLink = false;
+	// A start still waiting for the doorway belonged to the previous state.
+	bStateStartAfterDoorway = false;
 
 	switch (NewState)
 	{
@@ -130,12 +137,21 @@ void AExplorationEnemyController::EnterState(EExplorationEnemyState NewState)
 		Suspicion.Reset();
 		TimeSinceLastContact = 0.0f;
 		ForgetDoorKnock();
-		StartPatrol();
+
+		// Giving up halfway through a door: across first, then back to the
+		// post or the route.
+		if (!DeferStateStartToDoorwayExit())
+		{
+			StartPatrol();
+		}
 		break;
 
 	case EExplorationEnemyState::Suspicious:
 		// Stand still: the turn towards the survivor is the whole beat.
-		StopMovementAfterNavLink();
+		if (!DeferStateStartToDoorwayExit())
+		{
+			StopMovement();
+		}
 		break;
 
 	case EExplorationEnemyState::Investigate:
@@ -145,14 +161,18 @@ void AExplorationEnemyController::EnterState(EExplorationEnemyState NewState)
 	case EExplorationEnemyState::Chase:
 		TimeSinceLastContact = 0.0f;
 		TimeSinceRepath = ChaseRepathInterval;
+		CatchBlockingDoor = nullptr;
 		break;
 
 	case EExplorationEnemyState::Catch:
 	case EExplorationEnemyState::KnockedDown:
+		// The capture places the body, wherever it stood.
+		DoorwayCrossing.Reset();
 		StopMovement();
 		break;
 
 	case EExplorationEnemyState::Dead:
+		DoorwayCrossing.Reset();
 		StopMovement();
 		ChaseTarget = nullptr;
 		ConfirmTarget = nullptr;
@@ -210,6 +230,9 @@ void AExplorationEnemyController::Tick(float DeltaTime)
 	default:
 		break;
 	}
+
+	// A move that ended in a doorway walks out of it.
+	DoorwayCrossing.Tick(*this);
 
 	// Sight escalation is handled here rather than in the sensed handler, so a
 	// survivor standing still in view still accumulates contact time: the
@@ -297,22 +320,18 @@ void AExplorationEnemyController::Tick(float DeltaTime)
 		Suspicion.Reset();
 	}
 
-	// A stop asked halfway through a door: the state already changed, the
-	// body finishes crossing first.
-	if (bStopAfterNavLink)
+	// A state entered halfway through a door: it already changed, the body
+	// finishes crossing first.
+	if (bStateStartAfterDoorway)
 	{
-		if (NevergoneAI::IsWalkingNavLink(*this))
+		if (DoorwayCrossing.IsCrossing(*this))
 		{
 			return;
 		}
 
-		bStopAfterNavLink = false;
+		bStateStartAfterDoorway = false;
 
-		StopMovement();
-
-		UE_LOG(LogNevergone, Verbose,
-			TEXT("[ExplorationEnemyController] %s is off the nav link and stops"),
-			*GetNameSafe(ControlledEnemy.Get()));
+		StartStateAfterDoorway();
 	}
 
 	TickDoorKnock(DeltaTime);
@@ -764,7 +783,10 @@ void AExplorationEnemyController::BeginInvestigation()
 	bInvestigateMoveIssued = false;
 	bIsSearching = false;
 
-	StopMovementAfterNavLink();
+	if (!DeferStateStartToDoorwayExit())
+	{
+		StopMovement();
+	}
 
 	// Face the stimulus before travelling to it. The eyes follow the body,
 	// so turning in place is what lets the enemy spot a survivor who is
@@ -942,7 +964,29 @@ void AExplorationEnemyController::TickChase(float DeltaTime)
 		return;
 	}
 
-	if (ControlledEnemy->IsWithinCatchDistance(Target))
+	// A closed door between them is a wall for the capture, however close
+	// they stand. It also changes the chase move below.
+	const ADoor* BlockingDoor = ADoor::FindClosedDoorBetween(GetWorld(),
+		ControlledEnemy->GetActorLocation(), Target->GetActorLocation());
+
+	const bool bWithinCatchDistance = ControlledEnemy->IsWithinCatchDistance(Target);
+
+	const ADoor* CatchDoor = bWithinCatchDistance ? BlockingDoor : nullptr;
+
+	if (CatchDoor != CatchBlockingDoor.Get())
+	{
+		if (CatchDoor)
+		{
+			UE_LOG(LogNevergone, Verbose,
+				TEXT("[ExplorationEnemyController] %s cannot catch %s through %s (%s); it goes through the door first"),
+				*GetNameSafe(ControlledEnemy.Get()), *GetNameSafe(Target), *GetNameSafe(CatchDoor),
+				*UEnum::GetValueAsString(CatchDoor->GetState()));
+		}
+
+		CatchBlockingDoor = CatchDoor;
+	}
+
+	if (bWithinCatchDistance && !BlockingDoor)
 	{
 		UExcursionEncounterSubsystem* Encounter = UExcursionEncounterSubsystem::Get(this);
 
@@ -1015,15 +1059,15 @@ void AExplorationEnemyController::TickChase(float DeltaTime)
 
 	TimeSinceRepath += DeltaTime;
 
-	// Not while walking a nav link (a door): the repath runs as soon as the
-	// enemy is off the link. An enemy paused at a closed door is still at
-	// the link start, on the navmesh, and may change its route.
-	if (NevergoneAI::IsWalkingNavLink(*this))
+	// Not while crossing a doorway: the repath runs as soon as the enemy is
+	// out of it. An enemy paused at a closed door is still at the link
+	// start, on the navmesh, and may change its route.
+	if (DoorwayCrossing.IsCrossing(*this))
 	{
 		if (bRepathDue)
 		{
 			UE_LOG(LogNevergone, Verbose,
-				TEXT("[ExplorationEnemyController] %s chase repath postponed while on a nav link"),
+				TEXT("[ExplorationEnemyController] %s chase repath postponed while crossing a doorway"),
 				*GetNameSafe(ControlledEnemy.Get()));
 		}
 	}
@@ -1033,7 +1077,14 @@ void AExplorationEnemyController::TickChase(float DeltaTime)
 
 		// While tracking, chase the live actor. Once the window closes, run to
 		// the last remembered location instead of following through walls.
-		if (bIsTracking)
+		if (bIsTracking && BlockingDoor)
+		{
+			// The target's own spot, with no overlap: the usual reach test is
+			// a straight distance and, close to the door, would call the move
+			// done on this side of it. The path has to run through the door.
+			MoveToActor(Target, ExplorationEnemyAI::DoorBlockedChaseAcceptanceRadius, /*bStopOnOverlap=*/false);
+		}
+		else if (bIsTracking)
 		{
 			MoveToActor(Target, ControlledEnemy->GetCatchDistance() * 0.5f);
 		}
@@ -1157,20 +1208,75 @@ void AExplorationEnemyController::ForgetDoorKnock()
 	DoorKnocks.Reset();
 }
 
-void AExplorationEnemyController::StopMovementAfterNavLink()
+void AExplorationEnemyController::HandleDoorCrossing(ADoor* Door, const FVector& Exit)
 {
-	if (!NevergoneAI::IsWalkingNavLink(*this))
-	{
-		StopMovement();
+	DoorwayCrossing.HandleDoorCrossing(Door, Exit);
+}
 
+void AExplorationEnemyController::OnMoveCompleted(FAIRequestID RequestID, const FPathFollowingResult& Result)
+{
+	Super::OnMoveCompleted(RequestID, Result);
+
+	DoorwayCrossing.HandleMoveCompleted(*this, RequestID, Result);
+}
+
+bool AExplorationEnemyController::DoesStateWaitForDoorway(EExplorationEnemyState State)
+{
+	switch (State)
+	{
+	case EExplorationEnemyState::Idle:
+	case EExplorationEnemyState::Patrol:
+	case EExplorationEnemyState::Suspicious:
+	case EExplorationEnemyState::Investigate:
+		return true;
+
+	default:
+		return false;
+	}
+}
+
+bool AExplorationEnemyController::DeferStateStartToDoorwayExit()
+{
+	if (bStateStartAfterDoorway)
+	{
+		return true;
+	}
+
+	if (!ControlledEnemy.IsValid() ||
+		!DoesStateWaitForDoorway(ControlledEnemy->GetBehaviorState()) ||
+		!DoorwayCrossing.IsCrossing(*this))
+	{
+		return false;
+	}
+
+	bStateStartAfterDoorway = true;
+
+	UE_LOG(LogNevergone, Verbose,
+		TEXT("[ExplorationEnemyController] %s enters %s halfway through a doorway; it starts once out of it"),
+		*GetNameSafe(ControlledEnemy.Get()), *UEnum::GetValueAsString(ControlledEnemy->GetBehaviorState()));
+
+	return true;
+}
+
+void AExplorationEnemyController::StartStateAfterDoorway()
+{
+	if (!ControlledEnemy.IsValid())
+	{
 		return;
 	}
 
-	bStopAfterNavLink = true;
-
 	UE_LOG(LogNevergone, Verbose,
-		TEXT("[ExplorationEnemyController] %s stop postponed until it is off the nav link"),
-		*GetNameSafe(ControlledEnemy.Get()));
+		TEXT("[ExplorationEnemyController] %s is out of the doorway and starts %s"),
+		*GetNameSafe(ControlledEnemy.Get()), *UEnum::GetValueAsString(ControlledEnemy->GetBehaviorState()));
+
+	if (ControlledEnemy->GetBehaviorState() == EExplorationEnemyState::Patrol)
+	{
+		StartPatrol();
+	}
+	else
+	{
+		StopMovement();
+	}
 }
 
 // ---------------------------------------------------------------------------

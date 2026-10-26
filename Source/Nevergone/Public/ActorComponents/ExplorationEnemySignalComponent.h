@@ -68,12 +68,12 @@ private:
 	void HandleDoorSignal(EExplorationEnemySignalMoment Moment, ADoor* Door);
 
 	// Plays the montage and emits the noise at the door.
-	void PlayDoorSignal(const FExplorationEnemyScreamSignal& Signal, ADoor* Door, const TCHAR* MomentName);
+	void PlayDoorSignal(const FExplorationEnemyNoiseSignal& Signal, ADoor* Door, const TCHAR* MomentName);
 
 	// Plays the montage and the one-shot sound of a signal.
 	void PlaySignal(const FExplorationEnemySignal& Signal, const TCHAR* MomentName);
 
-	void PlayChaseSignal(const FExplorationEnemyScreamSignal& Signal);
+	void PlayChaseSignal(const FExplorationEnemyNoiseSignal& Signal);
 
 	void PlayMontage(UAnimMontage* Montage, const TCHAR* MomentName);
 

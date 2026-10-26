@@ -146,6 +146,38 @@ float DoorRules::ChooseSwingSign(float OpenerSide, const FVector& LeafCentre, fl
 	return (SwungSide * OpenerSide <= 0.f) ? 1.f : -1.f;
 }
 
+bool DoorRules::DoesDoorBlockCapture(EDoorState State)
+{
+	switch (State)
+	{
+	case EDoorState::Locked:
+	case EDoorState::Closed:
+	case EDoorState::Latched:
+		return true;
+
+	case EDoorState::Open:
+	case EDoorState::Broken:
+	default:
+		return false;
+	}
+}
+
+bool DoorRules::DoesSegmentCrossDoorway(const FVector& LocalFrom, const FVector& LocalTo, const FVector& BoxExtent)
+{
+	// Strictly on opposite sides of the door plane.
+	if (LocalFrom.X * LocalTo.X >= 0.f)
+	{
+		return false;
+	}
+
+	// Where the segment meets the plane.
+	const float Alpha = LocalFrom.X / (LocalFrom.X - LocalTo.X);
+
+	const FVector Crossing = FMath::Lerp(LocalFrom, LocalTo, Alpha);
+
+	return FMath::Abs(Crossing.Y) <= BoxExtent.Y && FMath::Abs(Crossing.Z) <= BoxExtent.Z;
+}
+
 float DoorRules::GetJoltOffset(float ElapsedSeconds, float DurationSeconds, float AngleDegrees)
 {
 	if (DurationSeconds <= 0.f || ElapsedSeconds <= 0.f || ElapsedSeconds >= DurationSeconds)

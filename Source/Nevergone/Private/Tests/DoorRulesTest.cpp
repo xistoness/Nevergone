@@ -2,7 +2,9 @@
 
 #include "Misc/AutomationTest.h"
 #include "Nevergone.h"
+#include "Characters/PlayerControllers/ExplorationEnemyController.h"
 #include "Data/NoiseDefinition.h"
+#include "EngineTools/AINavLinks.h"
 #include "Types/DoorTypes.h"
 #include "World/ExcursionNoiseSubsystem.h"
 
@@ -308,6 +310,77 @@ bool FNevergoneNoiseSourceLogTest::RunTest(const FString& Parameters)
 	OtherDoor->MarkAsGarbage();
 
 	TestNull(TEXT("Destroyed source: no source"), Log.Find(Enemy, At, Knock, 10.3));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FNevergoneDoorCaptureBlockTest, "Nevergone.Excursion.DoorCaptureBlock",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::ProductFilter)
+
+bool FNevergoneDoorCaptureBlockTest::RunTest(const FString& Parameters)
+{
+	TestTrue(TEXT("Closed door blocks the capture"), DoorRules::DoesDoorBlockCapture(EDoorState::Closed));
+	TestTrue(TEXT("Latched door blocks the capture"), DoorRules::DoesDoorBlockCapture(EDoorState::Latched));
+	TestTrue(TEXT("Locked door blocks the capture"), DoorRules::DoesDoorBlockCapture(EDoorState::Locked));
+	TestFalse(TEXT("Open door: the leaf hides, but does not block"), DoorRules::DoesDoorBlockCapture(EDoorState::Open));
+	TestFalse(TEXT("Broken door does not block"), DoorRules::DoesDoorBlockCapture(EDoorState::Broken));
+
+	// The default box: 10 thick, 120 wide, 200 tall, in its own frame.
+	const FVector Extent(5.0, 60.0, 100.0);
+
+	TestTrue(TEXT("Enemy and victim on either side, across the doorway"),
+		DoorRules::DoesSegmentCrossDoorway(FVector(-80.0, 0.0, -10.0), FVector(45.0, 10.0, -10.0), Extent));
+
+	TestTrue(TEXT("Crossing at an angle, still within the width"),
+		DoorRules::DoesSegmentCrossDoorway(FVector(-60.0, -80.0, 0.0), FVector(60.0, 80.0, 0.0), Extent));
+
+	TestFalse(TEXT("Both on the same side"),
+		DoorRules::DoesSegmentCrossDoorway(FVector(-80.0, 0.0, 0.0), FVector(-30.0, 20.0, 0.0), Extent));
+
+	TestFalse(TEXT("Across the plane but beside the doorway (through the wall)"),
+		DoorRules::DoesSegmentCrossDoorway(FVector(-50.0, 90.0, 0.0), FVector(50.0, 90.0, 0.0), Extent));
+
+	TestFalse(TEXT("Across the plane above the doorway"),
+		DoorRules::DoesSegmentCrossDoorway(FVector(-50.0, 0.0, 150.0), FVector(50.0, 0.0, 150.0), Extent));
+
+	TestFalse(TEXT("A point on the plane is on neither side"),
+		DoorRules::DoesSegmentCrossDoorway(FVector(0.0, 0.0, 0.0), FVector(60.0, 0.0, 0.0), Extent));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FNevergoneDoorwayStopTest, "Nevergone.Excursion.DoorwayStop",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::ProductFilter)
+
+bool FNevergoneDoorwayStopTest::RunTest(const FString& Parameters)
+{
+	auto Waits = [](EExplorationEnemyState State)
+	{
+		return AExplorationEnemyController::DoesStateWaitForDoorway(State);
+	};
+
+	// The states that stop the enemy or send it elsewhere start once across.
+	TestTrue(TEXT("Idle waits for the doorway"), Waits(EExplorationEnemyState::Idle));
+	TestTrue(TEXT("Giving up (Patrol) waits for the doorway"), Waits(EExplorationEnemyState::Patrol));
+	TestTrue(TEXT("Suspicious waits for the doorway"), Waits(EExplorationEnemyState::Suspicious));
+	TestTrue(TEXT("Investigate waits for the doorway"), Waits(EExplorationEnemyState::Investigate));
+
+	// A chase must still catch; the capture states place the body.
+	TestFalse(TEXT("Chase starts at once"), Waits(EExplorationEnemyState::Chase));
+	TestFalse(TEXT("Catch starts at once"), Waits(EExplorationEnemyState::Catch));
+	TestFalse(TEXT("Knockdown starts at once"), Waits(EExplorationEnemyState::KnockedDown));
+	TestFalse(TEXT("Dead starts at once"), Waits(EExplorationEnemyState::Dead));
+
+	// A finished move walks on out of the doorway only when it arrived
+	// inside the doorway of the door the agent crossed.
+	TestTrue(TEXT("Arrived halfway through the door crossed: walk out"),
+		FDoorwayCrossing::ShouldWalkOut(true, true, true));
+	TestFalse(TEXT("Arrived past the doorway: done"),
+		FDoorwayCrossing::ShouldWalkOut(true, true, false));
+	TestFalse(TEXT("Aborted in the doorway (stopped on purpose): stays"),
+		FDoorwayCrossing::ShouldWalkOut(true, false, true));
+	TestFalse(TEXT("Never crossed a door: nothing to walk out of"),
+		FDoorwayCrossing::ShouldWalkOut(false, true, true));
 
 	return true;
 }

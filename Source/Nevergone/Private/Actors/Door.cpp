@@ -33,6 +33,13 @@
 #include "Widgets/ExplorationPromptWidget.h"
 #include "World/ExcursionNoiseSubsystem.h"
 #include "World/InventorySubsystem.h"
+#include "EngineUtils.h"
+
+#if WITH_EDITOR
+#include "ActorDeferredScriptManager.h"
+#include "Engine/Level.h"
+#include "StaticMeshCompiler.h"
+#endif
 
 const FName ADoor::SaveKey = SaveKeys::Door;
 
@@ -49,6 +56,10 @@ namespace DoorConstants
 
     // How far below the box centre each nav link end looks for the floor.
     static constexpr float NavLinkFloorSearchDepth = 500.f;
+
+    // Nav link ends closer than this to where they already are count as
+    // unchanged.
+    static constexpr float NavLinkEndTolerance = 0.1f;
 
     // A zero duration swings the leaf in one frame.
     static constexpr float MinSwingDurationSeconds = 0.01f;
@@ -248,11 +259,39 @@ void ADoor::PlaceNavLinkEnds()
             if (World->LineTraceSingleByChannel(Hit, Start, Bottom, ECC_Visibility, Params))
             {
                 End.Z = ActorTransform.InverseTransformPosition(Hit.ImpactPoint).Z;
+
+                continue;
             }
-            else
+
+#if WITH_EDITOR
+            // The editor runs construction while it loads the level, before
+            // the floor has collision: a miss there says nothing about the
+            // floor. Collapsing the ends to the pivot would make the navmesh
+            // rebuild without the link, so the saved ends stay until the
+            // level is ready and construction runs again. Asked for once per
+            // deferral: a level that never finishes its load-time pass keeps
+            // the saved link instead of rerunning construction every tick.
+            if (ShouldDeferNavLinkPlacement())
             {
-                // Left at the pivot: the link only works if the pivot is near
-                // the navmesh.
+                UE_LOG(LogTemp, Verbose,
+                    TEXT("[Door] '%s' found no floor under a nav link end while the level loads — keeps its saved link and places it again once loaded."),
+                    *GetName());
+
+                if (!bNavLinkPlacementDeferred)
+                {
+                    bNavLinkPlacementDeferred = true;
+
+                    FActorDeferredScriptManager::Get().AddActor(this);
+                }
+
+                return;
+            }
+#endif
+
+            // Left at the pivot: the link only works if the pivot is near
+            // the navmesh. A Blueprint preview has no floor to find.
+            if (World->WorldType != EWorldType::EditorPreview)
+            {
                 UE_LOG(LogTemp, Warning,
                     TEXT("[Door] '%s' found no floor under a nav link end at %s — AI may not cross this door."),
                     *GetName(), *Start.ToCompactString());
@@ -260,7 +299,58 @@ void ADoor::PlaceNavLinkEnds()
         }
     }
 
+    // Placed for real: a later miss while loading may defer again.
+    bNavLinkPlacementDeferred = false;
+
+    FVector CurrentStart;
+    FVector CurrentEnd;
+    ENavLinkDirection::Type CurrentDirection;
+
+    DoorNavLink->GetLinkData(CurrentStart, CurrentEnd, CurrentDirection);
+
+    // Unchanged: nothing for the navigation to rebuild.
+    if (CurrentStart.Equals(Ends[0], DoorConstants::NavLinkEndTolerance) &&
+        CurrentEnd.Equals(Ends[1], DoorConstants::NavLinkEndTolerance) &&
+        CurrentDirection == ENavLinkDirection::BothWays)
+    {
+        return;
+    }
+
+    UE_LOG(LogTemp, Verbose, TEXT("[Door] '%s' registers its nav link again: %s / %s (was %s / %s)."),
+        *GetName(), *Ends[0].ToCompactString(), *Ends[1].ToCompactString(),
+        *CurrentStart.ToCompactString(), *CurrentEnd.ToCompactString());
+
     DoorNavLink->SetLinkData(Ends[0], Ends[1], ENavLinkDirection::BothWays);
+}
+
+bool ADoor::ShouldDeferNavLinkPlacement() const
+{
+#if WITH_EDITOR
+    const UWorld* World = GetWorld();
+
+    if (!World || World->IsGameWorld() || World->WorldType == EWorldType::EditorPreview)
+    {
+        return false;
+    }
+
+    ULevel* Level = GetLevel();
+
+    if (!Level)
+    {
+        return false;
+    }
+
+    // Same test the engine uses to defer construction scripts that trace
+    // (ULevel::DeferRunningConstructionScripts).
+    if (FStaticMeshCompilingManager::Get().GetNumRemainingMeshes() > 0 && Level->HasStaticMeshCompilationPending())
+    {
+        return true;
+    }
+
+    return !Level->bHasRerunConstructionScripts;
+#else
+    return false;
+#endif
 }
 
 // ===========================================================================
@@ -468,19 +558,22 @@ void ADoor::ApplyInteraction(EDoorInteraction Interaction, AActor* Interactor)
         [[fallthrough]];
 
     case EDoorInteraction::Latch:
-        // Not an AI noise.
+        // Heard by the player only: the door, not the interactor, makes it.
         UE_LOG(LogTemp, Verbose, TEXT("[Door] '%s' latched by '%s'."), *GetName(), *GetNameSafe(Interactor));
         SetState(EDoorState::Latched);
+        EmitDoorNoise(LatchNoise, TEXT("Latch"), this);
         break;
 
     case EDoorInteraction::Unlatch:
         UE_LOG(LogTemp, Verbose, TEXT("[Door] '%s' unlatched by '%s'."), *GetName(), *GetNameSafe(Interactor));
         SetState(EDoorState::Closed);
+        EmitDoorNoise(LatchNoise, TEXT("Unlatch"), this);
         break;
 
     case EDoorInteraction::UnlatchAndOpen:
         UE_LOG(LogTemp, Verbose, TEXT("[Door] '%s' unlatched by '%s'."), *GetName(), *GetNameSafe(Interactor));
         SetState(EDoorState::Closed);
+        EmitDoorNoise(LatchNoise, TEXT("Unlatch"), this);
         TryOpen(Interactor);
         break;
 
@@ -663,6 +756,40 @@ FVector ADoor::GetNoiseLocation() const
 {
     // Centre of the box (the closed doorway) rather than the floor pivot.
     return DoorCollisionBox ? DoorCollisionBox->GetComponentLocation() : GetActorLocation();
+}
+
+bool ADoor::BlocksCaptureBetween(const FVector& From, const FVector& To) const
+{
+    if (!DoorCollisionBox || !DoorRules::DoesDoorBlockCapture(CurrentState))
+    {
+        return false;
+    }
+
+    // In the box's frame: X across the doorway, Y along the leaf.
+    const FTransform& BoxTransform = DoorCollisionBox->GetComponentTransform();
+
+    return DoorRules::DoesSegmentCrossDoorway(
+        BoxTransform.InverseTransformPositionNoScale(From),
+        BoxTransform.InverseTransformPositionNoScale(To),
+        DoorCollisionBox->GetScaledBoxExtent());
+}
+
+ADoor* ADoor::FindClosedDoorBetween(const UWorld* World, const FVector& From, const FVector& To)
+{
+    if (!World)
+    {
+        return nullptr;
+    }
+
+    for (TActorIterator<ADoor> It(World); It; ++It)
+    {
+        if (It->BlocksCaptureBetween(From, To))
+        {
+            return *It;
+        }
+    }
+
+    return nullptr;
 }
 
 // ===========================================================================

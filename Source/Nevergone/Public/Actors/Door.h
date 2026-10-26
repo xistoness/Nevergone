@@ -75,6 +75,10 @@ class UPathFollowingComponent;
 // Every door noise is emitted with the door as its source: the door never
 // counts as a wall for its own noise.
 //
+// Capture: a closed, latched or locked door between an enemy and its victim
+// stops the capture (FindClosedDoorBetween), whatever the leaf hides. The
+// enemy goes through the door first, the way it always does.
+//
 // Component layout:
 //   Root (USceneComponent)
 //   ├── DoorMesh          (UStaticMeshComponent — the swinging leaf, QueryOnly)
@@ -152,6 +156,15 @@ public:
 
     // Where every door noise sounds: the centre of the box (the doorway).
     FVector GetNoiseLocation() const;
+
+    // True when this door is closed, latched or locked and the straight line
+    // from From to To goes through its doorway. Decided by the door's state
+    // and its box, never by a collision channel: the open leaf blocks sight,
+    // not a capture.
+    bool BlocksCaptureBetween(const FVector& From, const FVector& To) const;
+
+    // The first door in World that BlocksCaptureBetween From and To, or null.
+    static ADoor* FindClosedDoorBetween(const UWorld* World, const FVector& From, const FVector& To);
 
     // How long an enemy knocks at the latched door before it breaks.
     float GetBreakSeconds() const { return BreakSeconds; }
@@ -276,6 +289,13 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Noise")
     TObjectPtr<UNoiseDefinition> JoltNoise;
 
+    // The latch going on or coming off. For the player only: emitted with
+    // the door as instigator, which no enemy hunts, like an enemy opening
+    // the door. Must not carry a place-noise tag (Noise.Scream,
+    // Noise.DoorKnock, Noise.DoorBreak), which enemies hear from anybody.
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Noise")
+    TObjectPtr<UNoiseDefinition> LatchNoise;
+
     // -----------------------------------------------------------------------
     // Components
     // -----------------------------------------------------------------------
@@ -382,7 +402,20 @@ private:
     bool IsOnLatchSide(const AActor* Actor) const;
 
     // Places the nav link ends across the box, each on the floor below it.
+    // Only touches the link when the ends move: SetLinkData makes the
+    // navigation rebuild around the door. A floor not found while the
+    // editor is still loading the level leaves the link as it was saved and
+    // places it again once the level is ready (ShouldDeferNavLinkPlacement).
     void PlaceNavLinkEnds();
+
+    // True in the editor while traces cannot be trusted: the level is still
+    // running its load-time construction (physics bodies are created after
+    // it) or static meshes are still compiling.
+    bool ShouldDeferNavLinkPlacement() const;
+
+    // A placement was deferred and has not been placed since: construction
+    // is not asked to run again until it is.
+    bool bNavLinkPlacementDeferred = false;
 
     // -----------------------------------------------------------------------
     // Leaf swing

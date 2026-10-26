@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "AIController.h"
+#include "EngineTools/AINavLinks.h"
 #include "Interfaces/DoorAgent.h"
 #include "ExcursionSurvivorController.generated.h"
 
@@ -37,7 +38,8 @@ enum class EExcursionSurvivorState : uint8;
 // the navmesh, and a path started from there can begin on either side of the
 // door. Told to wait halfway through, it finishes crossing first. A follow
 // move that reaches StopDistance halfway through walks straight on to the
-// link end it was heading to (the door tells it, IDoorAgent).
+// link end it was heading to (the door tells it, IDoorAgent). Both rules
+// live in FDoorwayCrossing, shared with the enemies.
 //
 // At a latched door the follower waits, its move paused by the door, until
 // somebody opens it.
@@ -103,26 +105,14 @@ private:
 
 	ACharacter* GetLeader() const;
 
-	// Walks straight to the exit of the door last crossed.
-	void LeaveDoorway();
-
 	// True while walking a nav link, or walking out of a doorway.
 	bool IsCrossingDoorway() const;
 
 	// A stop asked while crossing a doorway: done once the pawn is out.
 	bool bStopAfterNavLink = false;
 
-	// The door whose nav link the follower last walked, and where it comes
-	// out on the far side.
-	TWeakObjectPtr<ADoor> CrossingDoor;
-
-	FVector CrossingExit = FVector::ZeroVector;
-
-	// A move ended in the doorway: the next tick walks out of it.
-	bool bLeaveDoorwayPending = false;
-
-	// The move walking out of the doorway, while it runs.
-	FAIRequestID DoorwayExitRequest;
+	// Never standing still in a doorway, same rule as the enemies.
+	FDoorwayCrossing DoorwayCrossing;
 
 	TWeakObjectPtr<AExcursionSurvivorNPC> ControlledSurvivor;
 

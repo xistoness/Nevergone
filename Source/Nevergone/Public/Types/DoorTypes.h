@@ -156,6 +156,18 @@ namespace DoorRules
 	// +1 when the opener stands in the doorway plane.
 	NEVERGONE_API float ChooseSwingSign(float OpenerSide, const FVector& LeafCentre, float OpenAngleDegrees, const FVector& Axis);
 
+	// True when the door stands between an enemy and its victim as a wall
+	// for the capture: closed, latched or locked. An open or broken door
+	// never blocks it, whatever the leaf hides.
+	NEVERGONE_API bool DoesDoorBlockCapture(EDoorState State);
+
+	// True when the segment from LocalFrom to LocalTo goes through the
+	// doorway: it crosses the door plane (X = 0) from one side to the other,
+	// within the box's half width (Y) and half height (Z). Both points in the
+	// collision box's frame, unscaled; BoxExtent is its scaled half size.
+	// A point on the plane itself is on neither side.
+	NEVERGONE_API bool DoesSegmentCrossDoorway(const FVector& LocalFrom, const FVector& LocalTo, const FVector& BoxExtent);
+
 	// How far the leaf is off its rest pose ElapsedSeconds into a jolt:
 	// straight out to AngleDegrees at half the duration, straight back, then
 	// zero. Zero for a non-positive duration.

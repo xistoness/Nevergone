@@ -252,7 +252,7 @@ public:
 
 	// The chase starts: a scream that other enemies hear as a noise.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Signals")
-	FExplorationEnemyScreamSignal ChaseSignal;
+	FExplorationEnemyNoiseSignal ChaseSignal;
 
 	// Back to patrol after an investigation or a chase.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Signals")
@@ -262,12 +262,12 @@ public:
 	// sounds at the door and must be tagged Noise.DoorKnock: other enemies
 	// come to investigate it.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Signals")
-	FExplorationEnemyScreamSignal KnockSignal;
+	FExplorationEnemyNoiseSignal KnockSignal;
 
 	// The latched door gives way. The noise sounds at the door and must be
 	// tagged Noise.DoorBreak.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Signals")
-	FExplorationEnemyScreamSignal BreakSignal;
+	FExplorationEnemyNoiseSignal BreakSignal;
 
 	// --- Doors ---
 

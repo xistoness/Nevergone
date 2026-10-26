@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "AIController.h"
+#include "EngineTools/AINavLinks.h"
 #include "Interfaces/DoorAgent.h"
 #include "Types/DoorTypes.h"
 #include "Types/ExplorationEnemyTypes.h"
@@ -69,10 +70,16 @@ enum class EExplorationSenseChannel : uint8;
 // from the door like from anywhere else; the knocking done so far is kept
 // for that door until it opens or breaks, or the enemy goes back to patrol.
 //
-// Stops never happen halfway through a door: an enemy entering Suspicious
-// or Investigate while walking a nav link changes state (and signals) at
-// once, but only stops moving, and only runs the new state, once it is off
-// the link (NevergoneAI::IsWalkingNavLink).
+// Nobody stops in a doorway (FDoorwayCrossing, shared with the follower): an
+// enemy entering Patrol, Suspicious or Investigate while crossing a doorway
+// changes state (and signals) at once, but only stops, or starts the patrol,
+// and only runs the new state, once it is out (DoesStateWaitForDoorway).
+// A move that ends inside the doorway it crossed walks on to the link end.
+//
+// No capture through a door: within CatchDistance, a closed, latched or
+// locked door between the enemy and its target (ADoor::FindClosedDoorBetween)
+// holds the catch, and the chase heads for the target's own spot so its path
+// runs through the door: the enemy opens it, or knocks until it breaks.
 //
 // Escalation differs per sense: hearing only ever causes Investigate, sight
 // needs TimeToConfirmSeconds of contact (spent in Suspicious, short losses
@@ -123,9 +130,19 @@ public:
 
 	virtual void Tick(float DeltaTime) override;
 
+	virtual void OnMoveCompleted(FAIRequestID RequestID, const FPathFollowingResult& Result) override;
+
 	// --- IDoorAgent ---
 
 	virtual void HandleDoorBarred(ADoor* Door) override;
+
+	virtual void HandleDoorCrossing(ADoor* Door, const FVector& Exit) override;
+
+	// True for the states whose start waits until the pawn is out of a
+	// doorway it is crossing: those that stop it or send it somewhere new
+	// (Idle, Patrol, Suspicious, Investigate). A chase repaths once out on
+	// its own and must still catch; the capture states place the body.
+	static bool DoesStateWaitForDoorway(EExplorationEnemyState State);
 
 protected:
 
@@ -205,8 +222,14 @@ private:
 
 	void ForgetDoorKnock();
 
-	// StopMovement now, or once the pawn is off the nav link it is walking.
-	void StopMovementAfterNavLink();
+	// True when the current state waits to start until the pawn is out of
+	// the doorway it is crossing (see DoesStateWaitForDoorway). Tick then
+	// runs StartStateAfterDoorway.
+	bool DeferStateStartToDoorwayExit();
+
+	// What the current state does on entry once out of the doorway: start
+	// the patrol, or stop.
+	void StartStateAfterDoorway();
 
 	// --- Perception handlers ---
 
@@ -312,7 +335,12 @@ private:
 	// breaks, or the enemy goes back to patrol.
 	TMap<TWeakObjectPtr<ADoor>, FDoorKnock> DoorKnocks;
 
-	// A stop was asked while walking a nav link: the current state waits
-	// for the pawn to come off it.
-	bool bStopAfterNavLink = false;
+	// The current state was entered while crossing a doorway: it starts
+	// once the pawn is out.
+	bool bStateStartAfterDoorway = false;
+
+	FDoorwayCrossing DoorwayCrossing;
+
+	// The door holding up the catch of the chase target, for the log.
+	TWeakObjectPtr<const ADoor> CatchBlockingDoor;
 };
