@@ -15,6 +15,7 @@
 #include "World/ExcursionNoiseSubsystem.h"
 #include "World/InventorySubsystem.h"
 
+#include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -245,6 +246,12 @@ void UExcursionEncounterSubsystem::FinishCapture(const FExcursionCaptureSequence
 	AExplorationEnemyController* EnemyController =
 		Enemy ? Cast<AExplorationEnemyController>(Enemy->GetController()) : nullptr;
 
+	const UExplorationEnemyDefinition* Definition = Enemy ? Enemy->GetDefinition() : nullptr;
+
+	UAnimMontage* DeathMontage = Definition
+		? GetDeathMontage(*Definition, Capture.bVictimIsPlayer, Capture.Outcome)
+		: nullptr;
+
 	if (!Capture.bVictimIsPlayer)
 	{
 		if (Enemy)
@@ -253,7 +260,7 @@ void UExcursionEncounterSubsystem::FinishCapture(const FExcursionCaptureSequence
 			Enemy->StopAnimMontage();
 		}
 
-		BecomeCorpse(Victim);
+		BecomeCorpse(Victim, DeathMontage);
 
 		if (EnemyController)
 		{
@@ -272,7 +279,7 @@ void UExcursionEncounterSubsystem::FinishCapture(const FExcursionCaptureSequence
 				EnemyController->Kill();
 			}
 
-			BecomeCorpse(Enemy);
+			BecomeCorpse(Enemy, DeathMontage);
 
 			UnfreezeWorld();
 
@@ -288,9 +295,9 @@ void UExcursionEncounterSubsystem::FinishCapture(const FExcursionCaptureSequence
 				++BitesBySurvivor.FindOrAdd(Victim);
 			}
 
-			if (EnemyController && Enemy && Enemy->GetDefinition())
+			if (EnemyController && Definition)
 			{
-				EnemyController->BeginKnockdown(Enemy->GetDefinition()->KnockdownSeconds, Victim);
+				EnemyController->BeginKnockdown(Definition->KnockdownSeconds, Victim);
 			}
 
 			UnfreezeWorld();
@@ -306,7 +313,7 @@ void UExcursionEncounterSubsystem::FinishCapture(const FExcursionCaptureSequence
 			// stays blocked until the excursion result takes over.
 			bPlayerDied = true;
 
-			BecomeCorpse(Victim);
+			BecomeCorpse(Victim, DeathMontage);
 
 			KillRecruitedSurvivors();
 			break;
@@ -416,6 +423,28 @@ float UExcursionEncounterSubsystem::CalculateDeathChance(float BaseDeathChance, 
 	return FMath::Clamp(Chance, 0.0f, 100.0f);
 }
 
+UAnimMontage* UExcursionEncounterSubsystem::GetDeathMontage(const UExplorationEnemyDefinition& Definition,
+	bool bVictimIsPlayer, EExcursionCaptureOutcome Outcome)
+{
+	if (!bVictimIsPlayer)
+	{
+		return Definition.DevourFollowerAnimation.VictimMontage;
+	}
+
+	switch (Outcome)
+	{
+	case EExcursionCaptureOutcome::Unharmed:
+		// The safeguard kills the enemy.
+		return Definition.SafeguardAnimation.EnemyMontage;
+
+	case EExcursionCaptureOutcome::Killed:
+		return Definition.KillAnimation.VictimMontage;
+
+	default:
+		return nullptr;
+	}
+}
+
 int32 UExcursionEncounterSubsystem::GetStrength(const ACharacter* Survivor)
 {
 	// Outside combat the live pawn's stats are the authority, bonuses
@@ -492,7 +521,7 @@ float UExcursionEncounterSubsystem::PlayPairedAnimation(AExplorationEnemyCharact
 	return Length;
 }
 
-void UExcursionEncounterSubsystem::BecomeCorpse(ACharacter* Character)
+void UExcursionEncounterSubsystem::BecomeCorpse(ACharacter* Character, UAnimMontage* DeathMontage)
 {
 	if (!Character)
 	{
@@ -537,14 +566,18 @@ void UExcursionEncounterSubsystem::BecomeCorpse(ACharacter* Character)
 	Mesh->WakeAllRigidBodies();
 	Mesh->bBlendPhysics = true;
 
-	ActiveRagdolls.Add(Mesh);
+	FExcursionRagdoll Ragdoll;
+	Ragdoll.Mesh = Mesh;
+	Ragdoll.DeathMontage = DeathMontage;
+
+	ActiveRagdolls.Add(Ragdoll);
 }
 
 void UExcursionEncounterSubsystem::WatchRagdolls()
 {
 	for (int32 Index = ActiveRagdolls.Num() - 1; Index >= 0; --Index)
 	{
-		USkeletalMeshComponent* Mesh = ActiveRagdolls[Index].Get();
+		USkeletalMeshComponent* Mesh = ActiveRagdolls[Index].Mesh.Get();
 
 		if (!Mesh)
 		{
@@ -556,12 +589,29 @@ void UExcursionEncounterSubsystem::WatchRagdolls()
 		if (Mesh->Bounds.ContainsNaN())
 		{
 			UE_LOG(LogNevergone, Error,
-				TEXT("[ExcursionEncounterSubsystem] ragdoll of %s blew up (NaN); removed from physics and hidden. Check physics asset %s: tiny bodies (fingers, toes) or overlapping bodies with collision between them are the usual cause"),
+				TEXT("[ExcursionEncounterSubsystem] ragdoll of %s blew up (NaN); removed from physics. Check physics asset %s: tiny bodies (fingers, toes) or overlapping bodies with collision between them are the usual cause"),
 				*GetNameSafe(Mesh->GetOwner()), *GetNameSafe(Mesh->GetPhysicsAsset()));
 
 			Mesh->SetSimulatePhysics(false);
 			Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-			Mesh->SetVisibility(false);
+
+			UAnimMontage* DeathMontage = ActiveRagdolls[Index].DeathMontage.Get();
+
+			if (HoldDeathPose(Mesh, DeathMontage))
+			{
+				UE_LOG(LogNevergone, Log,
+					TEXT("[ExcursionEncounterSubsystem] %s stays on the ground in the last frame of %s"),
+					*GetNameSafe(Mesh->GetOwner()), *GetNameSafe(DeathMontage));
+			}
+			else
+			{
+				// Animation alone would stand the body back up.
+				Mesh->SetVisibility(false);
+
+				UE_LOG(LogNevergone, Log,
+					TEXT("[ExcursionEncounterSubsystem] %s has no death montage to hold; body hidden"),
+					*GetNameSafe(Mesh->GetOwner()));
+			}
 
 			ActiveRagdolls.RemoveAt(Index);
 
@@ -574,6 +624,41 @@ void UExcursionEncounterSubsystem::WatchRagdolls()
 			ActiveRagdolls.RemoveAt(Index);
 		}
 	}
+}
+
+bool UExcursionEncounterSubsystem::HoldDeathPose(USkeletalMeshComponent* Mesh, UAnimMontage* DeathMontage)
+{
+	ACharacter* Character = Mesh ? Cast<ACharacter>(Mesh->GetOwner()) : nullptr;
+
+	UCapsuleComponent* Capsule = Character ? Character->GetCapsuleComponent() : nullptr;
+
+	UAnimInstance* AnimInstance = Mesh ? Mesh->GetAnimInstance() : nullptr;
+
+	if (!DeathMontage || !Capsule || !AnimInstance)
+	{
+		return false;
+	}
+
+	// Started at its end and paused, the montage never blends out. A
+	// montage that does not play (wrong skeleton, no slot) would leave the
+	// body standing in the anim graph's pose.
+	const float Length = AnimInstance->Montage_PlayWithBlendIn(DeathMontage, FAlphaBlendArgs(0.0f), 1.0f,
+		EMontagePlayReturnType::MontageLength, DeathMontage->GetPlayLength());
+
+	if (Length <= 0.0f)
+	{
+		return false;
+	}
+
+	AnimInstance->Montage_Pause(DeathMontage);
+
+	// The ragdoll dragged the mesh away from the capsule, which stayed where
+	// the body died: the mesh goes back to its usual offset there. The
+	// attach only matters if something detached it.
+	Mesh->AttachToComponent(Capsule, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+	Mesh->SetRelativeLocationAndRotation(Character->GetBaseTranslationOffset(), Character->GetBaseRotationOffset());
+
+	return true;
 }
 
 void UExcursionEncounterSubsystem::KillRecruitedSurvivors()
@@ -589,7 +674,8 @@ void UExcursionEncounterSubsystem::KillRecruitedSurvivors()
 
 		Survivor->MarkDead();
 
-		BecomeCorpse(Survivor);
+		// No animation of their own: they die where they stand.
+		BecomeCorpse(Survivor, nullptr);
 
 		UE_LOG(LogNevergone, Log,
 			TEXT("[ExcursionEncounterSubsystem] %s dies with the player"),

@@ -185,6 +185,10 @@ public:
     UFUNCTION(BlueprintPure, Category = "Door")
     bool IsLatched() const { return CurrentState == EDoorState::Latched; }
 
+    // The doorway blocker. The one non-mesh component allowed to muffle
+    // noise: it stands for the closed leaf.
+    const UBoxComponent* GetCollisionBox() const { return DoorCollisionBox; }
+
 protected:
 
     virtual void OnConstruction(const FTransform& Transform) override;

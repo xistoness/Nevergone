@@ -10,6 +10,7 @@ class ACharacter;
 class AExcursionSurvivorNPC;
 class AExplorationEnemyCharacter;
 class AExplorationPlayerController;
+class UAnimMontage;
 class UExplorationEnemyDefinition;
 class USkeletalMeshComponent;
 struct FExcursionCaptureAnimation;
@@ -46,6 +47,17 @@ struct FExcursionCaptureSequence
 	float TimeLeft = 0.0f;
 
 	bool bVictimIsPlayer = false;
+};
+
+// A corpse's ragdoll, watched until it settles. Plain struct, like the
+// capture sequence.
+struct FExcursionRagdoll
+{
+	TWeakObjectPtr<USkeletalMeshComponent> Mesh;
+
+	// What the body played as it died. Its last frame is the pose the body
+	// keeps if the ragdoll fails.
+	TWeakObjectPtr<UAnimMontage> DeathMontage;
 };
 
 // ---------------------------------------------------------------------------
@@ -102,6 +114,13 @@ public:
 	static float CalculateDeathChance(float BaseDeathChance, int32 Strength, int32 PriorBites,
 		float ReductionPerStrength, float BonusPerPriorBite);
 
+	// The montage the body that dies in this capture plays as it dies: the
+	// devoured follower's, the enemy's under a safeguard, the killed
+	// player's. Null for a bite, where nobody dies, or when the type has no
+	// such montage. Pure, so it can be tested without a world.
+	static UAnimMontage* GetDeathMontage(const UExplorationEnemyDefinition& Definition, bool bVictimIsPlayer,
+		EExcursionCaptureOutcome Outcome);
+
 	// --- UTickableWorldSubsystem ---
 
 	virtual void Tick(float DeltaTime) override;
@@ -142,15 +161,22 @@ private:
 		const FExcursionCaptureAnimation& Animation);
 
 	// Stops the body and hands it to physics as a ragdoll, watched by
-	// WatchRagdolls until it settles.
-	void BecomeCorpse(ACharacter* Character);
+	// WatchRagdolls until it settles. DeathMontage is what the body played
+	// as it died; null when it died without one.
+	void BecomeCorpse(ACharacter* Character, UAnimMontage* DeathMontage);
 
 	// A ragdoll whose physics asset blows up produces NaN transforms, and
 	// NaN bodies corrupt the physics scene: every query nearby (the
 	// player's movement sweeps) fails from then on. A ragdoll that goes NaN
-	// is taken out of physics and hidden, with an error naming the asset;
-	// one that settles stops being watched.
+	// is taken out of physics, with an error naming the asset, and stays on
+	// the ground in its death pose (HoldDeathPose); without a death montage
+	// it is hidden. One that settles stops being watched.
 	void WatchRagdolls();
+
+	// Puts the mesh back on the capsule, where the body died, and holds the
+	// last frame of DeathMontage. False when there is no montage, character
+	// or anim instance to do it with, or the montage does not play.
+	static bool HoldDeathPose(USkeletalMeshComponent* Mesh, UAnimMontage* DeathMontage);
 
 	void KillRecruitedSurvivors();
 
@@ -168,7 +194,7 @@ private:
 	TArray<TWeakObjectPtr<AActor>> FrozenActors;
 
 	// Ragdolls still moving.
-	TArray<TWeakObjectPtr<USkeletalMeshComponent>> ActiveRagdolls;
+	TArray<FExcursionRagdoll> ActiveRagdolls;
 
 	bool bPlayerDied = false;
 };

@@ -48,10 +48,41 @@ bool FNevergoneNoiseOcclusionProfilesTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("Corpse (Ragdoll) ignores noise occlusion"), Response == ECR_Ignore);
 	}
 
-	// Scenery keeps the channel's default and muffles.
-	if (ResponseOf(TEXT("BlockAll"), Response))
+	// Nothing the player cannot see muffles: triggers, blocking volumes,
+	// generic volumes, widgets and spectators all ignore the channel.
+	static const TCHAR* InvisibleProfiles[] =
 	{
-		TestTrue(TEXT("Wall (BlockAll) blocks noise occlusion"), Response == ECR_Block);
+		TEXT("Trigger"),
+		TEXT("InvisibleWall"),
+		TEXT("InvisibleWallDynamic"),
+		TEXT("UI"),
+		TEXT("OverlapAll"),
+		TEXT("OverlapAllDynamic"),
+		TEXT("OverlapOnlyPawn"),
+		TEXT("Spectator"),
+	};
+
+	for (const TCHAR* ProfileName : InvisibleProfiles)
+	{
+		if (ResponseOf(ProfileName, Response))
+		{
+			TestTrue(FString::Printf(TEXT("%s ignores noise occlusion"), ProfileName), Response == ECR_Ignore);
+		}
+	}
+
+	// Scenery keeps the channel's default and muffles.
+	static const TCHAR* SceneryProfiles[] =
+	{
+		TEXT("BlockAll"),
+		TEXT("BlockAllDynamic"),
+	};
+
+	for (const TCHAR* ProfileName : SceneryProfiles)
+	{
+		if (ResponseOf(ProfileName, Response))
+		{
+			TestTrue(FString::Printf(TEXT("Wall (%s) blocks noise occlusion"), ProfileName), Response == ECR_Block);
+		}
 	}
 
 	return true;
