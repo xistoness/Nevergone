@@ -14,8 +14,8 @@ namespace NevergoneCollision
 
 	// Objects that muffle noise for AI hearing (walls, closed doors). Created in
 	// Project Settings > Collision with default response Block; pawns, character
-	// meshes and loose physics props are set to Ignore. Must match the index
-	// DefaultEngine.ini assigned to the channel.
+	// meshes, ragdolls (corpses) and loose physics props are set to Ignore. Must
+	// match the index DefaultEngine.ini assigned to the channel.
 	static constexpr ECollisionChannel NoiseOcclusion =
 		ECollisionChannel::ECC_GameTraceChannel3;
 }

@@ -1249,9 +1249,10 @@ ECaptureLineBlock AExplorationEnemyController::FindCaptureLineBlock(const AActor
 	}
 
 	// Never the visibility channel: the open leaf blocks it. Noise occlusion
-	// is blocked by walls and ignored by the leaf, knockable props and
-	// characters. Whatever else still stops the trace without being scenery
-	// (a closed door's box, a ragdoll) is skipped and the trace repeated.
+	// is blocked by walls and ignored by the leaf, knockable props,
+	// characters and ragdolls. Whatever else still stops the trace without
+	// being scenery (a closed door's box, a body with custom collision) is
+	// skipped and the trace repeated.
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(ExplorationCaptureLine), false);
 	Params.AddIgnoredActor(ControlledEnemy.Get());
 	Params.AddIgnoredActor(Target);
