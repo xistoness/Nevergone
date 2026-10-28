@@ -658,7 +658,18 @@ bool UExcursionEncounterSubsystem::HoldDeathPose(USkeletalMeshComponent* Mesh, U
 	Mesh->AttachToComponent(Capsule, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
 	Mesh->SetRelativeLocationAndRotation(Character->GetBaseTranslationOffset(), Character->GetBaseRotationOffset());
 
-	return true;
+	// The bones are still NaN, and so are the bounds: the mesh is never
+	// rendered, and a character's mesh only refreshes its bones when
+	// rendered. The pose is evaluated here, before the frame ends (NaN
+	// bounds reaching the renderer trip an ensure), and the bones keep
+	// refreshing from now on.
+	Mesh->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+	Mesh->TickAnimation(0.0f, false);
+	Mesh->RefreshBoneTransforms();
+
+	// An evaluation skipped (update rate optimizations) leaves the bones
+	// NaN: better hidden than a body that never shows.
+	return !Mesh->Bounds.ContainsNaN();
 }
 
 void UExcursionEncounterSubsystem::KillRecruitedSurvivors()

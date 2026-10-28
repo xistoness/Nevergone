@@ -175,7 +175,8 @@ private:
 
 	// Puts the mesh back on the capsule, where the body died, and holds the
 	// last frame of DeathMontage. False when there is no montage, character
-	// or anim instance to do it with, or the montage does not play.
+	// or anim instance to do it with, or the montage does not play, or the
+	// pose comes out NaN.
 	static bool HoldDeathPose(USkeletalMeshComponent* Mesh, UAnimMontage* DeathMontage);
 
 	void KillRecruitedSurvivors();
