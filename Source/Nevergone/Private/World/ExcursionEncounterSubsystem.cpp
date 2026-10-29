@@ -117,6 +117,8 @@ void UExcursionEncounterSubsystem::StartFollowerCapture(AExplorationEnemyCharact
 
 	PlayPairedAnimation(Enemy, Follower, Definition.DevourFollowerAnimation);
 
+	KeepDeathMontageEnd(Follower, GetDeathMontage(Definition, false, EExcursionCaptureOutcome::Killed));
+
 	FExcursionCaptureSequence Capture;
 	Capture.Enemy = Enemy;
 	Capture.Victim = Follower;
@@ -187,6 +189,11 @@ void UExcursionEncounterSubsystem::StartPlayerCapture(AExplorationEnemyCharacter
 	}
 
 	Capture.TimeLeft = PlayPairedAnimation(Enemy, Player, *Animation);
+
+	// Under a safeguard the enemy dies; otherwise only the player can.
+	ACharacter* DyingBody = Capture.Outcome == EExcursionCaptureOutcome::Unharmed ? Enemy : Player;
+
+	KeepDeathMontageEnd(DyingBody, GetDeathMontage(Definition, true, Capture.Outcome));
 
 	Captures.Add(Capture);
 
@@ -519,6 +526,24 @@ float UExcursionEncounterSubsystem::PlayPairedAnimation(AExplorationEnemyCharact
 	}
 
 	return Length;
+}
+
+void UExcursionEncounterSubsystem::KeepDeathMontageEnd(ACharacter* Body, UAnimMontage* DeathMontage)
+{
+	USkeletalMeshComponent* Mesh = Body ? Body->GetMesh() : nullptr;
+	UAnimInstance* AnimInstance = Mesh ? Mesh->GetAnimInstance() : nullptr;
+
+	if (!DeathMontage || !AnimInstance)
+	{
+		return;
+	}
+
+	// The instance copies the asset's flag on play and may override it, as
+	// the engine's own sequencer montages do. BecomeCorpse stops it.
+	if (FAnimMontageInstance* Instance = AnimInstance->GetActiveInstanceForMontage(DeathMontage))
+	{
+		Instance->bEnableAutoBlendOut = false;
+	}
 }
 
 void UExcursionEncounterSubsystem::BecomeCorpse(ACharacter* Character, UAnimMontage* DeathMontage)

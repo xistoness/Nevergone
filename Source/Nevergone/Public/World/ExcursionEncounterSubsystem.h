@@ -160,6 +160,11 @@ private:
 	static float PlayPairedAnimation(AExplorationEnemyCharacter* Enemy, ACharacter* Victim,
 		const FExcursionCaptureAnimation& Animation);
 
+	// The body that dies keeps the last frame of its death montage until it
+	// becomes a corpse, instead of blending back to its standing pose when
+	// the montage ends. Only this play is changed, never the asset.
+	static void KeepDeathMontageEnd(ACharacter* Body, UAnimMontage* DeathMontage);
+
 	// Stops the body and hands it to physics as a ragdoll, watched by
 	// WatchRagdolls until it settles. DeathMontage is what the body played
 	// as it died; null when it died without one.
