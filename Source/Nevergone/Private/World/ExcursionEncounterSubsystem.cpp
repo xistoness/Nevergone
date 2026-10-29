@@ -609,7 +609,7 @@ void UExcursionEncounterSubsystem::WatchRagdolls()
 				Mesh->SetVisibility(false);
 
 				UE_LOG(LogNevergone, Log,
-					TEXT("[ExcursionEncounterSubsystem] %s has no death montage to hold; body hidden"),
+					TEXT("[ExcursionEncounterSubsystem] %s has no death pose to hold (no montage, or the pose stayed NaN); body hidden"),
 					*GetNameSafe(Mesh->GetOwner()));
 			}
 
@@ -654,9 +654,16 @@ bool UExcursionEncounterSubsystem::HoldDeathPose(USkeletalMeshComponent* Mesh, U
 
 	// The ragdoll dragged the mesh away from the capsule, which stayed where
 	// the body died: the mesh goes back to its usual offset there. The
-	// attach only matters if something detached it.
+	// attach only matters if something detached it. The NaN ragdoll left
+	// NaN in the mesh's location: every setter that moves by a delta from
+	// the current transform keeps it NaN, so the offset is written
+	// directly and the transform rebuilt from it. Scale is never touched
+	// by physics. The bodies follow once the pose below is valid; pushed
+	// now, they would get the still-NaN bones.
 	Mesh->AttachToComponent(Capsule, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
-	Mesh->SetRelativeLocationAndRotation(Character->GetBaseTranslationOffset(), Character->GetBaseRotationOffset());
+	Mesh->SetRelativeLocation_Direct(Character->GetBaseTranslationOffset());
+	Mesh->SetRelativeRotation_Direct(Character->GetBaseRotationOffset().Rotator());
+	Mesh->UpdateComponentToWorld(EUpdateTransformFlags::SkipPhysicsUpdate, ETeleportType::TeleportPhysics);
 
 	// The bones are still NaN, and so are the bounds: the mesh is never
 	// rendered, and a character's mesh only refreshes its bones when
