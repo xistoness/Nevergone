@@ -103,7 +103,8 @@ public:
 	// --- Place noise ---
 
 	// True when an enemy hears this stimulus as a place noise: its tag is in
-	// the place-noise list (Noise.Scream, Noise.DoorKnock, Noise.DoorBreak)
+	// the place-noise list (Noise.Scream, Noise.DoorKnock, Noise.DoorBreak,
+	// Noise.Device)
 	// and it was not made by the listener itself. The instigator does not
 	// matter otherwise.
 	static bool IsHeardAsPlaceNoise(FName StimulusTag, bool bMadeByListener);
@@ -115,8 +116,10 @@ public:
 	void UnregisterMaskVolume(AExcursionNoiseMaskVolume* Volume);
 
 	// Hearing multiplier at a point: the lowest multiplier among the mask
-	// volumes that contain it, or 1 when none does.
-	float GetHearingMaskAt(const FVector& Location) const;
+	// volumes that contain it and mask a noise from NoiseSource
+	// (AExcursionNoiseMaskVolume::MasksNoiseFrom), or 1 when none does.
+	// NoiseSource is the Source the noise was emitted with, null when none.
+	float GetHearingMaskAt(const FVector& Location, const AActor* NoiseSource) const;
 
 	// --- Debug ---
 

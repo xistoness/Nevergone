@@ -99,12 +99,13 @@ bool UExcursionNoiseSubsystem::IsHeardAsPlaceNoise(FName StimulusTag, bool bMade
 		return false;
 	}
 
-	// Noises that point at a place. Devices join this list in their own task.
+	// Noises that point at a place.
 	const FName PlaceNoiseTags[] =
 	{
 		TAG_Noise_Scream.GetTag().GetTagName(),
 		TAG_Noise_DoorKnock.GetTag().GetTagName(),
 		TAG_Noise_DoorBreak.GetTag().GetTagName(),
+		TAG_Noise_Device.GetTag().GetTagName(),
 	};
 
 	for (const FName& PlaceNoiseTag : PlaceNoiseTags)
@@ -227,13 +228,13 @@ void UExcursionNoiseSubsystem::UnregisterMaskVolume(AExcursionNoiseMaskVolume* V
 	MaskVolumes.Remove(Volume);
 }
 
-float UExcursionNoiseSubsystem::GetHearingMaskAt(const FVector& Location) const
+float UExcursionNoiseSubsystem::GetHearingMaskAt(const FVector& Location, const AActor* NoiseSource) const
 {
 	float Multiplier = 1.0f;
 
 	for (const TWeakObjectPtr<AExcursionNoiseMaskVolume>& Volume : MaskVolumes)
 	{
-		if (Volume.IsValid() && Volume->EncompassesPoint(Location))
+		if (Volume.IsValid() && Volume->MasksNoiseFrom(NoiseSource) && Volume->EncompassesPoint(Location))
 		{
 			Multiplier = FMath::Min(Multiplier, Volume->GetHearingMultiplier());
 		}

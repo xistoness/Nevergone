@@ -303,11 +303,13 @@ bool UExplorationPerceptionComponent::IsNoiseAudible(const AActor* Instigator, c
 
 	// --- Masking: the noisier end of the path wins ---
 
+	// A switched-on device's volume never masks the device's own noise.
 	float Mask = 1.0f;
 
 	if (NoiseSubsystem)
 	{
-		Mask = FMath::Min(NoiseSubsystem->GetHearingMaskAt(ListenerLocation), NoiseSubsystem->GetHearingMaskAt(NoiseLocation));
+		Mask = FMath::Min(NoiseSubsystem->GetHearingMaskAt(ListenerLocation, Source),
+			NoiseSubsystem->GetHearingMaskAt(NoiseLocation, Source));
 	}
 
 	// Stimulus strength is the reported loudness, surface already applied.

@@ -106,6 +106,7 @@ Lembre das tarefas manuais dele sem esperar que pergunte:
 - Não editar `Content/`, `Binaries/`, `Intermediate/`, `DerivedDataCache/` e `Saved/` (em `Saved/`, só ler logs; exceção: `Saved/Automation/`, onde os scripts escrevem os relatórios de teste e o `build.log`). `Config/*.ini` só com pedido explícito.
 - Não apagar arquivos sem pedir. Push comum é livre; reescrever histórico, forçar push ou apagar `main` (local ou remota), só com Briefing que peça e confirmação do Cristopher. Apagar a branch da tarefa depois do merge é parte do fluxo.
 - Não abrir o editor nem cookar o jogo.
+- O editor do UE fica sempre em inglês (`Language=en` e `Locale=en` no `EditorSettings.ini` global); nenhuma tarefa muda o idioma do editor. No PIE, um `PreferredCulture` diferente de `en` troca o idioma do editor.
 
 ## Início de sessão
 

@@ -35,6 +35,28 @@ void AExcursionNoiseMaskVolume::BeginPlay()
 	}
 }
 
+void AExcursionNoiseMaskVolume::SetMaskActive(bool bActive)
+{
+	// Logged by the device that switches it.
+	bMaskActive = bActive;
+}
+
+bool AExcursionNoiseMaskVolume::MasksNoiseFrom(const AActor* NoiseSource) const
+{
+	return IsMaskApplied(bMaskActive, Device.Get(), NoiseSource);
+}
+
+bool AExcursionNoiseMaskVolume::IsMaskApplied(bool bActive, const UObject* InDevice, const UObject* NoiseSource)
+{
+	if (!bActive)
+	{
+		return false;
+	}
+
+	// The device's own noise sounds before its mask covers anything.
+	return !InDevice || InDevice != NoiseSource;
+}
+
 void AExcursionNoiseMaskVolume::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	if (UExcursionNoiseSubsystem* Noise = UExcursionNoiseSubsystem::Get(this))

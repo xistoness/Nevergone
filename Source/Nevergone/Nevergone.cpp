@@ -70,6 +70,7 @@ UE_DEFINE_GAMEPLAY_TAG(TAG_Noise_Panting,			"Noise.Panting")
 UE_DEFINE_GAMEPLAY_TAG(TAG_Noise_Scream,			"Noise.Scream")
 UE_DEFINE_GAMEPLAY_TAG(TAG_Noise_DoorKnock,			"Noise.DoorKnock")
 UE_DEFINE_GAMEPLAY_TAG(TAG_Noise_DoorBreak,			"Noise.DoorBreak")
+UE_DEFINE_GAMEPLAY_TAG(TAG_Noise_Device,			"Noise.Device")
 
 // Item roles
 UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Safeguard,			"Item.Safeguard")

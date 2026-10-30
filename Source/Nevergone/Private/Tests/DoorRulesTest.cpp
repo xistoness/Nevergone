@@ -265,6 +265,9 @@ bool FNevergonePlaceNoiseFilterTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("Own knocking: not heard"),
 		UExcursionNoiseSubsystem::IsHeardAsPlaceNoise(TAG_Noise_DoorKnock.GetTag().GetTagName(), true));
 
+	TestTrue(TEXT("Switching a device on: place noise"),
+		UExcursionNoiseSubsystem::IsHeardAsPlaceNoise(TAG_Noise_Device.GetTag().GetTagName(), false));
+
 	TestFalse(TEXT("Footstep: not a place noise"),
 		UExcursionNoiseSubsystem::IsHeardAsPlaceNoise(TAG_Noise_Footstep.GetTag().GetTagName(), false));
 

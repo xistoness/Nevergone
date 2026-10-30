@@ -296,7 +296,8 @@ protected:
     // The latch going on or coming off. For the player only: emitted with
     // the door as instigator, which no enemy hunts, like an enemy opening
     // the door. Must not carry a place-noise tag (Noise.Scream,
-    // Noise.DoorKnock, Noise.DoorBreak), which enemies hear from anybody.
+    // Noise.DoorKnock, Noise.DoorBreak, Noise.Device), which enemies hear
+    // from anybody.
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Noise")
     TObjectPtr<UNoiseDefinition> LatchNoise;
 
