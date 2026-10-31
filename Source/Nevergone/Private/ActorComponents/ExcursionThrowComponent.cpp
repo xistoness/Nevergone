@@ -56,7 +56,7 @@ void UExcursionThrowComponent::BeginAim()
 		return;
 	}
 
-	if (!FindDistraction())
+	if (!FindThrowable())
 	{
 		UE_LOG(LogNevergone, Log,
 			TEXT("[ExcursionThrowComponent] %s has nothing to throw"),
@@ -114,7 +114,7 @@ void UExcursionThrowComponent::ReleaseAim()
 
 	UInventorySubsystem* Inventory = GetInventory(GetWorld());
 
-	UItemDefinition* Item = FindDistraction();
+	UItemDefinition* Item = FindThrowable();
 
 	if (!bCanLaunch || !Character || !Inventory || !Item)
 	{
@@ -339,7 +339,7 @@ void UExcursionThrowComponent::HideArc()
 // Helpers
 // ---------------------------------------------------------------------------
 
-UItemDefinition* UExcursionThrowComponent::FindDistraction() const
+UItemDefinition* UExcursionThrowComponent::FindThrowable() const
 {
 	const UInventorySubsystem* Inventory = GetInventory(GetWorld());
 
@@ -352,7 +352,9 @@ UItemDefinition* UExcursionThrowComponent::FindDistraction() const
 	{
 		UItemDefinition* Item = Entry.Definition.LoadSynchronous();
 
-		if (!Item || !Item->ItemTags.HasTag(TAG_Item_Distraction))
+		// Provisional: the first throwable of either kind, until the tool
+		// ring lets the player pick one.
+		if (!Item || (!Item->ItemTags.HasTag(TAG_Item_Distraction) && !Item->ItemTags.HasTag(TAG_Item_ScentBait)))
 		{
 			continue;
 		}
@@ -360,7 +362,7 @@ UItemDefinition* UExcursionThrowComponent::FindDistraction() const
 		if (Item->WorldActorClass.IsNull())
 		{
 			UE_LOG(LogNevergone, Warning,
-				TEXT("[ExcursionThrowComponent] %s is tagged Item.Distraction but has no WorldActorClass to fly and land as; skipped"),
+				TEXT("[ExcursionThrowComponent] %s is throwable but has no WorldActorClass to fly as; skipped"),
 				*GetNameSafe(Item));
 
 			continue;

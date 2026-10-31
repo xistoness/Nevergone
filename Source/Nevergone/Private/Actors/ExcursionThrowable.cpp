@@ -3,6 +3,7 @@
 #include "Actors/ExcursionThrowable.h"
 
 #include "Nevergone.h"
+#include "Actors/ExcursionScentBait.h"
 #include "Data/ItemDefinition.h"
 #include "Data/NoiseDefinition.h"
 #include "EngineTools/CollisionChannels.h"
@@ -53,7 +54,12 @@ void AExcursionThrowable::Launch(const FVector& Velocity, UItemDefinition* InIte
 	Item = InItem;
 	Thrower = InThrower;
 
-	CopyPickupLooks();
+	if (!CopyPickupLooks(Item, Mesh, this))
+	{
+		UE_LOG(LogNevergone, Warning,
+			TEXT("[ExcursionThrowable] %s: %s has no WorldActorClass with a PickupMesh; it flies invisible"),
+			*GetNameSafe(this), *GetNameSafe(Item));
+	}
 
 	Movement->OnProjectileBounce.AddDynamic(this, &AExcursionThrowable::HandleBounce);
 	Movement->OnProjectileStop.AddDynamic(this, &AExcursionThrowable::HandleStop);
@@ -62,9 +68,14 @@ void AExcursionThrowable::Launch(const FVector& Velocity, UItemDefinition* InIte
 	Movement->Activate();
 }
 
-void AExcursionThrowable::CopyPickupLooks()
+bool AExcursionThrowable::CopyPickupLooks(const UItemDefinition* InItem, UStaticMeshComponent* Target, const AActor* LogContext)
 {
-	UClass* PickupClass = Item ? Item->WorldActorClass.LoadSynchronous() : nullptr;
+	if (!Target)
+	{
+		return false;
+	}
+
+	UClass* PickupClass = InItem ? InItem->WorldActorClass.LoadSynchronous() : nullptr;
 
 	const AWorldItemActor* PickupDefaults = PickupClass ? PickupClass->GetDefaultObject<AWorldItemActor>() : nullptr;
 
@@ -72,22 +83,24 @@ void AExcursionThrowable::CopyPickupLooks()
 
 	if (!PickupMesh || !PickupMesh->GetStaticMesh())
 	{
-		UE_LOG(LogNevergone, Warning,
-			TEXT("[ExcursionThrowable] %s: %s has no WorldActorClass with a PickupMesh; it flies invisible"),
-			*GetNameSafe(this), *GetNameSafe(Item));
-
-		return;
+		return false;
 	}
 
 	// Same mesh and same placement relative to the root as the pickup, so
 	// the swap on landing does not show.
-	Mesh->SetStaticMesh(PickupMesh->GetStaticMesh());
-	Mesh->SetRelativeTransform(PickupMesh->GetRelativeTransform());
+	Target->SetStaticMesh(PickupMesh->GetStaticMesh());
+	Target->SetRelativeTransform(PickupMesh->GetRelativeTransform());
 
 	for (int32 Index = 0; Index < PickupMesh->GetNumMaterials(); ++Index)
 	{
-		Mesh->SetMaterial(Index, PickupMesh->GetMaterial(Index));
+		Target->SetMaterial(Index, PickupMesh->GetMaterial(Index));
 	}
+
+	UE_LOG(LogNevergone, Verbose,
+		TEXT("[ExcursionThrowable] %s shows %s as its pickup %s"),
+		*GetNameSafe(LogContext), *GetNameSafe(InItem), *GetNameSafe(PickupMesh->GetStaticMesh()));
+
+	return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -105,6 +118,16 @@ void AExcursionThrowable::HandleStop(const FHitResult& ImpactResult)
 	// be owed here.
 	MakeImpactNoise(ImpactResult);
 
+	// A scent bait stays where it lands and cannot be picked up again.
+	if (Item && Item->ItemTags.HasTag(TAG_Item_ScentBait))
+	{
+		SpawnScentBait();
+
+		Destroy();
+
+		return;
+	}
+
 	const UGameInstance* GameInstance = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
 
 	UInventorySubsystem* Inventory = GameInstance ? GameInstance->GetSubsystem<UInventorySubsystem>() : nullptr;
@@ -118,6 +141,41 @@ void AExcursionThrowable::HandleStop(const FHitResult& ImpactResult)
 		*GetNameSafe(this), *GetNameSafe(Pickup));
 
 	Destroy();
+}
+
+bool AExcursionThrowable::SpawnScentBait()
+{
+	UWorld* World = GetWorld();
+
+	if (!World)
+	{
+		return false;
+	}
+
+	const FTransform Transform(GetActorRotation(), GetActorLocation());
+
+	// Deferred so the bait knows its item before BeginPlay registers it.
+	AExcursionScentBait* Bait = World->SpawnActorDeferred<AExcursionScentBait>(AExcursionScentBait::StaticClass(),
+		Transform, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+
+	if (!Bait)
+	{
+		UE_LOG(LogNevergone, Warning,
+			TEXT("[ExcursionThrowable] %s could not spawn the scent bait for %s"),
+			*GetNameSafe(this), *GetNameSafe(Item));
+
+		return false;
+	}
+
+	Bait->Initialize(Item);
+
+	Bait->FinishSpawning(Transform);
+
+	UE_LOG(LogNevergone, Log,
+		TEXT("[ExcursionThrowable] %s came to rest; left scent bait %s"),
+		*GetNameSafe(this), *GetNameSafe(Bait));
+
+	return true;
 }
 
 void AExcursionThrowable::MakeImpactNoise(const FHitResult& Hit)

@@ -4,10 +4,12 @@
 #include "ActorComponents/ExplorationPerceptionComponent.h"
 
 #include "Nevergone.h"
+#include "Actors/ExcursionScentBait.h"
 #include "Characters/ExcursionSurvivorNPC.h"
 #include "Data/ExplorationEnemyDefinition.h"
 #include "EngineTools/CollisionChannels.h"
 #include "World/ExcursionNoiseSubsystem.h"
+#include "World/ExcursionScentSubsystem.h"
 
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
@@ -263,6 +265,42 @@ void UExplorationPerceptionComponent::UpdateSmell()
 			OnSurvivorLost.Broadcast(Survivor);
 		}
 	}
+
+	// After the survivors: a survivor smelled this poll already started a
+	// chase, which ignores the bait.
+	UpdateBaitSmell(OwnerPawn->GetActorLocation());
+}
+
+void UExplorationPerceptionComponent::UpdateBaitSmell(const FVector& ListenerLocation)
+{
+	const UExcursionScentSubsystem* Scent = UExcursionScentSubsystem::Get(this);
+
+	if (!Scent)
+	{
+		return;
+	}
+
+	TArray<AExcursionScentBait*> Baits;
+
+	Scent->GatherScentBaitsAt(ListenerLocation, Baits);
+
+	TSet<TWeakObjectPtr<AExcursionScentBait>> InRange;
+
+	for (AExcursionScentBait* Bait : Baits)
+	{
+		InRange.Add(Bait);
+
+		if (!SmelledBaits.Contains(Bait))
+		{
+			UE_LOG(LogNevergone, Verbose,
+				TEXT("[ExplorationPerceptionComponent] %s smelled scent bait %s"),
+				*GetNameSafe(GetListenerPawn()), *GetNameSafe(Bait));
+		}
+
+		OnScentBaitSensed.Broadcast(Bait);
+	}
+
+	SmelledBaits = MoveTemp(InRange);
 }
 
 void UExplorationPerceptionComponent::TickComponent(float DeltaTime, ELevelTick TickType,

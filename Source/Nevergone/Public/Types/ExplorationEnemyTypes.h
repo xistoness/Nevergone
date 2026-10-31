@@ -68,6 +68,11 @@ enum class EExplorationEnemyState : uint8
 	// Killed by a survivor's safeguard. The body is a ragdoll and the brain
 	// never acts again.
 	Dead,
+
+	// Smelled a scent bait: walks to it and eats it, blind and deaf while
+	// eating. Last in the list so the values AnimBPs already compare against
+	// do not shift.
+	Baited,
 };
 
 // ---------------------------------------------------------------------------
@@ -133,9 +138,10 @@ struct FExcursionCaptureAnimation
 //
 // The moments in which an enemy tells the player, through its own body and
 // voice, what it is doing. There is no UI for enemy awareness: these are the
-// whole read. The first four are derived from a state transition by
-// UExplorationEnemySignalComponent::GetSignalMoment; the door moments are
-// announced by the controller while it works at a door, in any state.
+// whole read. Suspicion, Investigation, Chase, GiveUp and Sniff are derived
+// from a state transition by UExplorationEnemySignalComponent::GetSignalMoment;
+// the door moments are announced by the controller while it works at a door,
+// in any state; Eat follows the character's eating flag.
 // ---------------------------------------------------------------------------
 UENUM()
 enum class EExplorationEnemySignalMoment : uint8
@@ -151,8 +157,9 @@ enum class EExplorationEnemySignalMoment : uint8
 	// Entered Chase: the scream.
 	Chase,
 
-	// Back to Patrol after an investigation or a chase. A suspicion never
-	// ends in a patrol: it ends in a chase or an investigation.
+	// Back to Patrol after an investigation, a chase or a scent bait. A
+	// suspicion never ends in a patrol: it ends in a chase or an
+	// investigation.
 	GiveUp,
 
 	// One knock at a latched door.
@@ -160,6 +167,12 @@ enum class EExplorationEnemySignalMoment : uint8
 
 	// The latched door gives way.
 	DoorBreak,
+
+	// Entered Baited: the enemy smelled a scent bait and heads for it.
+	Sniff,
+
+	// Eating a scent bait, in a loop for as long as it eats.
+	Eat,
 };
 
 // ---------------------------------------------------------------------------

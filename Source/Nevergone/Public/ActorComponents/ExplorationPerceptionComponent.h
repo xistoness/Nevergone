@@ -6,6 +6,7 @@
 #include "Perception/AIPerceptionComponent.h"
 #include "ExplorationPerceptionComponent.generated.h"
 
+class AExcursionScentBait;
 class UExplorationEnemyDefinition;
 
 // Which sense produced a stimulus. The FSM treats them differently: hearing is
@@ -26,6 +27,8 @@ DECLARE_MULTICAST_DELEGATE_OneParam(FOnSurvivorLost, AActor* /*Survivor*/);
 
 DECLARE_MULTICAST_DELEGATE_TwoParams(FOnPlaceNoiseHeard,
 	AActor* /*Source*/, const FVector& /*NoiseLocation*/);
+
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnScentBaitSensed, AExcursionScentBait* /*Bait*/);
 
 // What one enemy currently knows about one survivor. Plain struct, never
 // reflected: it only lives inside the perception component.
@@ -50,7 +53,10 @@ struct FExplorationSensedSurvivor
 // the perception debugger, the sight cone gizmo and ReportNoiseEvent all work
 // out of the box. Smell has no engine equivalent and is polled here as a plain
 // radius check: no cone, no line of sight, no walls. It exists so that holding
-// still right next to a type that has it is not a safe play.
+// still right next to a type that has it is not a safe play. The same poll
+// smells the scent baits whose scent radius reaches the enemy
+// (UExcursionScentSubsystem), reported on a delegate of their own: a bait is
+// not a survivor, and the survivor's scent keeps leading to a chase.
 //
 // Hearing is also filtered here, per listener: the engine only checks
 // distance against HearingRange x Loudness, so walls (occlusion) and
@@ -94,6 +100,11 @@ public:
 	// Not recorded as a stimulus: the listener decides whether it reacts,
 	// and records it with SetMostRecentStimulus when it does.
 	FOnPlaceNoiseHeard OnPlaceNoiseHeard;
+
+	// Fired on every smell poll for each scent bait in reach, closest first,
+	// for as long as it stays in reach. The listener decides whether it
+	// reacts.
+	FOnScentBaitSensed OnScentBaitSensed;
 
 	// Builds the sense configurations from the type. Must run before the
 	// component is useful; the controller calls it on possess.
@@ -150,6 +161,9 @@ private:
 	// Polls the smell radius. Runs only when the type has bCanSmell.
 	void UpdateSmell();
 
+	// Part of the smell poll: the scent baits in reach.
+	void UpdateBaitSmell(const FVector& ListenerLocation);
+
 	// Stores the location on the survivor's own entry, and as the most recent
 	// stimulus when the survivor is a body enemies hunt.
 	void RecordStimulus(AActor* Survivor, const FVector& Location);
@@ -177,4 +191,7 @@ private:
 	FVector LastKnownLocation = FVector::ZeroVector;
 
 	bool bHasLastKnownLocation = false;
+
+	// Baits smelled on the last poll, so the log reports only new ones.
+	TSet<TWeakObjectPtr<AExcursionScentBait>> SmelledBaits;
 };

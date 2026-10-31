@@ -157,14 +157,33 @@ public:
     // survivor, who kills the enemy and walks away unharmed.
     // Item.Distraction: thrown during an excursion; needs ImpactNoise and a
     // WorldActorClass.
+    // Item.ScentBait: thrown like a distraction, but lands as a scent bait
+    // (AExcursionScentBait) that holds enemies who smell it; needs the
+    // Scent fields too.
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Identity")
     FGameplayTagContainer ItemTags;
 
-    // Noise made where this item lands when thrown as a distraction. Tag it
-    // Noise.Distraction. The item flies with the mesh of its WorldActorClass
-    // and becomes that pickup again once it stops.
+    // Noise made where this item lands when thrown as a distraction or a
+    // scent bait. Tag it Noise.Distraction. The item flies with the mesh of
+    // its WorldActorClass; a distraction becomes that pickup again once it
+    // stops, a scent bait stays on the ground with that mesh.
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Excursion")
     TObjectPtr<UNoiseDefinition> ImpactNoise = nullptr;
+
+    // Scent bait only. Enemies that can smell (bCanSmell) and stand within
+    // this distance of the bait smell it.
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Excursion", meta = (ClampMin = "0.0"))
+    float ScentRadius = 600.0f;
+
+    // Scent bait only. Seconds the bait lasts once the first enemy starts
+    // eating it; every enemy eating it stops when it is gone.
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Excursion", meta = (ClampMin = "0.0", Units = "Seconds"))
+    float ScentEatSeconds = 10.0f;
+
+    // Scent bait only. Seconds the bait lasts on the ground while nobody
+    // eats it.
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Excursion", meta = (ClampMin = "0.0", Units = "Seconds"))
+    float ScentGroundSeconds = 30.0f;
 
     // -----------------------------------------------------------------------
     // Economy

@@ -55,4 +55,6 @@ void UExplorationEnemyAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	bIsCatching = BehaviorState == EExplorationEnemyState::Catch;
 
 	bIsKnockedDown = BehaviorState == EExplorationEnemyState::KnockedDown;
+
+	bIsEating = Enemy->IsEating();
 }

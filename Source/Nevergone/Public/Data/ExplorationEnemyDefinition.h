@@ -99,6 +99,8 @@ public:
 	// Smell is proximity only: it ignores walls, cones, and line of sight, and
 	// exists so that hiding right next to a type that has it is not safe.
 	// The engine ships no smell sense, so the controller polls this radius.
+	// Only a type that can smell is drawn by scent baits (each bait has its
+	// own scent radius).
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Perception|Smell")
 	bool bCanSmell = false;
 
@@ -254,9 +256,21 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Signals")
 	FExplorationEnemyNoiseSignal ChaseSignal;
 
-	// Back to patrol after an investigation or a chase.
+	// Back to patrol after an investigation, a chase or a scent bait.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Signals")
 	FExplorationEnemySignal GiveUpSignal;
+
+	// Smelled a scent bait: the enemy sniffs and heads for it. Only types
+	// with bCanSmell ever play it.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Signals")
+	FExplorationEnemySignal SniffSignal;
+
+	// Eating a scent bait. The montage should loop (the AnimInstance also
+	// exposes bIsEating); it is stopped when the enemy stops eating. The
+	// sound loops for as long as it eats, whether or not the asset itself
+	// loops, and pauses with the world.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Signals")
+	FExplorationEnemySignal EatSignal;
 
 	// One knock at a latched door, every KnockIntervalSeconds. The noise
 	// sounds at the door and must be tagged Noise.DoorKnock: other enemies

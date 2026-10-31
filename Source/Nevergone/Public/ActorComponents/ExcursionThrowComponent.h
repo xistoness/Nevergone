@@ -16,12 +16,14 @@ class UStaticMeshComponent;
 // ---------------------------------------------------------------------------
 // UExcursionThrowComponent
 //
-// Throwing distractions during an excursion. Holding the input aims: the arc
-// the object will follow is predicted every frame and drawn as a row of
-// markers ending on a landing marker. Releasing throws the first item tagged
-// Item.Distraction in the inventory, which leaves the inventory at that
-// moment. It flies as an AExcursionThrowable and lands as the item's own
-// pickup, so picking it up again gives it back.
+// Throwing distractions and scent baits during an excursion. Holding the
+// input aims: the arc the object will follow is predicted every frame and
+// drawn as a row of markers ending on a landing marker. Releasing throws the
+// first item tagged Item.Distraction or Item.ScentBait in the inventory
+// (provisional until the tool ring picks one), which leaves the inventory at
+// that moment. It flies as an AExcursionThrowable; a distraction lands as the
+// item's own pickup, so picking it up again gives it back, and a scent bait
+// lands as an AExcursionScentBait, which cannot be picked up.
 //
 // Driven by UExplorationModeComponent (BeginAim / ReleaseAim / CancelAim), so
 // input keeps reaching the survivor only through IExplorationInputReceiver.
@@ -100,9 +102,9 @@ protected:
 
 private:
 
-	// First item in the inventory tagged Item.Distraction that has a pickup
-	// to fly as and land as.
-	UItemDefinition* FindDistraction() const;
+	// First item in the inventory tagged Item.Distraction or Item.ScentBait
+	// that has a pickup to fly as.
+	UItemDefinition* FindThrowable() const;
 
 	bool ComputeLaunch(FVector& OutStart, FVector& OutVelocity) const;
 

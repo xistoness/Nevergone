@@ -6,11 +6,13 @@
 #include "Nevergone.h"
 #include "ActorComponents/ExplorationPerceptionComponent.h"
 #include "Actors/Door.h"
+#include "Actors/ExcursionScentBait.h"
 #include "Characters/ExcursionSurvivorNPC.h"
 #include "Characters/ExplorationEnemyCharacter.h"
 #include "Data/ExplorationEnemyDefinition.h"
 #include "EngineTools/AINavLinks.h"
 #include "EngineTools/CollisionChannels.h"
+#include "Types/ScentBaitRules.h"
 #include "World/ExcursionEncounterSubsystem.h"
 
 #include "Components/PrimitiveComponent.h"
@@ -35,6 +37,14 @@ namespace ExplorationEnemyAI
 	// Hits on the capture line that are not scenery (a closed door's box, a
 	// ragdoll) skipped before the line is taken as free.
 	static constexpr int32 MaxCaptureLineSkippedHits = 8;
+
+	// How close to a scent bait the walk to it ends, beyond the capsule
+	// radius: the enemy stands over it to eat.
+	static constexpr float BaitReachRadius = 40.0f;
+
+	// Slack on top of BaitReachRadius and the capsule radius before a walk
+	// that ended counts as not having reached the bait (a partial path).
+	static constexpr float BaitReachTolerance = 60.0f;
 }
 
 AExplorationEnemyController::AExplorationEnemyController()
@@ -84,6 +94,7 @@ void AExplorationEnemyController::OnPossess(APawn* InPawn)
 		EnemyPerceptionComponent->OnSurvivorSensed.AddUObject(this, &AExplorationEnemyController::HandleSurvivorSensed);
 		EnemyPerceptionComponent->OnSurvivorLost.AddUObject(this, &AExplorationEnemyController::HandleSurvivorLost);
 		EnemyPerceptionComponent->OnPlaceNoiseHeard.AddUObject(this, &AExplorationEnemyController::HandlePlaceNoiseHeard);
+		EnemyPerceptionComponent->OnScentBaitSensed.AddUObject(this, &AExplorationEnemyController::HandleScentBaitSensed);
 	}
 
 	// Placed pawns are possessed inside PostInitializeComponents, before any
@@ -99,7 +110,16 @@ void AExplorationEnemyController::OnUnPossess()
 		EnemyPerceptionComponent->OnSurvivorSensed.RemoveAll(this);
 		EnemyPerceptionComponent->OnSurvivorLost.RemoveAll(this);
 		EnemyPerceptionComponent->OnPlaceNoiseHeard.RemoveAll(this);
+		EnemyPerceptionComponent->OnScentBaitSensed.RemoveAll(this);
 	}
+
+	if (ControlledEnemy.IsValid())
+	{
+		ControlledEnemy->SetEating(false);
+	}
+
+	TargetBait = nullptr;
+	IgnoredBaits.Reset();
 
 	ControlledEnemy = nullptr;
 	Definition = nullptr;
@@ -128,9 +148,26 @@ void AExplorationEnemyController::EnterState(EExplorationEnemyState NewState)
 		return;
 	}
 
-	if (ControlledEnemy->GetBehaviorState() == NewState)
+	const EExplorationEnemyState OldState = ControlledEnemy->GetBehaviorState();
+
+	if (OldState == NewState)
 	{
 		return;
+	}
+
+	// Leaving the bait: the eat loop stops before the next state's signal.
+	if (OldState == EExplorationEnemyState::Baited)
+	{
+		UE_LOG(LogNevergone, Verbose,
+			TEXT("[ExplorationEnemyController] %s leaves Baited (%s %s) for %s"),
+			*GetNameSafe(ControlledEnemy.Get()), ControlledEnemy->IsEating() ? TEXT("eating") : TEXT("walking to"),
+			*GetNameSafe(TargetBait.Get()), *UEnum::GetValueAsString(NewState));
+
+		ControlledEnemy->SetEating(false);
+
+		TargetBait = nullptr;
+
+		bFacingStimulus = false;
 	}
 
 	// The character owns the state so the AnimInstance can read it without
@@ -165,6 +202,10 @@ void AExplorationEnemyController::EnterState(EExplorationEnemyState NewState)
 
 	case EExplorationEnemyState::Investigate:
 		BeginInvestigation();
+		break;
+
+	case EExplorationEnemyState::Baited:
+		BeginBait();
 		break;
 
 	case EExplorationEnemyState::Chase:
@@ -257,9 +298,12 @@ void AExplorationEnemyController::Tick(float DeltaTime)
 
 	const bool bWasSuspicious = StateBeforeSight == EExplorationEnemyState::Suspicious;
 
-	AActor* Focus = ConfirmTarget.Get();
+	// Eating a bait, the enemy sees nothing: no contact builds up.
+	const bool bCanSee = ScentBaitRules::CanSee(StateBeforeSight, ControlledEnemy->IsEating());
 
-	if (EnemyPerceptionComponent && (!Focus || !EnemyPerceptionComponent->HasSightOf(Focus)))
+	AActor* Focus = bCanSee ? ConfirmTarget.Get() : nullptr;
+
+	if (bCanSee && EnemyPerceptionComponent && (!Focus || !EnemyPerceptionComponent->HasSightOf(Focus)))
 	{
 		AActor* Sighted = EnemyPerceptionComponent->GetClosestSightedSurvivor();
 
@@ -310,7 +354,8 @@ void AExplorationEnemyController::Tick(float DeltaTime)
 		}
 		else if (StateBeforeSight == EExplorationEnemyState::Idle ||
 			StateBeforeSight == EExplorationEnemyState::Patrol ||
-			StateBeforeSight == EExplorationEnemyState::Investigate)
+			StateBeforeSight == EExplorationEnemyState::Investigate ||
+			StateBeforeSight == EExplorationEnemyState::Baited)
 		{
 			// The confirmation window is open: stop and look. Decided here
 			// rather than in the sight handler for the same reason as the
@@ -367,6 +412,10 @@ void AExplorationEnemyController::Tick(float DeltaTime)
 
 	case EExplorationEnemyState::Chase:
 		TickChase(DeltaTime);
+		break;
+
+	case EExplorationEnemyState::Baited:
+		TickBaited(DeltaTime);
 		break;
 
 	default:
@@ -949,6 +998,165 @@ void AExplorationEnemyController::TickInvestigate(float DeltaTime)
 }
 
 // ---------------------------------------------------------------------------
+// Baited
+//
+// Three phases. Walk: to the bait, sight working. Face: turn to it, as for a
+// stimulus. Eat: blind and deaf until the bait is gone.
+// ---------------------------------------------------------------------------
+
+void AExplorationEnemyController::BeginBait()
+{
+	bBaitMoveIssued = false;
+	bBaitMoveRetried = false;
+	bFacingStimulus = false;
+	FaceStimulusElapsed = 0.0f;
+
+	if (!DeferStateStartToDoorwayExit())
+	{
+		StopMovement();
+	}
+}
+
+void AExplorationEnemyController::TickBaited(float DeltaTime)
+{
+	AExplorationEnemyCharacter* Enemy = ControlledEnemy.Get();
+
+	if (!Enemy || !Definition)
+	{
+		return;
+	}
+
+	AExcursionScentBait* Bait = TargetBait.Get();
+
+	// Eaten up, or left too long on the ground before this enemy got there.
+	if (!IsValid(Bait))
+	{
+		GiveUpBait(TEXT("the bait is gone"));
+
+		return;
+	}
+
+	if (Enemy->IsEating())
+	{
+		return;
+	}
+
+	// --- Face ---
+
+	if (bFacingStimulus)
+	{
+		if (UpdateStimulusFacing(DeltaTime))
+		{
+			StartEating();
+		}
+
+		return;
+	}
+
+	// --- Walk ---
+
+	if (!bBaitMoveIssued)
+	{
+		bBaitMoveIssued = true;
+
+		if (MoveToLocation(Bait->GetActorLocation(), ExplorationEnemyAI::BaitReachRadius) == EPathFollowingRequestResult::Failed)
+		{
+			GiveUpBait(TEXT("no path to the bait"), Bait);
+		}
+
+		return;
+	}
+
+	if (!HasReachedDestination())
+	{
+		return;
+	}
+
+	const float Distance = FVector::Dist2D(Enemy->GetActorLocation(), Bait->GetActorLocation());
+
+	const float Reach = ExplorationEnemyAI::BaitReachRadius + Enemy->GetSimpleCollisionRadius() +
+		ExplorationEnemyAI::BaitReachTolerance;
+
+	if (Distance > Reach)
+	{
+		// Once more first: a walk that ended in a doorway walked on to the
+		// link end, or another eater pushed this one aside.
+		if (!bBaitMoveRetried)
+		{
+			bBaitMoveRetried = true;
+			bBaitMoveIssued = false;
+
+			UE_LOG(LogNevergone, Verbose,
+				TEXT("[ExplorationEnemyController] %s stopped %.0f from %s; walking to it again"),
+				*GetNameSafe(Enemy), Distance, *GetNameSafe(Bait));
+
+			return;
+		}
+
+		GiveUpBait(*FString::Printf(TEXT("the walk ended %.0f from the bait twice"), Distance), Bait);
+
+		return;
+	}
+
+	FaceTarget = Bait->GetActorLocation();
+	FaceStimulusElapsed = 0.0f;
+	bFacingStimulus = true;
+}
+
+void AExplorationEnemyController::StartEating()
+{
+	AExplorationEnemyCharacter* Enemy = ControlledEnemy.Get();
+
+	AExcursionScentBait* Bait = TargetBait.Get();
+
+	if (!Enemy || !IsValid(Bait))
+	{
+		return;
+	}
+
+	// Blind from now on: whatever sight was building up is dropped.
+	ConfirmTarget = nullptr;
+	Suspicion.Reset();
+
+	Bait->NotifyEatingStarted(Enemy);
+
+	Enemy->SetEating(true);
+
+	UE_LOG(LogNevergone, Verbose,
+		TEXT("[ExplorationEnemyController] %s starts eating %s; blind and deaf until it is gone"),
+		*GetNameSafe(Enemy), *GetNameSafe(Bait));
+}
+
+void AExplorationEnemyController::GiveUpBait(const TCHAR* Reason, AExcursionScentBait* Ignore)
+{
+	if (Ignore)
+	{
+		for (auto It = IgnoredBaits.CreateIterator(); It; ++It)
+		{
+			if (!It->IsValid())
+			{
+				It.RemoveCurrent();
+			}
+		}
+
+		IgnoredBaits.Add(Ignore);
+	}
+
+	UE_LOG(LogNevergone, Verbose,
+		TEXT("[ExplorationEnemyController] %s gives up the bait %s: %s%s"),
+		*GetNameSafe(ControlledEnemy.Get()), *GetNameSafe(TargetBait.Get()), Reason,
+		Ignore ? TEXT("; it ignores that bait from now on") : TEXT(""));
+
+	// Back to what it was doing, not to whatever it heard before the bait.
+	if (EnemyPerceptionComponent)
+	{
+		EnemyPerceptionComponent->ForgetLastKnownLocation();
+	}
+
+	EnterState(EExplorationEnemyState::Patrol);
+}
+
+// ---------------------------------------------------------------------------
 // Chase
 // ---------------------------------------------------------------------------
 
@@ -1319,6 +1527,7 @@ bool AExplorationEnemyController::DoesStateWaitForDoorway(EExplorationEnemyState
 	case EExplorationEnemyState::Patrol:
 	case EExplorationEnemyState::Suspicious:
 	case EExplorationEnemyState::Investigate:
+	case EExplorationEnemyState::Baited:
 		return true;
 
 	default:
@@ -1583,6 +1792,29 @@ void AExplorationEnemyController::HandlePlaceNoiseHeard(AActor* Source, const FV
 	ReactToNoise();
 }
 
+void AExplorationEnemyController::HandleScentBaitSensed(AExcursionScentBait* Bait)
+{
+	// Frozen by a player capture: the smell poll still runs at zero time.
+	if (!ControlledEnemy.IsValid() || !IsValid(Bait) || CustomTimeDilation <= 0.0f)
+	{
+		return;
+	}
+
+	if (!ScentBaitRules::CanBeBaited(ControlledEnemy->GetBehaviorState()) || IgnoredBaits.Contains(Bait))
+	{
+		return;
+	}
+
+	UE_LOG(LogNevergone, Verbose,
+		TEXT("[ExplorationEnemyController] %s smells %s while in %s and goes to it"),
+		*GetNameSafe(ControlledEnemy.Get()), *GetNameSafe(Bait),
+		*UEnum::GetValueAsString(ControlledEnemy->GetBehaviorState()));
+
+	TargetBait = Bait;
+
+	EnterState(EExplorationEnemyState::Baited);
+}
+
 bool AExplorationEnemyController::CanReactToNoise() const
 {
 	if (!ControlledEnemy.IsValid())
@@ -1590,15 +1822,8 @@ bool AExplorationEnemyController::CanReactToNoise() const
 		return false;
 	}
 
-	// A noise never confirms a target, it only moves the enemy to look. A
-	// chase keeps its target, a suspicious enemy is already looking at one
-	// and holds the noise instead (HoldNoise), and a captured, downed or
-	// dead one cannot react.
-	const EExplorationEnemyState State = ControlledEnemy->GetBehaviorState();
-
-	return State == EExplorationEnemyState::Idle ||
-		State == EExplorationEnemyState::Patrol ||
-		State == EExplorationEnemyState::Investigate;
+	// A suspicious enemy holds the noise instead (HoldNoise).
+	return ScentBaitRules::CanReactToNoise(ControlledEnemy->GetBehaviorState());
 }
 
 void AExplorationEnemyController::HoldNoise(const FVector& NoiseLocation, const AActor* Source)

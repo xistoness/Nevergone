@@ -367,6 +367,7 @@ bool FNevergoneDoorwayStopTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Giving up (Patrol) waits for the doorway"), Waits(EExplorationEnemyState::Patrol));
 	TestTrue(TEXT("Suspicious waits for the doorway"), Waits(EExplorationEnemyState::Suspicious));
 	TestTrue(TEXT("Investigate waits for the doorway"), Waits(EExplorationEnemyState::Investigate));
+	TestTrue(TEXT("Baited waits for the doorway"), Waits(EExplorationEnemyState::Baited));
 
 	// A chase must still catch; the capture states place the body.
 	TestFalse(TEXT("Chase starts at once"), Waits(EExplorationEnemyState::Chase));

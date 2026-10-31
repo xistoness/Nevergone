@@ -186,6 +186,18 @@ void AExplorationEnemyCharacter::SetBehaviorState(EExplorationEnemyState NewStat
 	OnStateChanged.Broadcast(OldState, NewState);
 }
 
+void AExplorationEnemyCharacter::SetEating(bool bInEating)
+{
+	if (bEating == bInEating)
+	{
+		return;
+	}
+
+	bEating = bInEating;
+
+	OnEatingChanged.Broadcast(bEating);
+}
+
 void AExplorationEnemyCharacter::AnnounceDoorSignal(EExplorationEnemySignalMoment Moment, ADoor* Door)
 {
 	OnDoorSignal.Broadcast(Moment, Door);

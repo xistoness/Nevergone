@@ -26,7 +26,7 @@ namespace ExplorationEnemySignals
 
 UExplorationEnemySignalComponent::UExplorationEnemySignalComponent()
 {
-	// Only the investigation loop needs a tick, and only while it is wanted.
+	// Only the sound loop needs a tick, and only while it is wanted.
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
 }
@@ -50,18 +50,27 @@ EExplorationEnemySignalMoment UExplorationEnemySignalComponent::GetSignalMoment(
 	case EExplorationEnemyState::Chase:
 		return EExplorationEnemySignalMoment::Chase;
 
+	case EExplorationEnemyState::Baited:
+		return EExplorationEnemySignalMoment::Sniff;
+
 	case EExplorationEnemyState::Patrol:
 		// Giving up only after noticing something. The first patrol after
 		// spawn, getting up and finishing a meal are not a give-up. Suspicion
 		// never returns to patrol: it ends in a chase or an investigation.
 		return OldState == EExplorationEnemyState::Investigate ||
-			OldState == EExplorationEnemyState::Chase
+			OldState == EExplorationEnemyState::Chase ||
+			OldState == EExplorationEnemyState::Baited
 			? EExplorationEnemySignalMoment::GiveUp
 			: EExplorationEnemySignalMoment::None;
 
 	default:
 		return EExplorationEnemySignalMoment::None;
 	}
+}
+
+EExplorationEnemySignalMoment UExplorationEnemySignalComponent::GetEatingSignalMoment(bool bEating)
+{
+	return bEating ? EExplorationEnemySignalMoment::Eat : EExplorationEnemySignalMoment::None;
 }
 
 void UExplorationEnemySignalComponent::BeginPlay()
@@ -82,20 +91,24 @@ void UExplorationEnemySignalComponent::BeginPlay()
 	StateChangedHandle = Enemy->OnStateChanged.AddUObject(this, &UExplorationEnemySignalComponent::HandleStateChanged);
 
 	DoorSignalHandle = Enemy->OnDoorSignal.AddUObject(this, &UExplorationEnemySignalComponent::HandleDoorSignal);
+
+	EatingChangedHandle = Enemy->OnEatingChanged.AddUObject(this, &UExplorationEnemySignalComponent::HandleEatingChanged);
 }
 
 void UExplorationEnemySignalComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	StopInvestigationLoop();
+	StopSignalLoop();
 
 	if (AExplorationEnemyCharacter* Enemy = GetEnemy())
 	{
 		Enemy->OnStateChanged.Remove(StateChangedHandle);
 		Enemy->OnDoorSignal.Remove(DoorSignalHandle);
+		Enemy->OnEatingChanged.Remove(EatingChangedHandle);
 	}
 
 	StateChangedHandle.Reset();
 	DoorSignalHandle.Reset();
+	EatingChangedHandle.Reset();
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -103,9 +116,11 @@ void UExplorationEnemySignalComponent::EndPlay(const EEndPlayReason::Type EndPla
 void UExplorationEnemySignalComponent::HandleStateChanged(EExplorationEnemyState OldState,
 	EExplorationEnemyState NewState)
 {
+	// The investigation loop. The eat loop stops with the eating flag,
+	// which the controller clears before the state changes.
 	if (OldState == EExplorationEnemyState::Investigate)
 	{
-		StopInvestigationLoop();
+		StopSignalLoop();
 	}
 
 	const UExplorationEnemyDefinition* Definition = GetDefinition();
@@ -124,7 +139,7 @@ void UExplorationEnemySignalComponent::HandleStateChanged(EExplorationEnemyState
 	case EExplorationEnemySignalMoment::Investigation:
 		// The sound is the loop; only the montage plays once.
 		PlayMontage(Definition->InvestigationSignal.Montage, TEXT("investigation"));
-		StartInvestigationLoop();
+		StartSignalLoop(Definition->InvestigationSignal.Sound, TEXT("investigation"));
 		break;
 
 	case EExplorationEnemySignalMoment::Chase:
@@ -135,8 +150,40 @@ void UExplorationEnemySignalComponent::HandleStateChanged(EExplorationEnemyState
 		PlaySignal(Definition->GiveUpSignal, TEXT("give-up"));
 		break;
 
+	case EExplorationEnemySignalMoment::Sniff:
+		PlaySignal(Definition->SniffSignal, TEXT("sniff"));
+		break;
+
 	default:
 		break;
+	}
+}
+
+void UExplorationEnemySignalComponent::HandleEatingChanged(bool bEating)
+{
+	const UExplorationEnemyDefinition* Definition = GetDefinition();
+
+	AExplorationEnemyCharacter* Enemy = GetEnemy();
+
+	if (!Definition || !Enemy)
+	{
+		return;
+	}
+
+	if (GetEatingSignalMoment(bEating) == EExplorationEnemySignalMoment::Eat)
+	{
+		// The montage loops in its own sections; the sound loops here.
+		PlayMontage(Definition->EatSignal.Montage, TEXT("eat"));
+		StartSignalLoop(Definition->EatSignal.Sound, TEXT("eat"));
+
+		return;
+	}
+
+	StopSignalLoop();
+
+	if (UAnimMontage* Montage = Definition->EatSignal.Montage)
+	{
+		Enemy->StopAnimMontage(Montage);
 	}
 }
 
@@ -271,69 +318,72 @@ void UExplorationEnemySignalComponent::PlayMontage(UAnimMontage* Montage, const 
 }
 
 // ---------------------------------------------------------------------------
-// Investigation loop
+// Sound loop
 // ---------------------------------------------------------------------------
 
-void UExplorationEnemySignalComponent::StartInvestigationLoop()
+void UExplorationEnemySignalComponent::StartSignalLoop(USoundBase* Sound, const TCHAR* MomentName)
 {
-	const UExplorationEnemyDefinition* Definition = GetDefinition();
+	// One loop at a time: investigating and eating never overlap.
+	StopSignalLoop();
 
-	if (!Definition || !Definition->InvestigationSignal.Sound)
+	if (!Sound)
 	{
 		UE_LOG(LogNevergone, Verbose,
-			TEXT("[ExplorationEnemySignalComponent] %s has no investigation sound"),
-			*GetNameSafe(GetOwner()));
+			TEXT("[ExplorationEnemySignalComponent] %s has no %s sound"),
+			*GetNameSafe(GetOwner()), MomentName);
 
 		return;
 	}
 
-	bInvestigationLoopWanted = true;
+	LoopSound = Sound;
+
+	LoopName = MomentName;
 
 	LoopRetrySeconds = 0.0f;
 
-	SpawnInvestigationLoopSound();
+	SpawnLoopSound();
 
 	SetComponentTickEnabled(true);
 }
 
-void UExplorationEnemySignalComponent::StopInvestigationLoop()
+void UExplorationEnemySignalComponent::StopSignalLoop()
 {
-	const bool bWasWanted = bInvestigationLoopWanted;
+	const bool bWasWanted = LoopSound != nullptr;
 
-	bInvestigationLoopWanted = false;
+	LoopSound = nullptr;
 
 	SetComponentTickEnabled(false);
 
-	if (IsValid(InvestigationLoop))
+	if (IsValid(SignalLoop))
 	{
-		InvestigationLoop->Stop();
+		SignalLoop->Stop();
 	}
 
-	InvestigationLoop = nullptr;
+	SignalLoop = nullptr;
 
 	if (bWasWanted)
 	{
 		UE_LOG(LogNevergone, Verbose,
-			TEXT("[ExplorationEnemySignalComponent] %s stopped the investigation loop"),
-			*GetNameSafe(GetOwner()));
+			TEXT("[ExplorationEnemySignalComponent] %s stopped the %s loop"),
+			*GetNameSafe(GetOwner()), LoopName);
 	}
 }
 
-void UExplorationEnemySignalComponent::SpawnInvestigationLoopSound()
+void UExplorationEnemySignalComponent::SpawnLoopSound()
 {
-	const UExplorationEnemyDefinition* Definition = GetDefinition();
-
 	AExplorationEnemyCharacter* Enemy = GetEnemy();
 
 	const UGameInstance* GameInstance = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
 
 	UAudioSubsystem* Audio = GameInstance ? GameInstance->GetSubsystem<UAudioSubsystem>() : nullptr;
 
-	InvestigationLoop = (Definition && Enemy && Audio)
-		? Audio->PlaySFXAttached(Definition->InvestigationSignal.Sound, Enemy->GetRootComponent())
+	// PlaySFXAttached gives a sound without attenuation of its own the
+	// project default.
+	SignalLoop = (LoopSound && Enemy && Audio)
+		? Audio->PlaySFXAttached(LoopSound, Enemy->GetRootComponent())
 		: nullptr;
 
-	if (!IsValid(InvestigationLoop) || !InvestigationLoop->IsPlaying())
+	if (!IsValid(SignalLoop) || !SignalLoop->IsPlaying())
 	{
 		// The engine skips a short sound the listener is too far to hear,
 		// and a concurrency limit can refuse one. Neither is permanent, so
@@ -341,15 +391,15 @@ void UExplorationEnemySignalComponent::SpawnInvestigationLoopSound()
 		LoopRetrySeconds = ExplorationEnemySignals::LoopRetryIntervalSeconds;
 
 		UE_LOG(LogNevergone, Verbose,
-			TEXT("[ExplorationEnemySignalComponent] %s could not start the investigation loop; retrying in %.1fs"),
-			*GetNameSafe(Enemy), LoopRetrySeconds);
+			TEXT("[ExplorationEnemySignalComponent] %s could not start the %s loop; retrying in %.1fs"),
+			*GetNameSafe(Enemy), LoopName, LoopRetrySeconds);
 
 		return;
 	}
 
 	UE_LOG(LogNevergone, Verbose,
-		TEXT("[ExplorationEnemySignalComponent] %s playing investigation loop %s"),
-		*GetNameSafe(Enemy), *GetNameSafe(Definition->InvestigationSignal.Sound));
+		TEXT("[ExplorationEnemySignalComponent] %s playing %s loop %s"),
+		*GetNameSafe(Enemy), LoopName, *GetNameSafe(LoopSound));
 }
 
 void UExplorationEnemySignalComponent::TickComponent(float DeltaTime, ELevelTick TickType,
@@ -357,7 +407,7 @@ void UExplorationEnemySignalComponent::TickComponent(float DeltaTime, ELevelTick
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	if (!bInvestigationLoopWanted)
+	if (!LoopSound)
 	{
 		SetComponentTickEnabled(false);
 
@@ -370,13 +420,13 @@ void UExplorationEnemySignalComponent::TickComponent(float DeltaTime, ELevelTick
 	// engine would keep playing the loop on its own.
 	const bool bFrozen = Owner && Owner->CustomTimeDilation <= 0.0f;
 
-	if (IsValid(InvestigationLoop) && InvestigationLoop->IsPlaying())
+	if (IsValid(SignalLoop) && SignalLoop->IsPlaying())
 	{
-		const bool bIsPaused = InvestigationLoop->bIsPaused;
+		const bool bIsPaused = SignalLoop->bIsPaused;
 
 		if (bIsPaused != bFrozen)
 		{
-			InvestigationLoop->SetPaused(bFrozen);
+			SignalLoop->SetPaused(bFrozen);
 		}
 
 		return;
@@ -397,7 +447,7 @@ void UExplorationEnemySignalComponent::TickComponent(float DeltaTime, ELevelTick
 
 	// The sound ended on its own (the asset does not loop), or the last
 	// attempt did not start. Start it again.
-	SpawnInvestigationLoopSound();
+	SpawnLoopSound();
 }
 
 // ---------------------------------------------------------------------------

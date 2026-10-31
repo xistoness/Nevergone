@@ -4,6 +4,7 @@
 
 #include "Nevergone.h"
 #include "ActorComponents/UnitStatsComponent.h"
+#include "Actors/ExcursionScentBait.h"
 #include "Characters/CharacterBase.h"
 #include "Characters/ExcursionSurvivorNPC.h"
 #include "Characters/ExplorationEnemyCharacter.h"
@@ -756,6 +757,13 @@ void UExcursionEncounterSubsystem::FreezeWorldExcept(const AActor* KeepA, const 
 
 		Freeze(Character);
 		Freeze(Character->GetController());
+	}
+
+	// Scent baits on the ground: they would otherwise age, or run out under
+	// a frozen enemy eating them.
+	for (TActorIterator<AExcursionScentBait> It(GetWorld()); It; ++It)
+	{
+		Freeze(*It);
 	}
 
 	UE_LOG(LogNevergone, Log,

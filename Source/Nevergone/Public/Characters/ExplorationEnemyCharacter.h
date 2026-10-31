@@ -17,6 +17,8 @@ DECLARE_MULTICAST_DELEGATE_TwoParams(FOnExplorationEnemyStateChanged,
 DECLARE_MULTICAST_DELEGATE_TwoParams(FOnExplorationEnemyDoorSignal,
 	EExplorationEnemySignalMoment /*Moment*/, ADoor* /*Door*/);
 
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnExplorationEnemyEatingChanged, bool /*bEating*/);
+
 // ---------------------------------------------------------------------------
 // AExplorationEnemyCharacter
 //
@@ -68,6 +70,16 @@ public:
 	// Sets the state, applies the matching movement speed, and broadcasts.
 	// No-op when the state is unchanged.
 	void SetBehaviorState(EExplorationEnemyState NewState);
+
+	// Eating a scent bait: the part of Baited spent at the bait. Owned here
+	// like the state, so the AnimInstance and the signals read it.
+	bool IsEating() const { return bEating; }
+
+	// Sets the flag and broadcasts OnEatingChanged. No-op when unchanged.
+	void SetEating(bool bInEating);
+
+	// Played by UExplorationEnemySignalComponent: the eat loop.
+	FOnExplorationEnemyEatingChanged OnEatingChanged;
 
 	// --- Queries used by the controller ---
 
@@ -128,6 +140,8 @@ private:
 	int32 ResolveVisualVariantIndex(int32 VariantCount) const;
 
 	EExplorationEnemyState BehaviorState = EExplorationEnemyState::Idle;
+
+	bool bEating = false;
 
 	FVector HomeLocation = FVector::ZeroVector;
 

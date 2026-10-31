@@ -69,6 +69,11 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Behaviour")
 	bool bIsKnockedDown = false;
 
+	// True while the enemy eats a scent bait (the end of Baited, at the
+	// bait). Drives an eating loop where the eat montage does not cover it.
+	UPROPERTY(BlueprintReadOnly, Category = "Behaviour")
+	bool bIsEating = false;
+
 private:
 
 	TWeakObjectPtr<AExplorationEnemyCharacter> OwningEnemy;

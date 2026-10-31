@@ -49,6 +49,21 @@ bool FNevergoneExplorationEnemySignalTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Catch -> KnockedDown"), Moment(EState::Catch, EState::KnockedDown) == EMoment::None);
 	TestTrue(TEXT("Catch -> Dead"), Moment(EState::Catch, EState::Dead) == EMoment::None);
 
+	// A scent bait: sniffing on the way in, giving up on the way back to
+	// patrol, the usual signal when sight or smell takes it elsewhere.
+	TestTrue(TEXT("Patrol -> Baited"), Moment(EState::Patrol, EState::Baited) == EMoment::Sniff);
+	TestTrue(TEXT("Investigate -> Baited"), Moment(EState::Investigate, EState::Baited) == EMoment::Sniff);
+	TestTrue(TEXT("Baited -> Patrol (bait gone)"), Moment(EState::Baited, EState::Patrol) == EMoment::GiveUp);
+	TestTrue(TEXT("Baited -> Chase (survivor smelled)"), Moment(EState::Baited, EState::Chase) == EMoment::Chase);
+	TestTrue(TEXT("Baited -> Suspicious (seen on the way)"), Moment(EState::Baited, EState::Suspicious) == EMoment::Suspicion);
+	TestTrue(TEXT("Baited -> Baited"), Moment(EState::Baited, EState::Baited) == EMoment::None);
+
+	// Eating plays its loop when it starts; stopping plays nothing new.
+	TestTrue(TEXT("Starts eating -> Eat"),
+		UExplorationEnemySignalComponent::GetEatingSignalMoment(true) == EMoment::Eat);
+	TestTrue(TEXT("Stops eating -> None"),
+		UExplorationEnemySignalComponent::GetEatingSignalMoment(false) == EMoment::None);
+
 	// No transition, no signal.
 	TestTrue(TEXT("Investigate -> Investigate"), Moment(EState::Investigate, EState::Investigate) == EMoment::None);
 

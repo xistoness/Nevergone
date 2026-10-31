@@ -75,3 +75,4 @@ UE_DEFINE_GAMEPLAY_TAG(TAG_Noise_Device,			"Noise.Device")
 // Item roles
 UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Safeguard,			"Item.Safeguard")
 UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Distraction,		"Item.Distraction")
+UE_DEFINE_GAMEPLAY_TAG(TAG_Item_ScentBait,			"Item.ScentBait")

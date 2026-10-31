@@ -13,6 +13,7 @@
 #include "ExplorationEnemyController.generated.h"
 
 class ADoor;
+class AExcursionScentBait;
 class AExplorationEnemyCharacter;
 class UExplorationEnemyDefinition;
 class UExplorationPerceptionComponent;
@@ -49,6 +50,18 @@ enum class EExplorationSenseChannel : uint8;
 //               instead of only once it has walked around the furniture.
 //   Chase       The survivor is confirmed. Moves at ChaseSpeed and repaths.
 //               Losing sight does not end the chase until MemorySeconds pass.
+//   Baited      A type that can smell smelled a scent bait while patrolling
+//               or investigating (ScentBaitRules::CanBeBaited); a chase and a
+//               suspicion ignore baits. Walks to it, sight working as in
+//               Investigate (a survivor in view opens a suspicion) and
+//               hearing off, since the bait's scent would pull it straight
+//               back from any noise. At the bait it turns to it and eats,
+//               blind and deaf: only a survivor's scent takes it away, to a
+//               chase. Several enemies eat the same bait. When the bait is
+//               gone (eaten, or left too long), or cannot be reached, it
+//               gives up back to Patrol, to its post or route; a bait it
+//               could not reach (no path, or two walks that ended short of
+//               it) is ignored from then on.
 //   Catch       The survivor is within CatchDistance and
 //               UExcursionEncounterSubsystem accepted the capture. The
 //               capture sequence drives the body; the brain waits for
@@ -73,7 +86,8 @@ enum class EExplorationSenseChannel : uint8;
 //
 // Nobody stops in a doorway (FDoorwayCrossing, shared with the follower): an
 // enemy entering Patrol, Suspicious or Investigate while crossing a doorway
-// changes state (and signals) at once, but only stops, or starts the patrol,
+// (or Baited) changes state (and signals) at once, but only stops, or starts
+// the patrol,
 // and only runs the new state, once it is out (DoesStateWaitForDoorway).
 // A move that ends inside the doorway it crossed walks on to the link end.
 //
@@ -143,7 +157,7 @@ public:
 
 	// True for the states whose start waits until the pawn is out of a
 	// doorway it is crossing: those that stop it or send it somewhere new
-	// (Idle, Patrol, Suspicious, Investigate). A chase repaths once out on
+	// (Idle, Patrol, Suspicious, Investigate, Baited). A chase repaths once out on
 	// its own and must still catch; the capture states place the body.
 	static bool DoesStateWaitForDoorway(EExplorationEnemyState State);
 
@@ -180,6 +194,7 @@ private:
 	void TickInvestigate(float DeltaTime);
 	void TickChase(float DeltaTime);
 	void TickKnockdown(float DeltaTime);
+	void TickBaited(float DeltaTime);
 
 	// --- Patrol helpers ---
 
@@ -213,7 +228,19 @@ private:
 	// Shared by Wander and the search phase. Returns false when no point was
 	// found or the move request failed.
 	bool MoveToRandomReachablePoint(const FVector& Origin, float Radius);
-	
+
+	// --- Baited ---
+
+	// Resets the walk to the bait. Called on entering Baited.
+	void BeginBait();
+
+	// At the bait and facing it: starts eating.
+	void StartEating();
+
+	// Leaves Baited for Patrol. Reason is for the log only. When Ignore is
+	// set, that bait no longer pulls this enemy.
+	void GiveUpBait(const TCHAR* Reason, AExcursionScentBait* Ignore = nullptr);
+
 	// --- Doors ---
 
 	// Knocks at KnockDoor while the move is paused there, and breaks it in
@@ -245,8 +272,10 @@ private:
 	void HandleSurvivorSensed(AActor* Survivor, const FVector& StimulusLocation, EExplorationSenseChannel Channel);
 	void HandleSurvivorLost(AActor* Survivor);
 	void HandlePlaceNoiseHeard(AActor* Source, const FVector& NoiseLocation);
+	void HandleScentBaitSensed(AExcursionScentBait* Bait);
 
-	// True in the states a noise can move: Idle, Patrol and Investigate.
+	// True in the states a noise can move: Idle, Patrol and Investigate
+	// (ScentBaitRules::CanReactToNoise).
 	bool CanReactToNoise() const;
 
 	// A suspicious enemy does not move for a noise: it keeps the most recent
@@ -334,6 +363,20 @@ private:
 	FVector FaceTarget = FVector::ZeroVector;
 
 	bool bIsSearching = false;
+
+	// --- Baited state ---
+
+	// The bait this enemy walks to or eats.
+	TWeakObjectPtr<AExcursionScentBait> TargetBait;
+
+	bool bBaitMoveIssued = false;
+
+	// A walk that ended short of the bait is tried once more before the
+	// bait is ignored.
+	bool bBaitMoveRetried = false;
+
+	// Baits it could not reach; they no longer pull it.
+	TSet<TWeakObjectPtr<AExcursionScentBait>> IgnoredBaits;
 
 	// --- Door state ---
 

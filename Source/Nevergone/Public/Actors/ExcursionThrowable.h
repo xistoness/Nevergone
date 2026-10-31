@@ -25,7 +25,9 @@ class UStaticMeshComponent;
 //             point and attributed to the thrower, so enemies take it for
 //             the survivor. Later bounces are silent.
 //   Landing   Once it stops it spawns the item's pickup in its place and
-//             destroys itself. Picking up is AWorldItemActor's job.
+//             destroys itself. Picking up is AWorldItemActor's job. An item
+//             tagged Item.ScentBait lands as an AExcursionScentBait instead,
+//             which cannot be picked up.
 //
 // Flight and pickup need opposite collision: a small body that blocks the
 // world to bounce, against a large overlap-only sphere that is easy to aim
@@ -49,6 +51,11 @@ public:
 
 	void Launch(const FVector& Velocity, UItemDefinition* InItem, AActor* InThrower);
 
+	// Gives Target the mesh, placement and materials of the item's pickup
+	// (its WorldActorClass), copied from the class default object. False
+	// when the item has no pickup mesh. LogContext is for the log only.
+	static bool CopyPickupLooks(const UItemDefinition* InItem, UStaticMeshComponent* Target, const AActor* LogContext);
+
 protected:
 
 	UPROPERTY(VisibleAnywhere, Category = "Components")
@@ -68,8 +75,8 @@ private:
 	UFUNCTION()
 	void HandleStop(const FHitResult& ImpactResult);
 
-	// Shows the item as its pickup looks.
-	void CopyPickupLooks();
+	// Leaves the bait the item lands as. False when it could not be spawned.
+	bool SpawnScentBait();
 
 	void MakeImpactNoise(const FHitResult& Hit);
 
