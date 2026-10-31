@@ -46,6 +46,7 @@ void UMyGameInstance::Init()
 		Audio->DefaultHitSFX   = DefaultHitSFX;
 		Audio->DefaultDeathSFX = DefaultDeathSFX;
 		Audio->DefaultHealSFX  = DefaultHealSFX;
+		Audio->DefaultWorldAttenuation = DefaultWorldAttenuation;
 		Audio->MasterSoundMix  = MasterSoundMix;
 		Audio->UISoundMap      = UISoundMap;
 

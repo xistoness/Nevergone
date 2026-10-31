@@ -6,11 +6,13 @@
 #include "Nevergone.h"
 #include "Actors/ExcursionNoiseMaskVolume.h"
 #include "ActorComponents/InteractableComponent.h"
+#include "Audio/AudioSubsystem.h"
 #include "Data/NoiseDefinition.h"
 #include "World/ExcursionNoiseSubsystem.h"
 
 #include "Components/AudioComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/GameInstance.h"
 #include "Sound/SoundBase.h"
 
 AExcursionDevice::AExcursionDevice()
@@ -61,6 +63,17 @@ void AExcursionDevice::BeginPlay()
 	if (LoopSound)
 	{
 		LoopAudio->SetSound(LoopSound);
+	}
+
+	// A loop with no attenuation of its own (neither on the component nor on
+	// the sound) takes the project's world default, like every world SFX.
+	const UGameInstance* GameInstance = GetGameInstance();
+
+	const UAudioSubsystem* Audio = GameInstance ? GameInstance->GetSubsystem<UAudioSubsystem>() : nullptr;
+
+	if (Audio && !LoopAudio->AttenuationSettings && !LoopAudio->bOverrideAttenuation)
+	{
+		LoopAudio->SetAttenuationSettings(Audio->ResolveWorldAttenuation(LoopAudio->Sound));
 	}
 
 	// The placed state, silently: nobody switched it on.

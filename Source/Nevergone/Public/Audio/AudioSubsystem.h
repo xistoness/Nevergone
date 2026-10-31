@@ -10,6 +10,7 @@
 
 class USoundBase;
 class USoundClass;
+class USoundAttenuation;
 class USoundMix;
 class UAudioComponent;
 class UCombatEventBus;
@@ -135,6 +136,17 @@ public:
 	UAudioComponent* PlaySFXAttached(USoundBase* Sound, USceneComponent* AttachTo,
 		float VolumeMultiplier = 1.0f, float PitchMultiplier = 1.0f);
 
+	/**
+	 * The attenuation a world sound plays with when its asset has none:
+	 * DefaultWorldAttenuation, or null when the sound brings its own (or
+	 * there is no default). PlaySFXAtLocation and PlaySFXAttached use it; an actor that
+	 * plays a world sound through its own UAudioComponent applies it too.
+	 */
+	USoundAttenuation* ResolveWorldAttenuation(const USoundBase* Sound) const;
+
+	/** The rule behind ResolveWorldAttenuation, pure so it can be tested. */
+	static USoundAttenuation* PickWorldAttenuation(const USoundBase* Sound, USoundAttenuation* Fallback);
+
 	// -----------------------------------------------------------------------
 	// SFX API — 2D (no attenuation)
 	// -----------------------------------------------------------------------
@@ -219,6 +231,10 @@ public:
 
 	UPROPERTY()
 	TObjectPtr<USoundBase> DefaultHealSFX;
+
+	// Mirrored from UMyGameInstance::DefaultWorldAttenuation.
+	UPROPERTY()
+	TObjectPtr<USoundAttenuation> DefaultWorldAttenuation;
 
 	UPROPERTY()
 	TObjectPtr<USoundMix> MasterSoundMix;

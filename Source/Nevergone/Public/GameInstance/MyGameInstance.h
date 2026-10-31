@@ -16,6 +16,7 @@
 class ACharacterPreviewStudio;
 class UStatusEffectDefinition;
 class USoundClass;
+class USoundAttenuation;
 struct FActorSaveData;
 class UMySaveGame;
 class ULoadingScreenWidget;
@@ -199,6 +200,14 @@ public:
 	/** Fallback SFX fired when a heal is applied with no heal sound assigned. */
 	UPROPERTY(EditDefaultsOnly, Category = "Audio|SFX|Defaults")
 	TObjectPtr<USoundBase> DefaultHealSFX;
+
+	/**
+	 * Attenuation for world sounds (SFX at a location or attached) whose asset
+	 * has none of its own, so no world sound plays at the same volume at any
+	 * distance. UI sounds and music never get it.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Audio|SFX|Defaults")
+	TObjectPtr<USoundAttenuation> DefaultWorldAttenuation;
 
 	/** Active Sound Mix used for per-category volume control. */
 	UPROPERTY(EditDefaultsOnly, Category = "Audio|Mixing")

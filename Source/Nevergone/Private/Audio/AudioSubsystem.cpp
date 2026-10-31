@@ -234,7 +234,8 @@ void UAudioSubsystem::PlaySFXAtLocation(USoundBase* Sound, FVector Location,
 	UWorld* World = GetGameInstance()->GetWorld();
 	if (!World) { return; }
 
-	UGameplayStatics::PlaySoundAtLocation(World, Sound, Location, VolumeMultiplier, PitchMultiplier);
+	UGameplayStatics::PlaySoundAtLocation(World, Sound, Location, VolumeMultiplier, PitchMultiplier,
+		/*StartTime=*/0.0f, ResolveWorldAttenuation(Sound));
 }
 
 UAudioComponent* UAudioSubsystem::PlaySFXAttached(USoundBase* Sound, USceneComponent* AttachTo,
@@ -255,7 +256,23 @@ UAudioComponent* UAudioSubsystem::PlaySFXAttached(USoundBase* Sound, USceneCompo
 
 	return UGameplayStatics::SpawnSoundAttached(Sound, AttachTo, NAME_None, FVector(ForceInit),
 		EAttachLocation::KeepRelativeOffset, /*bStopWhenAttachedToDestroyed=*/false,
-		VolumeMultiplier, PitchMultiplier);
+		VolumeMultiplier, PitchMultiplier, /*StartTime=*/0.0f, ResolveWorldAttenuation(Sound));
+}
+
+USoundAttenuation* UAudioSubsystem::ResolveWorldAttenuation(const USoundBase* Sound) const
+{
+	return PickWorldAttenuation(Sound, DefaultWorldAttenuation);
+}
+
+USoundAttenuation* UAudioSubsystem::PickWorldAttenuation(const USoundBase* Sound, USoundAttenuation* Fallback)
+{
+	// A sound that brings its own attenuation (asset or override) keeps it.
+	if (!Sound || Sound->GetAttenuationSettingsToApply())
+	{
+		return nullptr;
+	}
+
+	return Fallback;
 }
 
 // ---------------------------------------------------------------------------
