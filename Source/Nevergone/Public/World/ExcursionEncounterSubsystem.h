@@ -190,6 +190,10 @@ private:
 
 	void UnfreezeWorld();
 
+	// While the world is frozen, a scent bait that lands is born frozen too,
+	// so it ages only once the capture is over.
+	void HandleActorSpawned(AActor* Actor);
+
 	static AExplorationPlayerController* GetPlayerController(const ACharacter* Player);
 
 	TArray<FExcursionCaptureSequence> Captures;
@@ -198,6 +202,8 @@ private:
 
 	// Actors whose time dilation the current player capture set to zero.
 	TArray<TWeakObjectPtr<AActor>> FrozenActors;
+
+	FDelegateHandle ActorSpawnedHandle;
 
 	// Ragdolls still moving.
 	TArray<FExcursionRagdoll> ActiveRagdolls;

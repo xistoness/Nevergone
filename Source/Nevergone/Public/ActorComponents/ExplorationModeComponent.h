@@ -53,6 +53,9 @@ public:
 	virtual void Input_InteractReleased() override;
 	virtual void Input_ThrowPressed() override;
 	virtual void Input_ThrowReleased() override;
+	virtual void Input_ToolRingPressed() override;
+	virtual void Input_ToolRingReleased() override;
+	virtual bool Input_Look(const FVector2D& Look) override;
 
 	// Stamina left, from 0 to 1. For the HUD.
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Exploration|Stamina")

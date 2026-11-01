@@ -54,4 +54,13 @@ public:
 	// Held to aim a distraction along its arc; releasing throws it.
 	virtual void Input_ThrowPressed() = 0;
 	virtual void Input_ThrowReleased() = 0;
+
+	// Held to open the tool ring on the throwables; releasing chooses the
+	// highlighted one. The world keeps running meanwhile.
+	virtual void Input_ToolRingPressed() = 0;
+	virtual void Input_ToolRingReleased() = 0;
+
+	// The look input. True when the tool ring took it (the camera must not
+	// turn); the ring moves its pointer with it.
+	virtual bool Input_Look(const FVector2D& Look) = 0;
 };

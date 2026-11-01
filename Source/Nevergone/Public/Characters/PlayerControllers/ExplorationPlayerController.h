@@ -22,6 +22,9 @@ class AContainerActor;
 class IExplorationInputReceiver;
 class UExplorationModeComponent;
 class UExcursionResultWidget;
+class UExcursionThrowComponent;
+class UToolRingWidget;
+class UThrowableHudWidget;
 struct FExcursionResult;
 
 /**
@@ -115,6 +118,10 @@ public:
 
     void OnThrowStop();
 
+    void OnToolRingStart();
+
+    void OnToolRingStop();
+
     // --- Input Configuration (Properties) ---
 
     UPROPERTY(EditDefaultsOnly, Category = "Input|Gameplay", meta = (ToolTip = "Action for looking around."))
@@ -134,6 +141,9 @@ public:
 
     UPROPERTY(EditDefaultsOnly, Category = "Input|Gameplay", meta = (ToolTip = "Action for throwing a distraction. Held to aim, released to throw."))
     UInputAction* ThrowInput;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Input|Gameplay", meta = (ToolTip = "Action for the tool ring. Held to open it on the throwables, released to choose the highlighted one."))
+    UInputAction* ToolRingInput;
 
     UPROPERTY(EditDefaultsOnly, Category = "Input|Gameplay", meta = (ToolTip = "Action for interacting with objects/NPCs. Needs a Pressed and a Released trigger for hold interactions (the door latch)."))
     UInputAction* InteractionInput;
@@ -239,6 +249,20 @@ protected:
     UPROPERTY()
     TObjectPtr<UExcursionResultWidget> ExcursionResultWidget = nullptr;
 
+    // The tool ring over the world, in real time: it never pauses it.
+    UPROPERTY(EditDefaultsOnly, Category = "UI")
+    TSubclassOf<UToolRingWidget> ToolRingWidgetClass;
+
+    UPROPERTY()
+    TObjectPtr<UToolRingWidget> ToolRingWidget = nullptr;
+
+    // The small icon of the selected throwable.
+    UPROPERTY(EditDefaultsOnly, Category = "UI")
+    TSubclassOf<UThrowableHudWidget> ThrowableHudWidgetClass;
+
+    UPROPERTY()
+    TObjectPtr<UThrowableHudWidget> ThrowableHudWidget = nullptr;
+
 public:
 
     // Called by AContainerActor::Interact_Implementation to hand off the
@@ -300,6 +324,12 @@ private:
     void CreateInventoryWidget();
     void CreateContainerTransferWidget();
     void CreateExplorationPromptWidget();
+    void CreateToolRingWidgets();
+
+    // Points the ring and the HUD icon at the possessed survivor's throw
+    // component, and makes it follow the inventory.
+    void BindThrowWidgets();
+    void UnbindThrowWidgets();
 
     void BindDialogueSubsystem();
 

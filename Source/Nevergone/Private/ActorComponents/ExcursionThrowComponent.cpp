@@ -6,6 +6,7 @@
 #include "Actors/ExcursionThrowable.h"
 #include "Characters/PlayerControllers/ExplorationPlayerController.h"
 #include "Data/ItemDefinition.h"
+#include "Types/ToolRingRules.h"
 #include "World/InventorySubsystem.h"
 
 #include "Animation/AnimMontage.h"
@@ -40,6 +41,8 @@ UExcursionThrowComponent::UExcursionThrowComponent()
 
 void UExcursionThrowComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	SetTrackInventory(false);
+
 	StopAiming();
 
 	Super::EndPlay(EndPlayReason);
@@ -51,12 +54,15 @@ void UExcursionThrowComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void UExcursionThrowComponent::BeginAim()
 {
-	if (bAiming)
+	// Nothing is aimed with the ring open.
+	if (bAiming || bRingOpen)
 	{
 		return;
 	}
 
-	if (!FindThrowable())
+	RefreshSelection();
+
+	if (!GetSelectedThrowable())
 	{
 		UE_LOG(LogNevergone, Log,
 			TEXT("[ExcursionThrowComponent] %s has nothing to throw"),
@@ -84,6 +90,20 @@ void UExcursionThrowComponent::BeginAim()
 
 void UExcursionThrowComponent::CancelAim()
 {
+	if (bRingOpen)
+	{
+		bRingOpen = false;
+
+		RingOptions.Reset();
+		RingItemRefs.Reset();
+
+		OnRingClosed.Broadcast();
+
+		UE_LOG(LogNevergone, Verbose,
+			TEXT("[ExcursionThrowComponent] %s closed the ring without choosing"),
+			*GetNameSafe(GetOwner()));
+	}
+
 	if (!bAiming)
 	{
 		return;
@@ -114,7 +134,9 @@ void UExcursionThrowComponent::ReleaseAim()
 
 	UInventorySubsystem* Inventory = GetInventory(GetWorld());
 
-	UItemDefinition* Item = FindThrowable();
+	RefreshSelection();
+
+	UItemDefinition* Item = GetSelectedThrowable();
 
 	if (!bCanLaunch || !Character || !Inventory || !Item)
 	{
@@ -339,21 +361,21 @@ void UExcursionThrowComponent::HideArc()
 // Helpers
 // ---------------------------------------------------------------------------
 
-UItemDefinition* UExcursionThrowComponent::FindThrowable() const
+void UExcursionThrowComponent::CollectThrowables(TArray<FThrowableOption>& OutOptions) const
 {
+	OutOptions.Reset();
+
 	const UInventorySubsystem* Inventory = GetInventory(GetWorld());
 
 	if (!Inventory)
 	{
-		return nullptr;
+		return;
 	}
 
 	for (const FInventoryEntry& Entry : Inventory->GetInventory())
 	{
 		UItemDefinition* Item = Entry.Definition.LoadSynchronous();
 
-		// Provisional: the first throwable of either kind, until the tool
-		// ring lets the player pick one.
 		if (!Item || (!Item->ItemTags.HasTag(TAG_Item_Distraction) && !Item->ItemTags.HasTag(TAG_Item_ScentBait)))
 		{
 			continue;
@@ -368,10 +390,204 @@ UItemDefinition* UExcursionThrowComponent::FindThrowable() const
 			continue;
 		}
 
-		return Item;
+		// The same item can sit in more than one stack.
+		FThrowableOption* Existing = OutOptions.FindByPredicate(
+			[Item](const FThrowableOption& Option) { return Option.Item == Item; });
+
+		if (Existing)
+		{
+			Existing->Quantity += Entry.Quantity;
+		}
+		else
+		{
+			OutOptions.Add({ Item, Entry.Quantity });
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Tool ring
+// ---------------------------------------------------------------------------
+
+void UExcursionThrowComponent::OpenRing()
+{
+	if (bRingOpen)
+	{
+		return;
 	}
 
-	return nullptr;
+	if (bAiming)
+	{
+		StopAiming();
+	}
+
+	RefreshSelection();
+
+	CollectThrowables(RingOptions);
+
+	if (RingOptions.IsEmpty())
+	{
+		UE_LOG(LogNevergone, Log,
+			TEXT("[ExcursionThrowComponent] %s has nothing to throw; the ring stays closed"),
+			*GetNameSafe(GetOwner()));
+
+		ShowPrompt(LOCTEXT("NothingToThrow", "Nothing to throw"));
+
+		return;
+	}
+
+	TArray<FName> Names;
+
+	for (const FThrowableOption& Option : RingOptions)
+	{
+		Names.Add(Option.Item->GetFName());
+		RingItemRefs.Add(Option.Item);
+	}
+
+	// The ring opens on what is selected: releasing without moving keeps it.
+	RingHighlight = ToolRingRules::ResolveSelection(Names,
+		SelectedItem.IsValid() ? SelectedItem->GetFName() : NAME_None);
+
+	RingPointer = FVector2D::ZeroVector;
+
+	bRingOpen = true;
+
+	UE_LOG(LogNevergone, Verbose,
+		TEXT("[ExcursionThrowComponent] %s opened the ring with %d options, highlighting %s"),
+		*GetNameSafe(GetOwner()), RingOptions.Num(), *GetNameSafe(RingOptions[RingHighlight].Item));
+
+	OnRingOpened.Broadcast(RingOptions, RingHighlight);
+}
+
+void UExcursionThrowComponent::CloseRing()
+{
+	if (!bRingOpen)
+	{
+		return;
+	}
+
+	bRingOpen = false;
+
+	UItemDefinition* Chosen = RingOptions.IsValidIndex(RingHighlight) ? RingOptions[RingHighlight].Item : nullptr;
+
+	RingOptions.Reset();
+	RingItemRefs.Reset();
+
+	UE_LOG(LogNevergone, Verbose,
+		TEXT("[ExcursionThrowComponent] %s chose %s on the ring"),
+		*GetNameSafe(GetOwner()), *GetNameSafe(Chosen));
+
+	OnRingClosed.Broadcast();
+
+	ResolveSelection(Chosen);
+}
+
+bool UExcursionThrowComponent::PointRing(const FVector2D& Look)
+{
+	if (!bRingOpen)
+	{
+		return false;
+	}
+
+	// Look Y grows downwards on screen, the pointer's Y grows up.
+	RingPointer = ToolRingRules::AdvancePointer(RingPointer,
+		FVector2D(Look.X, -Look.Y) * RingPointerScale, RingPointerRadius);
+
+	const int32 Slice = ToolRingRules::PickSlice(RingPointer, RingOptions.Num(), RingDeadZone);
+
+	if (Slice != INDEX_NONE && Slice != RingHighlight)
+	{
+		RingHighlight = Slice;
+
+		OnRingHighlightChanged.Broadcast(RingHighlight);
+	}
+
+	return true;
+}
+
+UItemDefinition* UExcursionThrowComponent::GetSelectedThrowable() const
+{
+	return SelectedItem.Get();
+}
+
+void UExcursionThrowComponent::RefreshSelection()
+{
+	ResolveSelection(nullptr);
+}
+
+void UExcursionThrowComponent::ResolveSelection(UItemDefinition* Preferred)
+{
+	TArray<FThrowableOption> Options;
+
+	CollectThrowables(Options);
+
+	TArray<FName> Names;
+
+	for (const FThrowableOption& Option : Options)
+	{
+		Names.Add(Option.Item->GetFName());
+	}
+
+	const FName Wanted = Preferred ? Preferred->GetFName()
+		: (SelectedItem.IsValid() ? SelectedItem->GetFName() : NAME_None);
+
+	const int32 Index = ToolRingRules::ResolveSelection(Names, Wanted);
+
+	UItemDefinition* NewItem = Index != INDEX_NONE ? Options[Index].Item : nullptr;
+
+	const int32 NewQuantity = Index != INDEX_NONE ? Options[Index].Quantity : 0;
+
+	if (NewItem == SelectedItem.Get() && NewQuantity == SelectedQuantity)
+	{
+		return;
+	}
+
+	SelectedItem = NewItem;
+
+	SelectedQuantity = NewQuantity;
+
+	UE_LOG(LogNevergone, Verbose,
+		TEXT("[ExcursionThrowComponent] %s selection is now %s x%d"),
+		*GetNameSafe(GetOwner()), *GetNameSafe(NewItem), NewQuantity);
+
+	OnSelectionChanged.Broadcast(NewItem, NewQuantity);
+}
+
+void UExcursionThrowComponent::SetTrackInventory(bool bTrack)
+{
+	if (bTrack == bTrackingInventory)
+	{
+		return;
+	}
+
+	UInventorySubsystem* Inventory = GetInventory(GetWorld());
+
+	if (bTrack)
+	{
+		if (!Inventory)
+		{
+			return;
+		}
+
+		InventoryChangedHandle = Inventory->OnInventoryChanged.AddUObject(
+			this, &UExcursionThrowComponent::HandleInventoryChanged);
+	}
+	else if (Inventory)
+	{
+		Inventory->OnInventoryChanged.Remove(InventoryChangedHandle);
+	}
+
+	bTrackingInventory = bTrack;
+
+	if (bTrack)
+	{
+		RefreshSelection();
+	}
+}
+
+void UExcursionThrowComponent::HandleInventoryChanged()
+{
+	RefreshSelection();
 }
 
 void UExcursionThrowComponent::SetAimRotation(bool bAim)

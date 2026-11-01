@@ -6,6 +6,7 @@
 #include "InputAction.h"
 #include "Widgets/ExcursionResultWidget.h"
 #include "World/ExcursionSubsystem.h"
+#include "ActorComponents/ExcursionThrowComponent.h"
 #include "ActorComponents/ExplorationModeComponent.h"
 #include "ActorComponents/PauseMenuComponent.h"
 #include "Characters/CharacterBase.h"
@@ -14,6 +15,8 @@
 #include "Party/PartyManagerSubsystem.h"
 #include "Widgets/DialogueWidget.h"
 #include "Widgets/ExplorationPromptWidget.h"
+#include "Widgets/ThrowableHudWidget.h"
+#include "Widgets/ToolRingWidget.h"
 #include "Widgets/InventoryWidget.h"
 #include "Widgets/ContainerTransferWidget.h"
 #include "Widgets/QuestLogWidget.h"
@@ -65,6 +68,15 @@ void AExplorationPlayerController::SetupInputComponent()
         EIC->BindAction(ThrowInput, ETriggerEvent::Started, this, &AExplorationPlayerController::OnThrowStart);
         EIC->BindAction(ThrowInput, ETriggerEvent::Completed, this, &AExplorationPlayerController::OnThrowStop);
         EIC->BindAction(ThrowInput, ETriggerEvent::Canceled, this, &AExplorationPlayerController::OnThrowStop);
+    }
+
+    if (ToolRingInput)
+    {
+        // Canceled as well as Completed, like the throw: the ring must not
+        // stay open once the button is no longer held.
+        EIC->BindAction(ToolRingInput, ETriggerEvent::Started, this, &AExplorationPlayerController::OnToolRingStart);
+        EIC->BindAction(ToolRingInput, ETriggerEvent::Completed, this, &AExplorationPlayerController::OnToolRingStop);
+        EIC->BindAction(ToolRingInput, ETriggerEvent::Canceled, this, &AExplorationPlayerController::OnToolRingStop);
     }
 
     if (InteractionInput)
@@ -323,6 +335,13 @@ void AExplorationPlayerController::OnLook(const FInputActionValue& Value)
     if (CurrentInputMode != EExplorationInputMode::Gameplay) { return; }
 
     const FVector2D LookAxis = Value.Get<FVector2D>();
+
+    // The tool ring takes the look input while it is open: the camera stops.
+    if (IExplorationInputReceiver* Actions = GetInputReceiver())
+    {
+        if (Actions->Input_Look(LookAxis)) { return; }
+    }
+
     AddYawInput(LookAxis.X * MouseSensitivity);
     AddPitchInput(LookAxis.Y * MouseSensitivity);
 }
@@ -380,6 +399,22 @@ void AExplorationPlayerController::OnThrowStop()
     if (IExplorationInputReceiver* Actions = GetInputReceiver())
     {
         Actions->Input_ThrowReleased();
+    }
+}
+
+void AExplorationPlayerController::OnToolRingStart()
+{
+    if (IExplorationInputReceiver* Actions = GetInputReceiver())
+    {
+        Actions->Input_ToolRingPressed();
+    }
+}
+
+void AExplorationPlayerController::OnToolRingStop()
+{
+    if (IExplorationInputReceiver* Actions = GetInputReceiver())
+    {
+        Actions->Input_ToolRingReleased();
     }
 }
 
@@ -857,6 +892,93 @@ void AExplorationPlayerController::CreateExplorationPromptWidget()
     UE_LOG(LogTemp, Log, TEXT("[ExplorationPlayerController] ExplorationPromptWidget created."));
 }
 
+void AExplorationPlayerController::CreateToolRingWidgets()
+{
+    // ZOrder 90 for the icon, under the HUD elements (100); 120 for the ring,
+    // over them. Screens (200) never open together with the ring.
+    if (IsValid(ToolRingWidgetClass) && !ToolRingWidget)
+    {
+        ToolRingWidget = CreateWidget<UToolRingWidget>(this, ToolRingWidgetClass);
+
+        if (ToolRingWidget)
+        {
+            ToolRingWidget->AddToViewport(120);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("[ExplorationPlayerController] CreateToolRingWidgets: ring widget failed."));
+        }
+    }
+
+    if (IsValid(ThrowableHudWidgetClass) && !ThrowableHudWidget)
+    {
+        ThrowableHudWidget = CreateWidget<UThrowableHudWidget>(this, ThrowableHudWidgetClass);
+
+        if (ThrowableHudWidget)
+        {
+            ThrowableHudWidget->AddToViewport(90);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("[ExplorationPlayerController] CreateToolRingWidgets: HUD widget failed."));
+        }
+    }
+}
+
+void AExplorationPlayerController::BindThrowWidgets()
+{
+    APawn* MyPawn = GetPawn();
+
+    UExcursionThrowComponent* Throw = MyPawn ? MyPawn->FindComponentByClass<UExcursionThrowComponent>() : nullptr;
+
+    if (!Throw)
+    {
+        return;
+    }
+
+    Throw->SetTrackInventory(true);
+
+    if (ToolRingWidget)
+    {
+        ToolRingWidget->Bind(Throw);
+    }
+
+    if (ThrowableHudWidget)
+    {
+        ThrowableHudWidget->Bind(Throw);
+    }
+}
+
+void AExplorationPlayerController::UnbindThrowWidgets()
+{
+    // A ring held across the unpossess would stay open with nobody to close it.
+    if (APawn* HeldPawn = GetPawn())
+    {
+        if (UExcursionThrowComponent* Throw = HeldPawn->FindComponentByClass<UExcursionThrowComponent>())
+        {
+            Throw->CancelAim();
+        }
+    }
+
+    if (ToolRingWidget)
+    {
+        ToolRingWidget->Unbind();
+    }
+
+    if (ThrowableHudWidget)
+    {
+        ThrowableHudWidget->Unbind();
+    }
+
+    if (APawn* MyPawn = GetPawn())
+    {
+        if (UExcursionThrowComponent* Throw = MyPawn->FindComponentByClass<UExcursionThrowComponent>())
+        {
+            Throw->SetTrackInventory(false);
+        }
+    }
+}
+
 void AExplorationPlayerController::ShowExplorationPrompt(const FText& Message, float Duration)
 {
     if (!ExplorationPromptWidget)
@@ -996,6 +1118,8 @@ void AExplorationPlayerController::OnPossess(APawn* InPawn)
     CreateInventoryWidget();
     CreateContainerTransferWidget();
     CreateExplorationPromptWidget();
+    CreateToolRingWidgets();
+    BindThrowWidgets();
     PauseMenuComponent->CreatePauseWidget();
 
     if (DialogueSubsystem && DialogueSubsystem->IsDialogueActive())
@@ -1020,6 +1144,8 @@ void AExplorationPlayerController::OnUnPossess()
     {
         Mode->SetInputSuspended(false);
     }
+
+    UnbindThrowWidgets();
 
     Super::OnUnPossess();
 }

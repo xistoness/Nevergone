@@ -766,13 +766,44 @@ void UExcursionEncounterSubsystem::FreezeWorldExcept(const AActor* KeepA, const 
 		Freeze(*It);
 	}
 
+	// A throw already in the air keeps flying, and the bait it becomes on
+	// landing is born frozen.
+	if (!ActorSpawnedHandle.IsValid())
+	{
+		ActorSpawnedHandle = GetWorld()->AddOnActorSpawnedHandler(
+			FOnActorSpawned::FDelegate::CreateUObject(this, &UExcursionEncounterSubsystem::HandleActorSpawned));
+	}
+
 	UE_LOG(LogNevergone, Log,
 		TEXT("[ExcursionEncounterSubsystem] world frozen around %s and %s (%d actors)"),
 		*GetNameSafe(KeepA), *GetNameSafe(KeepB), FrozenActors.Num());
 }
 
+void UExcursionEncounterSubsystem::HandleActorSpawned(AActor* Actor)
+{
+	if (!Cast<AExcursionScentBait>(Actor))
+	{
+		return;
+	}
+
+	Actor->CustomTimeDilation = 0.0f;
+
+	FrozenActors.Add(Actor);
+
+	UE_LOG(LogNevergone, Log,
+		TEXT("[ExcursionEncounterSubsystem] %s landed during the capture; born frozen"),
+		*GetNameSafe(Actor));
+}
+
 void UExcursionEncounterSubsystem::UnfreezeWorld()
 {
+	if (ActorSpawnedHandle.IsValid())
+	{
+		GetWorld()->RemoveOnActorSpawnedHandler(ActorSpawnedHandle);
+
+		ActorSpawnedHandle.Reset();
+	}
+
 	// Everything frozen here ran at normal speed before: nothing else in the
 	// excursion changes time dilation.
 	for (const TWeakObjectPtr<AActor>& Actor : FrozenActors)

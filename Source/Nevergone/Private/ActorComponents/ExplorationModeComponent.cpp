@@ -269,6 +269,29 @@ void UExplorationModeComponent::Input_ThrowReleased()
 	}
 }
 
+void UExplorationModeComponent::Input_ToolRingPressed()
+{
+	if (UExcursionThrowComponent* Throw = GetThrowComponent())
+	{
+		Throw->OpenRing();
+	}
+}
+
+void UExplorationModeComponent::Input_ToolRingReleased()
+{
+	if (UExcursionThrowComponent* Throw = GetThrowComponent())
+	{
+		Throw->CloseRing();
+	}
+}
+
+bool UExplorationModeComponent::Input_Look(const FVector2D& Look)
+{
+	UExcursionThrowComponent* Throw = GetThrowComponent();
+
+	return Throw && Throw->PointRing(Look);
+}
+
 UExcursionThrowComponent* UExplorationModeComponent::GetThrowComponent() const
 {
 	const AActor* Owner = GetOwner();

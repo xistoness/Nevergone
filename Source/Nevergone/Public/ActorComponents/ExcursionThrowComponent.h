@@ -13,21 +13,48 @@ class UItemDefinition;
 class UStaticMesh;
 class UStaticMeshComponent;
 
+// One thing the ring offers: the item and how many of it the inventory holds.
+struct FThrowableOption
+{
+	UItemDefinition* Item = nullptr;
+
+	int32 Quantity = 0;
+};
+
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnToolRingOpened, const TArray<FThrowableOption>& /*Options*/, int32 /*Highlight*/);
+
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnToolRingHighlightChanged, int32 /*Highlight*/);
+
+DECLARE_MULTICAST_DELEGATE(FOnToolRingClosed);
+
+// Item is null and Quantity zero when nothing can be thrown.
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnThrowableSelectionChanged, UItemDefinition* /*Item*/, int32 /*Quantity*/);
+
 // ---------------------------------------------------------------------------
 // UExcursionThrowComponent
 //
 // Throwing distractions and scent baits during an excursion. Holding the
 // input aims: the arc the object will follow is predicted every frame and
 // drawn as a row of markers ending on a landing marker. Releasing throws the
-// first item tagged Item.Distraction or Item.ScentBait in the inventory
-// (provisional until the tool ring picks one), which leaves the inventory at
-// that moment. It flies as an AExcursionThrowable; a distraction lands as the
-// item's own pickup, so picking it up again gives it back, and a scent bait
-// lands as an AExcursionScentBait, which cannot be picked up.
+// selected item, which leaves the inventory at that moment. It flies as an
+// AExcursionThrowable; a distraction lands as the item's own pickup, so
+// picking it up again gives it back, and a scent bait lands as an
+// AExcursionScentBait, which cannot be picked up.
 //
-// Driven by UExplorationModeComponent (BeginAim / ReleaseAim / CancelAim), so
-// input keeps reaching the survivor only through IExplorationInputReceiver.
-// While aiming the survivor turns with the camera and can still move.
+// What is thrown is picked on the tool ring: holding its input opens a ring
+// of everything throwable in the inventory (items tagged Item.Distraction or
+// Item.ScentBait with a pickup to fly as), the look input moves a virtual
+// pointer over it, and releasing chooses the highlighted slice. The world
+// keeps running and the survivor can still walk; the camera stops, and
+// nothing can be aimed or thrown while the ring is open. The choice stays
+// for the next throws. When the selected item runs out the selection passes
+// to the first one still available, and with none there is nothing to throw.
+// The ring and the HUD icon listen to the delegates below.
+//
+// Driven by UExplorationModeComponent (BeginAim / ReleaseAim / CancelAim and
+// the ring calls), so input keeps reaching the survivor only through
+// IExplorationInputReceiver. While aiming the survivor turns with the camera
+// and can still move.
 //
 // The arc is predicted against the object types the thrown object collides
 // with, ignoring pawns, so where the landing marker sits is where it lands.
@@ -49,11 +76,49 @@ public:
 	// Throws along the arc being shown. Does nothing when not aiming.
 	void ReleaseAim();
 
-	// Stops aiming without throwing (a screen opened, the mode ended).
+	// Stops aiming and closes the ring without throwing or choosing (a screen
+	// opened, the mode ended).
 	void CancelAim();
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Excursion|Throw")
 	bool IsAiming() const { return bAiming; }
+
+	// --- Tool ring ---
+
+	// Opens the ring on the throwables in the inventory. Tells the player
+	// when there is nothing to throw. Stops an aim in progress.
+	void OpenRing();
+
+	// Closes the ring and selects the highlighted slice. Does nothing when
+	// the ring is not open.
+	void CloseRing();
+
+	bool IsRingOpen() const { return bRingOpen; }
+
+	// Look input while the ring is open: moves the pointer and returns true,
+	// so the camera does not turn. False when the ring is closed.
+	bool PointRing(const FVector2D& Look);
+
+	// Re-reads the inventory and moves the selection if it no longer holds.
+	// Broadcasts OnSelectionChanged when the item or its quantity changed.
+	void RefreshSelection();
+
+	// The item the next throw uses, null when nothing can be thrown.
+	UItemDefinition* GetSelectedThrowable() const;
+
+	int32 GetSelectedQuantity() const { return SelectedQuantity; }
+
+	// The player's survivor keeps the selection (and so the HUD icon) current
+	// as the inventory changes. Other bodies carrying this component do not.
+	void SetTrackInventory(bool bTrack);
+
+	FOnToolRingOpened OnRingOpened;
+
+	FOnToolRingHighlightChanged OnRingHighlightChanged;
+
+	FOnToolRingClosed OnRingClosed;
+
+	FOnThrowableSelectionChanged OnSelectionChanged;
 
 protected:
 
@@ -100,11 +165,32 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Throw|Arc")
 	TObjectPtr<UStaticMesh> LandingMarkerMesh = nullptr;
 
+	// --- Ring ---
+
+	// Pointer units per unit of look input. The pointer is the same for the
+	// mouse and the gamepad stick. Provisional.
+	UPROPERTY(EditDefaultsOnly, Category = "Throw|Ring", meta = (ClampMin = "0.0"))
+	float RingPointerScale = 10.0f;
+
+	// The pointer cannot go farther from the centre than this.
+	UPROPERTY(EditDefaultsOnly, Category = "Throw|Ring", meta = (ClampMin = "1.0"))
+	float RingPointerRadius = 100.0f;
+
+	// Inside this distance from the centre the highlight stays where it was.
+	UPROPERTY(EditDefaultsOnly, Category = "Throw|Ring", meta = (ClampMin = "0.0"))
+	float RingDeadZone = 30.0f;
+
 private:
 
-	// First item in the inventory tagged Item.Distraction or Item.ScentBait
-	// that has a pickup to fly as.
-	UItemDefinition* FindThrowable() const;
+	// Every item in the inventory tagged Item.Distraction or Item.ScentBait
+	// that has a pickup to fly as, in inventory order, stacks added up.
+	void CollectThrowables(TArray<FThrowableOption>& OutOptions) const;
+
+	// Moves the selection to Preferred when it is still available, else
+	// keeps the current one, else the first available.
+	void ResolveSelection(UItemDefinition* Preferred);
+
+	void HandleInventoryChanged();
 
 	bool ComputeLaunch(FVector& OutStart, FVector& OutVelocity) const;
 
@@ -130,6 +216,29 @@ private:
 	TObjectPtr<UStaticMeshComponent> LandingMarker = nullptr;
 
 	bool bAiming = false;
+
+	// --- Ring state ---
+
+	bool bRingOpen = false;
+
+	TArray<FThrowableOption> RingOptions;
+
+	// Keeps the items in RingOptions alive while the ring is open: the
+	// options hold plain pointers to definitions loaded from soft pointers.
+	UPROPERTY()
+	TArray<TObjectPtr<UItemDefinition>> RingItemRefs;
+
+	FVector2D RingPointer = FVector2D::ZeroVector;
+
+	int32 RingHighlight = INDEX_NONE;
+
+	TWeakObjectPtr<UItemDefinition> SelectedItem;
+
+	int32 SelectedQuantity = 0;
+
+	bool bTrackingInventory = false;
+
+	FDelegateHandle InventoryChangedHandle;
 
 	bool bSavedOrientRotationToMovement = true;
 
