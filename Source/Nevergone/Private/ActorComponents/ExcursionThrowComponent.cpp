@@ -482,27 +482,40 @@ void UExcursionThrowComponent::CloseRing()
 	ResolveSelection(Chosen);
 }
 
-bool UExcursionThrowComponent::PointRing(const FVector2D& Look)
+void UExcursionThrowComponent::PointRing(const FVector2D& Delta)
 {
 	if (!bRingOpen)
 	{
-		return false;
+		return;
 	}
 
-	// Look Y grows downwards on screen, the pointer's Y grows up.
+	// The mouse delta's Y grows downwards on screen, the pointer's Y grows up.
 	RingPointer = ToolRingRules::AdvancePointer(RingPointer,
-		FVector2D(Look.X, -Look.Y) * RingPointerScale, RingPointerRadius);
+		FVector2D(Delta.X, -Delta.Y) * RingPointerScale, RingPointerRadius);
 
-	const int32 Slice = ToolRingRules::PickSlice(RingPointer, RingOptions.Num(), RingDeadZone);
+	SetRingHighlight(ToolRingRules::PickSlice(RingPointer, RingOptions.Num(), RingDeadZone));
+}
 
-	if (Slice != INDEX_NONE && Slice != RingHighlight)
+void UExcursionThrowComponent::PointRingStick(const FVector2D& Stick)
+{
+	if (!bRingOpen)
 	{
-		RingHighlight = Slice;
-
-		OnRingHighlightChanged.Broadcast(RingHighlight);
+		return;
 	}
 
-	return true;
+	SetRingHighlight(ToolRingRules::PickStickSlice(Stick, RingOptions.Num(), RingStickDeadZone, RingHighlight));
+}
+
+void UExcursionThrowComponent::SetRingHighlight(int32 Slice)
+{
+	if (Slice == INDEX_NONE || Slice == RingHighlight)
+	{
+		return;
+	}
+
+	RingHighlight = Slice;
+
+	OnRingHighlightChanged.Broadcast(RingHighlight);
 }
 
 UItemDefinition* UExcursionThrowComponent::GetSelectedThrowable() const

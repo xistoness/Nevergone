@@ -15,6 +15,7 @@ class UDialogueSubsystem;
 class UPartyManagerWidget;
 class UPartyManagerSubsystem;
 class UInputAction;
+class UInputMappingContext;
 class UInventoryWidget;
 class UContainerTransferWidget;
 class UExplorationPromptWidget;
@@ -26,6 +27,7 @@ class UExcursionThrowComponent;
 class UToolRingWidget;
 class UThrowableHudWidget;
 struct FExcursionResult;
+struct FThrowableOption;
 
 /**
  * Defines the current input state of the exploration mode.
@@ -122,6 +124,10 @@ public:
 
     void OnToolRingStop();
 
+    void OnToolRingPoint(const FInputActionValue& Value);
+
+    void OnToolRingStick(const FInputActionValue& Value);
+
     // --- Input Configuration (Properties) ---
 
     UPROPERTY(EditDefaultsOnly, Category = "Input|Gameplay", meta = (ToolTip = "Action for looking around."))
@@ -144,6 +150,22 @@ public:
 
     UPROPERTY(EditDefaultsOnly, Category = "Input|Gameplay", meta = (ToolTip = "Action for the tool ring. Held to open it on the throwables, released to choose the highlighted one."))
     UInputAction* ToolRingInput;
+
+    // Added above the default contexts only while the tool ring is open. It
+    // maps ToolRingPointerInput and ToolRingStickInput, and both consume
+    // their keys, so the look input (and the camera) stops meanwhile.
+    UPROPERTY(EditDefaultsOnly, Category = "Input|ToolRing")
+    TObjectPtr<UInputMappingContext> ToolRingMappingContext;
+
+    // Must be higher than the default contexts' (0) to take the keys.
+    UPROPERTY(EditDefaultsOnly, Category = "Input|ToolRing")
+    int32 ToolRingMappingPriority = 1;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Input|ToolRing", meta = (ToolTip = "Axis2D. The mouse delta that moves the ring's pointer, with the same modifiers as the mouse look."))
+    TObjectPtr<UInputAction> ToolRingPointerInput;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Input|ToolRing", meta = (ToolTip = "Axis2D. The gamepad stick position (Y up, no modifiers) that points at a slice."))
+    TObjectPtr<UInputAction> ToolRingStickInput;
 
     UPROPERTY(EditDefaultsOnly, Category = "Input|Gameplay", meta = (ToolTip = "Action for interacting with objects/NPCs. Needs a Pressed and a Released trigger for hold interactions (the door latch)."))
     UInputAction* InteractionInput;
@@ -330,6 +352,17 @@ private:
     // component, and makes it follow the inventory.
     void BindThrowWidgets();
     void UnbindThrowWidgets();
+
+    // The ring's input context follows the ring: added when it opens,
+    // removed when it closes or the survivor is unpossessed.
+    void HandleToolRingOpened(const TArray<FThrowableOption>& Options, int32 Highlight);
+    void HandleToolRingClosed();
+    void RemoveToolRingMappingContext();
+
+    TWeakObjectPtr<UExcursionThrowComponent> BoundThrow;
+
+    FDelegateHandle ToolRingOpenedHandle;
+    FDelegateHandle ToolRingClosedHandle;
 
     void BindDialogueSubsystem();
 

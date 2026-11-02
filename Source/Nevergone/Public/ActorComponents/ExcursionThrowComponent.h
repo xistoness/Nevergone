@@ -43,8 +43,9 @@ DECLARE_MULTICAST_DELEGATE_TwoParams(FOnThrowableSelectionChanged, UItemDefiniti
 //
 // What is thrown is picked on the tool ring: holding its input opens a ring
 // of everything throwable in the inventory (items tagged Item.Distraction or
-// Item.ScentBait with a pickup to fly as), the look input moves a virtual
-// pointer over it, and releasing chooses the highlighted slice. The world
+// Item.ScentBait with a pickup to fly as), the mouse moves a virtual
+// pointer over it or the gamepad stick points at a slice directly, and
+// releasing chooses the highlighted slice. The world
 // keeps running and the survivor can still walk; the camera stops, and
 // nothing can be aimed or thrown while the ring is open. The choice stays
 // for the next throws. When the selected item runs out the selection passes
@@ -95,9 +96,13 @@ public:
 
 	bool IsRingOpen() const { return bRingOpen; }
 
-	// Look input while the ring is open: moves the pointer and returns true,
-	// so the camera does not turn. False when the ring is closed.
-	bool PointRing(const FVector2D& Look);
+	// Mouse delta while the ring is open (screen convention, Y down): moves
+	// the virtual pointer. Does nothing when the ring is closed.
+	void PointRing(const FVector2D& Delta);
+
+	// Gamepad stick position while the ring is open (Y up): highlights the
+	// slice it points at. Does nothing when the ring is closed.
+	void PointRingStick(const FVector2D& Stick);
 
 	// Re-reads the inventory and moves the selection if it no longer holds.
 	// Broadcasts OnSelectionChanged when the item or its quantity changed.
@@ -167,18 +172,23 @@ protected:
 
 	// --- Ring ---
 
-	// Pointer units per unit of look input. The pointer is the same for the
-	// mouse and the gamepad stick. Provisional.
+	// Pointer units per unit of mouse delta. Provisional.
 	UPROPERTY(EditDefaultsOnly, Category = "Throw|Ring", meta = (ClampMin = "0.0"))
 	float RingPointerScale = 10.0f;
 
-	// The pointer cannot go farther from the centre than this.
+	// The mouse pointer cannot go farther from the centre than this.
 	UPROPERTY(EditDefaultsOnly, Category = "Throw|Ring", meta = (ClampMin = "1.0"))
 	float RingPointerRadius = 100.0f;
 
-	// Inside this distance from the centre the highlight stays where it was.
+	// Inside this distance of the mouse pointer from the centre the
+	// highlight stays where it was.
 	UPROPERTY(EditDefaultsOnly, Category = "Throw|Ring", meta = (ClampMin = "0.0"))
 	float RingDeadZone = 30.0f;
+
+	// Stick tilt (0 to 1) below which the highlight stays where it was, so
+	// letting the stick back to the centre keeps the last slice. Provisional.
+	UPROPERTY(EditDefaultsOnly, Category = "Throw|Ring", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float RingStickDeadZone = 0.5f;
 
 private:
 
@@ -191,6 +201,9 @@ private:
 	void ResolveSelection(UItemDefinition* Preferred);
 
 	void HandleInventoryChanged();
+
+	// Moves the ring highlight to Slice and tells the ring. INDEX_NONE keeps it.
+	void SetRingHighlight(int32 Slice);
 
 	bool ComputeLaunch(FVector& OutStart, FVector& OutVelocity) const;
 

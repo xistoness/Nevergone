@@ -285,11 +285,20 @@ void UExplorationModeComponent::Input_ToolRingReleased()
 	}
 }
 
-bool UExplorationModeComponent::Input_Look(const FVector2D& Look)
+void UExplorationModeComponent::Input_ToolRingPoint(const FVector2D& Delta)
 {
-	UExcursionThrowComponent* Throw = GetThrowComponent();
+	if (UExcursionThrowComponent* Throw = GetThrowComponent())
+	{
+		Throw->PointRing(Delta);
+	}
+}
 
-	return Throw && Throw->PointRing(Look);
+void UExplorationModeComponent::Input_ToolRingStick(const FVector2D& Stick)
+{
+	if (UExcursionThrowComponent* Throw = GetThrowComponent())
+	{
+		Throw->PointRingStick(Stick);
+	}
 }
 
 UExcursionThrowComponent* UExplorationModeComponent::GetThrowComponent() const

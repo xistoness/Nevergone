@@ -39,6 +39,13 @@ namespace ToolRingRules
 		return FMath::FloorToInt((Angle + SliceAngle * 0.5f) / SliceAngle) % SliceCount;
 	}
 
+	int32 PickStickSlice(const FVector2D& Stick, int32 SliceCount, float DeadZone, int32 Current)
+	{
+		const int32 Slice = PickSlice(Stick, SliceCount, DeadZone);
+
+		return Slice != INDEX_NONE ? Slice : Current;
+	}
+
 	int32 ResolveSelection(const TArray<FName>& Available, FName Selected)
 	{
 		if (Available.IsEmpty())

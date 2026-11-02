@@ -8,11 +8,11 @@
 // ToolRingRules
 //
 // The pure part of the tool ring (UExcursionThrowComponent), kept free of
-// the world so it can be tested. The ring is read through a virtual pointer
-// that the look input pushes around the centre, mouse and gamepad alike.
+// the world so it can be tested. The mouse moves a virtual pointer around
+// the centre; the gamepad stick points at a slice directly, by its angle.
 //
-// Pointer space: X to the right, Y up. Slice 0 sits at the top and the rest
-// follow clockwise.
+// Pointer and stick space: X to the right, Y up. Slice 0 sits at the top
+// and the rest follow clockwise.
 // ---------------------------------------------------------------------------
 namespace ToolRingRules
 {
@@ -22,6 +22,10 @@ namespace ToolRingRules
 	// The slice the pointer is over, or INDEX_NONE inside the dead zone (or
 	// without slices): the highlight stays where it was.
 	NEVERGONE_API int32 PickSlice(const FVector2D& Pointer, int32 SliceCount, float DeadZoneRadius);
+
+	// The slice the stick points at, with nothing accumulated: inside the
+	// dead zone (or without slices) the highlight stays on Current.
+	NEVERGONE_API int32 PickStickSlice(const FVector2D& Stick, int32 SliceCount, float DeadZone, int32 Current);
 
 	// Where the selection lands when the list of what can be thrown
 	// changes: the same item while it is still there, otherwise the first

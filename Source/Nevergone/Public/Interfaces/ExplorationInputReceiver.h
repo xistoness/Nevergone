@@ -60,7 +60,9 @@ public:
 	virtual void Input_ToolRingPressed() = 0;
 	virtual void Input_ToolRingReleased() = 0;
 
-	// The look input. True when the tool ring took it (the camera must not
-	// turn); the ring moves its pointer with it.
-	virtual bool Input_Look(const FVector2D& Look) = 0;
+	// While the tool ring is open: the mouse delta moves its pointer, the
+	// gamepad stick position points at a slice. The ring's own input
+	// context consumes both, so the camera does not turn meanwhile.
+	virtual void Input_ToolRingPoint(const FVector2D& Delta) = 0;
+	virtual void Input_ToolRingStick(const FVector2D& Stick) = 0;
 };

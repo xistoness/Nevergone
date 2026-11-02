@@ -3,6 +3,8 @@
 #include "Characters/PlayerControllers/ExplorationPlayerController.h"
 
 #include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
+#include "InputMappingContext.h"
 #include "InputAction.h"
 #include "Widgets/ExcursionResultWidget.h"
 #include "World/ExcursionSubsystem.h"
@@ -78,6 +80,14 @@ void AExplorationPlayerController::SetupInputComponent()
         EIC->BindAction(ToolRingInput, ETriggerEvent::Completed, this, &AExplorationPlayerController::OnToolRingStop);
         EIC->BindAction(ToolRingInput, ETriggerEvent::Canceled, this, &AExplorationPlayerController::OnToolRingStop);
     }
+
+    // Mapped only in ToolRingMappingContext, so they fire only while the
+    // ring is open.
+    if (ToolRingPointerInput)
+        EIC->BindAction(ToolRingPointerInput, ETriggerEvent::Triggered, this, &AExplorationPlayerController::OnToolRingPoint);
+
+    if (ToolRingStickInput)
+        EIC->BindAction(ToolRingStickInput, ETriggerEvent::Triggered, this, &AExplorationPlayerController::OnToolRingStick);
 
     if (InteractionInput)
     {
@@ -336,12 +346,6 @@ void AExplorationPlayerController::OnLook(const FInputActionValue& Value)
 
     const FVector2D LookAxis = Value.Get<FVector2D>();
 
-    // The tool ring takes the look input while it is open: the camera stops.
-    if (IExplorationInputReceiver* Actions = GetInputReceiver())
-    {
-        if (Actions->Input_Look(LookAxis)) { return; }
-    }
-
     AddYawInput(LookAxis.X * MouseSensitivity);
     AddPitchInput(LookAxis.Y * MouseSensitivity);
 }
@@ -415,6 +419,22 @@ void AExplorationPlayerController::OnToolRingStop()
     if (IExplorationInputReceiver* Actions = GetInputReceiver())
     {
         Actions->Input_ToolRingReleased();
+    }
+}
+
+void AExplorationPlayerController::OnToolRingPoint(const FInputActionValue& Value)
+{
+    if (IExplorationInputReceiver* Actions = GetInputReceiver())
+    {
+        Actions->Input_ToolRingPoint(Value.Get<FVector2D>());
+    }
+}
+
+void AExplorationPlayerController::OnToolRingStick(const FInputActionValue& Value)
+{
+    if (IExplorationInputReceiver* Actions = GetInputReceiver())
+    {
+        Actions->Input_ToolRingStick(Value.Get<FVector2D>());
     }
 }
 
@@ -938,6 +958,17 @@ void AExplorationPlayerController::BindThrowWidgets()
 
     Throw->SetTrackInventory(true);
 
+    // Possessed again without an unpossess, the old bindings must not stay.
+    if (UExcursionThrowComponent* OldThrow = BoundThrow.Get())
+    {
+        OldThrow->OnRingOpened.Remove(ToolRingOpenedHandle);
+        OldThrow->OnRingClosed.Remove(ToolRingClosedHandle);
+    }
+
+    BoundThrow = Throw;
+    ToolRingOpenedHandle = Throw->OnRingOpened.AddUObject(this, &AExplorationPlayerController::HandleToolRingOpened);
+    ToolRingClosedHandle = Throw->OnRingClosed.AddUObject(this, &AExplorationPlayerController::HandleToolRingClosed);
+
     if (ToolRingWidget)
     {
         ToolRingWidget->Bind(Throw);
@@ -960,6 +991,18 @@ void AExplorationPlayerController::UnbindThrowWidgets()
         }
     }
 
+    // CancelAim already removed it if the ring was open; this covers a
+    // context left behind any other way.
+    RemoveToolRingMappingContext();
+
+    if (UExcursionThrowComponent* Throw = BoundThrow.Get())
+    {
+        Throw->OnRingOpened.Remove(ToolRingOpenedHandle);
+        Throw->OnRingClosed.Remove(ToolRingClosedHandle);
+    }
+
+    BoundThrow.Reset();
+
     if (ToolRingWidget)
     {
         ToolRingWidget->Unbind();
@@ -977,6 +1020,70 @@ void AExplorationPlayerController::UnbindThrowWidgets()
             Throw->SetTrackInventory(false);
         }
     }
+}
+
+void AExplorationPlayerController::HandleToolRingOpened(const TArray<FThrowableOption>& /*Options*/, int32 /*Highlight*/)
+{
+    // Without its context the ring gets no pointer or stick, and the camera
+    // keeps turning while it is open.
+    if (!ToolRingMappingContext || !ToolRingPointerInput || !ToolRingStickInput)
+    {
+        UE_LOG(LogTemp, Warning,
+            TEXT("[ExplorationPlayerController] %s opened the tool ring without its input context or actions set on %s"),
+            *GetNameSafe(GetPawn()), *GetNameSafe(GetClass()));
+    }
+
+    if (!ToolRingMappingContext)
+    {
+        return;
+    }
+
+    UEnhancedInputLocalPlayerSubsystem* Subsystem =
+        ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer());
+
+    if (!Subsystem)
+    {
+        return;
+    }
+
+    // The ring key and the move stick are held right now: they must keep
+    // working through the rebuild instead of waiting for a release.
+    FModifyContextOptions Options;
+    Options.bIgnoreAllPressedKeysUntilRelease = false;
+
+    Subsystem->AddMappingContext(ToolRingMappingContext, ToolRingMappingPriority, Options);
+
+    UE_LOG(LogTemp, Verbose, TEXT("[ExplorationPlayerController] %s added the tool ring context %s"),
+        *GetNameSafe(GetPawn()), *GetNameSafe(ToolRingMappingContext));
+}
+
+void AExplorationPlayerController::HandleToolRingClosed()
+{
+    RemoveToolRingMappingContext();
+}
+
+void AExplorationPlayerController::RemoveToolRingMappingContext()
+{
+    if (!ToolRingMappingContext)
+    {
+        return;
+    }
+
+    UEnhancedInputLocalPlayerSubsystem* Subsystem =
+        ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer());
+
+    if (!Subsystem || !Subsystem->HasMappingContext(ToolRingMappingContext))
+    {
+        return;
+    }
+
+    FModifyContextOptions Options;
+    Options.bIgnoreAllPressedKeysUntilRelease = false;
+
+    Subsystem->RemoveMappingContext(ToolRingMappingContext, Options);
+
+    UE_LOG(LogTemp, Verbose, TEXT("[ExplorationPlayerController] %s removed the tool ring context %s"),
+        *GetNameSafe(GetPawn()), *GetNameSafe(ToolRingMappingContext));
 }
 
 void AExplorationPlayerController::ShowExplorationPrompt(const FText& Message, float Duration)

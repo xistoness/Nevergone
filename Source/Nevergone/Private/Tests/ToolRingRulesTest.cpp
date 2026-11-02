@@ -34,6 +34,31 @@ bool FNevergoneToolRingPickSliceTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FNevergoneToolRingStickTest, "Nevergone.Excursion.ToolRing.Stick",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::ProductFilter)
+
+bool FNevergoneToolRingStickTest::RunTest(const FString& Parameters)
+{
+	// Four slices, highlight on slice 0. The stick picks by angle alone.
+	TestEqual(TEXT("Right picks slice 1"), ToolRingRules::PickStickSlice(FVector2D(1.0f, 0.0f), 4, 0.5f, 0), 1);
+	TestEqual(TEXT("Down picks slice 2"), ToolRingRules::PickStickSlice(FVector2D(0.0f, -0.8f), 4, 0.5f, 0), 2);
+	TestEqual(TEXT("Left picks slice 3"), ToolRingRules::PickStickSlice(FVector2D(-0.6f, 0.0f), 4, 0.5f, 1), 3);
+
+	// Nothing accumulates: the same direction gives the same slice whatever
+	// was highlighted before.
+	TestEqual(TEXT("Up from slice 2"), ToolRingRules::PickStickSlice(FVector2D(0.0f, 1.0f), 4, 0.5f, 2), 0);
+
+	// Inside the dead zone the last highlight stays.
+	TestEqual(TEXT("Small tilt keeps the highlight"), ToolRingRules::PickStickSlice(FVector2D(0.3f, 0.0f), 4, 0.5f, 2), 2);
+	TestEqual(TEXT("Centred stick keeps the highlight"), ToolRingRules::PickStickSlice(FVector2D::ZeroVector, 4, 0.5f, 3), 3);
+	TestEqual(TEXT("No highlight stays none"), ToolRingRules::PickStickSlice(FVector2D::ZeroVector, 4, 0.5f, INDEX_NONE), (int32)INDEX_NONE);
+
+	// Without slices nothing changes.
+	TestEqual(TEXT("No slices"), ToolRingRules::PickStickSlice(FVector2D(1.0f, 0.0f), 0, 0.5f, 1), 1);
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FNevergoneToolRingPointerTest, "Nevergone.Excursion.ToolRing.Pointer",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::ProductFilter)
 
